@@ -48,7 +48,11 @@ Willkommen! Damit unsere Zusammenarbeit reibungslos klappt, beachte bitte folgen
   function add(a, b) {
     return a + b;
   }
+  ``` 
 
   ## Codequalitöt
   - Beachte vereinbarte Standards
   - Reviews umsetzen wenn nötig
+ 
+  ## Testing
+  - **Jede Methode** (öffentlich und privat), die eine wesentliche Funktionalität bietet, sollte **durch Unit-Tests abgedeckt** werden. Ausnahmen bilden hier Getter und Setter, wenn diese nur ein Attribut zurückgeben.
