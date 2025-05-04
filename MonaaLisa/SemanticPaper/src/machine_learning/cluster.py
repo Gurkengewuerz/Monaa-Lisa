@@ -17,7 +17,7 @@ Args:
 
 Returns: Cluster label for each vector, the fitted KMeans object
 """
-def cluster(embeddings, n_cluster=5):
+def cluster(embeddings, n_cluster=30):
     embeddings = np.array(embeddings)
     kmeans = KMeans(n_clusters=n_cluster, random_state=42)
     labels = kmeans.fit_predict(embeddings)

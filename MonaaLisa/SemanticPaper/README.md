@@ -9,7 +9,7 @@ Automatically categorizes academic papers from **arXiv** using semantic embeddin
 
 ---
 
-### Example Cluster - will get updated with the last tried data ( trying 45 categories in this example =D ).
+### Example Cluster - will get updated with the last tried data ( trying 55 categories in this example =D ).
 
 ![Paper Cluster](clusters.png)
 
