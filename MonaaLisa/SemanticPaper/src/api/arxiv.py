@@ -74,6 +74,7 @@ Returns: One arXiv paper -> Result
 """
 def fetch_one_random_paper() -> arx.Result:
     random_cat = categories[random.randint(0, len(categories) - 1)]
+    print(f"current category: {random_cat}")
     search = arx.Search(
         query=f"cat:{random_cat}", 
         max_results=1, 

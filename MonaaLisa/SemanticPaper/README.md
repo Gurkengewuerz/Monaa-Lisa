@@ -1,2 +1,16 @@
-# semantic-paper
-Automatically categorizes academic papers from (as of now) arXiv using semantic embeddings and maps them into a structured, searchable knowledge space
+# Semantic Paper
+
+Automatically categorizes academic papers from **arXiv** using semantic embeddings and maps them into a structured, searchable knowledge space.
+
+##  Features
+- Fetches and embeds arXiv papers
+- Clusters papers by topic using machine learning
+- Visualizes knowledge structure
+
+---
+
+### Example Cluster - will get updated with the last tried data ( trying 100 papers right now! =D ).
+
+![Paper Cluster](clusters.png)
+
+---
