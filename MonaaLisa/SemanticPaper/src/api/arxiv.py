@@ -2,6 +2,8 @@ import arxiv as arx
 import feedparser
 import random
 
+
+
 # Funny test comment ! :D
 
 categories = [
@@ -43,6 +45,84 @@ categories = [
 
 # Global client that communicates with the arXiv API
 client = arx.Client()
+
+
+"""
+04-May-2025 - Basti
+Abstract: Retrieves a paper and prints out its metadata
+Args:
+    - paper: The current paper to be read out
+
+Returns: Metadata of the provided Paper
+"""
+def read_meta(paper: arx.Result):
+    if paper:
+        print(f"Title: {paper.title}\n")
+        print(f"Authors: {', '.join(str(author) for author in paper.authors)}\n")
+        print(f"Published: {paper.published}\n")
+        print(f"Abstract: {paper.summary}\n")
+        print(f"PDF URL: {paper.pdf_url}\n")
+        print(f"Entry ID: {paper.entry_id}\n")
+    else:
+        print("No Paper!")
+
+"""
+04-May-2025 - Basti
+Abstract: Takes one random category and proceeds to retrieve the newest paper from that category
+Args: None 
+Returns: One arXiv paper -> Result
+"""
+def fetch_one_random_paper() -> arx.Result:
+    random_cat = categories[random.randint(0, len(categories) - 1)]
+    print(f"current category: {random_cat}")
+    search = arx.Search(
+        query=f"cat:{random_cat}", 
+        max_results=1, 
+        sort_by=arx.SortCriterion.SubmittedDate, 
+        sort_order=arx.SortOrder.Descending
+    )
+    results = list(client.results(search))
+    return results[0] if results else None
+
+"""
+04-May-2025 - Basti
+Abstract: Fetches a x amount of papers in y category
+Args:
+
+- category: Category from one of arXiv's category
+- amount: Amount of papers to be fetched starting from the newest papers
+
+Returns: List -> of fetches papers
+"""
+def fetch_papers(category: str, amount: int) -> list:
+    if category in categories:
+        search = arx.Search(
+            query=f"cat:{category}",
+            max_results=amount,
+            sort_by=arx.SortCriterion.SubmittedDate, 
+            sort_order=arx.SortOrder.Descending
+        )
+
+        return list(search.results())
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+"""
+///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+FROM HERE ON ONLY SOME TESTING FUNCTIONS WILL BE DECLARED - THESE WILL LATER MOVE TO UNIT TESTS - IGNORE FOR NOW!
+
+"""
 
 """
 04-May-2025 - Basti
@@ -102,19 +182,3 @@ def test_categories():
         print(f"Category {cat} passed!")
         
 
-"""
-04-May-2025 - Basti
-Abstract: Takes one random category and proceeds to retrieve the newest paper from that category
-Args: None 
-Returns: One arXiv paper -> Result
-"""
-def fetch_one_paper() -> arx.Result:
-    random_cat = categories[random.randint(0, len(categories) - 1)]
-    search = arx.Search(
-        query=f"cat:{random_cat}", 
-        max_results=1, 
-        sort_by=arx.SortCriterion.SubmittedDate, 
-        sort_order=arx.SortOrder.Descending
-    )
-    results = list(client.results(search))
-    return results[0] if results else None
