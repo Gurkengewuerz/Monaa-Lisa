@@ -42,23 +42,20 @@ def visualize(embeddings, labels, titles=None, categories=None):
     reduced = tsne.fit_transform(embeddings)
     plt.figure(figsize=(18,13))
     if categories:
-        unique_cats = list(dict.fromkeys(categories))  
-        n_colors = max(len(unique_cats), 1)
-
+        unique_cats = sorted(set(categories))
+        cat_to_idx = {cat: i for i, cat in enumerate(unique_cats)}
+        color_vals = [cat_to_idx[cat] for cat in categories]
+        n_colors = len(unique_cats)
         if n_colors <= 20:
             cmap = cm.get_cmap('tab20', n_colors)
-            colors = [cmap(i) for i in range(n_colors)]
         else:
-            colors = plt.cm.get_cmap('hsv', n_colors)
-            colors = [colors(i) for i in range(n_colors)]
-        cat_to_color = {cat: colors[i] for i, cat in enumerate(unique_cats)}
-        color_vals = [cat_to_color[cat] for cat in categories]
-        scatter = plt.scatter(reduced[:,0], reduced[:,1], c=color_vals)
+            cmap = cm.get_cmap('hsv', n_colors)
+        scatter = plt.scatter(reduced[:,0], reduced[:,1], c=color_vals, cmap=cmap)
         plt.xticks([])
         plt.yticks([])
         handles = [plt.Line2D([0], [0], marker='o', color='w', label=cat,
-                              markerfacecolor=cat_to_color[cat], markersize=10)
-                   for cat in unique_cats]
+                              markerfacecolor=cmap(i), markersize=10)
+                   for i, cat in enumerate(unique_cats)]
         plt.legend(handles=handles, bbox_to_anchor=(1.05, 1), loc='upper left', title="Categories")
     else:
         scatter = plt.scatter(reduced[:,0], reduced[:,1], c=labels, cmap='tab10')
@@ -89,7 +86,7 @@ def cluster_papers_in_category(amount: int, n_clusters: int = 5):
     papers = []
     seen_ids = set()
     tries = 0
-    while len(papers) < amount and tries < amount * 5:
+    while len(papers) < amount and tries < amount*5:
         paper = fetch_one_random_paper()
         paper_id = getattr(paper, "entry_id", getattr(paper, "id", None))
         if paper and paper_id and paper_id not in seen_ids:
