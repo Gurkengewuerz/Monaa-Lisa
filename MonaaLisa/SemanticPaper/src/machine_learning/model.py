@@ -1,12 +1,15 @@
 from sentence_transformers import SentenceTransformer
 from src.api.arxiv import fetch_one_random_paper, read_meta, categories
 import arxiv as arx
-
+import torch
 """
 Testing it as of 4th May 2025 with this Pretrained Sentence Transformer
 replace this later with SciBERT or allenai/specter
 """
+device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 model = SentenceTransformer("all-MiniLM-L6-v2")
+model = model.to(device)
+print("Using device:", device)
 
 
 """
