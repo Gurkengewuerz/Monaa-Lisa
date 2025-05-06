@@ -1,0 +1,38 @@
+name: Auto Assign Reviewer
+
+on:
+  pull_request:
+    types:
+      - opened
+      - edited
+      - reopened
+
+jobs:
+  assign-reviewer:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v2
+
+      - name: Add reviewer
+        uses: github-script@v6
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          script: |
+            const pr = await github.rest.pulls.get({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              pull_number: context.issue.number
+            });
+
+            const creator = pr.data.user.login;
+            const reviewer = 'AlienDwarf';
+
+            if (creator !== reviewer) {
+              await github.rest.pulls.requestReviewers({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                pull_number: context.issue.number,
+                reviewers: [reviewer]
+              });
+            }
