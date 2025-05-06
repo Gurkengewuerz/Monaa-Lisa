@@ -8,7 +8,7 @@ def test_publication():
     assert publication.title == "Test Title"
     assert publication.authors == ["Test Author"]
     assert publication.summary == "Test Summary"
-    assert publication.published.strftime("%d %m %Y") == "2024-02-22"
+    assert publication.published.strftime("%d.%m.%Y") == "2024-02-22"
     assert publication.url == "Test Url"
     assert isinstance(publication.to_json(), dict)
     assert publication.to_json().keys() == {"title", "authors", "summary", "published", "url"}
