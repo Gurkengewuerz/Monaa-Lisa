@@ -34,6 +34,7 @@ nvidia-nvtx-cu12==12.6.77
 packaging==25.0
 pandas==2.2.3
 pillow==11.2.1
+PyMuPDF==1.25.5
 pyparsing==3.2.3
 python-dateutil==2.9.0.post0
 pytz==2025.2

@@ -5,7 +5,7 @@ from sklearn.manifold import TSNE
 import matplotlib.pyplot as plt
 import matplotlib.cm as cm
 from src.api.arxiv import fetch_papers, fetch_one_random_paper
-from src.machine_learning.model import parse_data
+from src.machine_learning.model import parse_description_data, parse_full_data
 
 """
 04-May-2025 - Basti
@@ -98,7 +98,7 @@ def cluster_papers_in_category(amount: int, n_clusters: int = 5):
         return
     embeddings, titles, categories = [], [], []
     for paper in papers:
-        parsed = parse_data(paper)
+        parsed = parse_full_data(paper)
         embeddings.append(parsed["Embedding"])
         titles.append(paper.title)
         categories.append(getattr(paper, "categories", [getattr(paper, "category", "unknown")])[0])

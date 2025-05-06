@@ -1,5 +1,7 @@
+import numpy as np
 from sentence_transformers import SentenceTransformer
 from src.api.arxiv import fetch_one_random_paper, read_meta, categories
+from src.utils.paper import get_paper_text
 import arxiv as arx
 import torch
 """
@@ -11,7 +13,6 @@ model = SentenceTransformer("all-MiniLM-L6-v2")
 model = model.to(device)
 print("Using device:", device)
 
-
 """
 04-May-2025 - Basti
 Abstract: Parses the data and using the given Model embeds it into a abstract vector
@@ -21,7 +22,7 @@ Args:
 
 Returns: Dict containing the title and its abstracted data
 """
-def parse_data(paper: arx.Result) -> dict:
+def parse_description_data(paper: arx.Result) -> dict:
     print("Reading current paper...\n")
     read_meta(paper)
 
@@ -41,7 +42,45 @@ def parse_data(paper: arx.Result) -> dict:
         "Text": text,
         "Embedding": embedding
     }
+"""
+06-May-2025 - Basti
+Abstract: Takes a whole paper and embeds them chunk by chunk (chunk size pre-defined in constructor)
+Args:
+
+- paper: The to be worked with paper
+- chunk_size: size of chars in which the full text will be divided into
+
+Returns: dict -> containing the Result/Embedding + total of processed chunks
+"""
+def parse_full_data(paper: arx.Result, chunk_size: int = 512):
+    print("Reading current paper...\n")
+    read_meta(paper)
+
+    full_text = get_paper_text(paper)
+    if not full_text:
+        print("Processing PDF failed!")
+        return
+
+    try:
+        chunks = [full_text[i:i + chunk_size] 
+                 for i in range(0, len(full_text), chunk_size)]
+        
+        embeddings = []
+        for c in chunks:
+            c_embeddings = model.encode(c)
+            embeddings.append(c_embeddings)
+
+        final_embedding = np.mean(embeddings,axis=0)
+
+        return {
+            "Embedding": final_embedding,
+            "Chunks_Processed": len(chunks)
+        }
+    except Exception as e:
+        print(f"Error processing embeddings for {paper.title} with error: {str(e)}")
+        return None
     
+  
 """
 04-May-2025 - Basti
 Abstract: 
