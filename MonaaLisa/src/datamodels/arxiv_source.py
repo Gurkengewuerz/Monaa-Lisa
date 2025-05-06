@@ -1,9 +1,9 @@
 # Nico
 from typing import List
 import requests # TODO: evt eigene Lösung für die Anfragen
-from models import Publication
+from .models import Publication
 from datetime import datetime
-from data_source import DataSource
+from .data_source import DataSource
 
 class ArxivSource(DataSource):
     def fetch_publications(self, query: str, max_results: int = 5) -> List[Publication]:

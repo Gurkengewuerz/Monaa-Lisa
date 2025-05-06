@@ -1,7 +1,7 @@
 # Nico
 from abc import ABC, abstractmethod
 from typing import List
-from models import Publication
+from .models import Publication
 
 
 class DataSource(ABC): # ABC = abstrakte BASISklasse
