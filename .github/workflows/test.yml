@@ -19,6 +19,14 @@ jobs:
         with:
           python-version: '3.12'  # Wähle deine Python-Version
 
+      - name: Cache pip dependencies
+        uses: actions/cache@v3
+        with:
+            path: ~/.cache/pip
+            key: ${{ runner.os }}-pip-${{ hashFiles('**/requirements.txt') }}
+            restore-keys: |
+              ${{ runner.os }}-pip-
+
       - name: Install dependencies # 1) Module updaten 2) Deps installieren
         run: |
           python -m pip install --upgrade pip
