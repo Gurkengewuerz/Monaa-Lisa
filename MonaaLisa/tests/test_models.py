@@ -4,11 +4,11 @@ import datetime
 
 # Tests basic behaivour of Publication
 def test_publication():
-    publication = Publication("Test Title", ["Test Author"], "Test Summary", datetime.datetime.fromisoformat("2024-02-22"), "Test Url")
+    publication = Publication("Test Title", ["Test Author"], "Test Summary", datetime.datetime.fromisoformat("2025-05-06"), "Test Url")
     assert publication.title == "Test Title"
     assert publication.authors == ["Test Author"]
     assert publication.summary == "Test Summary"
-    assert publication.published.strftime("%d.%m.%Y") == "2024-02-22"
+    assert publication.published.strftime("%d.%m.%Y") == "06.05.2025"
     assert publication.url == "Test Url"
     assert isinstance(publication.to_json(), dict)
     assert publication.to_json().keys() == {"title", "authors", "summary", "published", "url"}
