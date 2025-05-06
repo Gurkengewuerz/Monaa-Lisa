@@ -2,6 +2,7 @@ from MonaaLisa.src.datamodels.models import Publication
 from MonaaLisa.src.datamodels.arxiv_source import ArxivSource
 import datetime
 
+# No online connection req. all data is mocked
 # Tests basic behaivour of Publication
 def test_publication():
     publication = Publication("Test Title", ["Test Author"], "Test Summary", datetime.datetime.fromisoformat("2025-05-06"), "Test Url")
