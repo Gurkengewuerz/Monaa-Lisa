@@ -4,8 +4,8 @@ from sklearn.cluster import KMeans
 from sklearn.manifold import TSNE
 import matplotlib.pyplot as plt
 import matplotlib.cm as cm
-from src.api.arxiv import fetch_papers, fetch_one_random_paper
-from src.machine_learning.model import parse_description_data, parse_full_data
+from ..api.arxiv import fetch_papers, fetch_one_random_paper
+from ..machine_learning.model import parse_description_data, parse_full_data
 
 """
 04-May-2025 - Basti

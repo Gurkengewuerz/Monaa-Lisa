@@ -1,7 +1,7 @@
 import numpy as np
 from sentence_transformers import SentenceTransformer
-from src.api.arxiv import fetch_one_random_paper, read_meta, categories
-from src.utils.paper import get_paper_text
+from ..api.arxiv import fetch_one_random_paper, read_meta, categories
+from ..utils.paper import get_paper_text
 import arxiv as arx
 import torch
 """
