@@ -83,24 +83,20 @@ Args:
 Returns: A .png file of the generated cluster on the local disk!
 """
 def cluster_papers_in_category(amount: int, n_clusters: int = 5):
-    papers = []
-    seen_ids = set()
-    tries = 0
-    while len(papers) < amount and tries < amount*5:
-        paper = fetch_one_random_paper()
-        paper_id = getattr(paper, "entry_id", getattr(paper, "id", None))
-        if paper and paper_id and paper_id not in seen_ids:
-            papers.append(paper)
-            seen_ids.add(paper_id)
-        tries += 1
+    papers = fetch_papers(amount=amount)
     if not papers:
         print("No papers fetched.")
         return
     embeddings, titles, categories = [], [], []
     for paper in papers:
         parsed = parse_full_data(paper)
+        if parsed is None:
+            continue
         embeddings.append(parsed["Embedding"])
         titles.append(paper.title)
         categories.append(getattr(paper, "categories", [getattr(paper, "category", "unknown")])[0])
+    if not embeddings:
+        print("No embeddings generated.")
+        return
     labels, _ = cluster(embeddings, n_clusters)
     visualize(embeddings, labels, titles, categories)

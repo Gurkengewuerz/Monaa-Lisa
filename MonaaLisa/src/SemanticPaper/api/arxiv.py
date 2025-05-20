@@ -44,7 +44,7 @@ import random
 #     'econ.EM', 'econ.GN', 'econ.TH'
 # ]
 
-CS_CG_CATEGORY = 'cs_CG'
+CS_CG_CATEGORY = 'cs.CG'
 
 # Global client that communicates with the arXiv API
 client = arx.Client()
