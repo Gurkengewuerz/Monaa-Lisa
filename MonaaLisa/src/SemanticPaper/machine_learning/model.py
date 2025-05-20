@@ -1,6 +1,6 @@
 import numpy as np
 from sentence_transformers import SentenceTransformer
-from ..api.arxiv import fetch_one_random_paper, read_meta, categories
+from ..api.arxiv import fetch_one_random_paper, read_meta, CS_CG_CATEGORY
 from ..utils.paper import get_paper_text
 import arxiv as arx
 import torch
@@ -87,11 +87,11 @@ Abstract:
 Args:
 Returns: 
 """
-def parse_category(category: str, amount: int):
-    if category not in categories:
-        print("Invalid category! Choose one of these: \n")
-        print(categories)
-        return
+# def parse_category(category: str, amount: int):
+#     if category not in categories:
+#         print("Invalid category! Choose one of these: \n")
+#         print(categories)
+#         return
 
 
 
