@@ -66,6 +66,8 @@ def read_meta(paper: arx.Result):
         print(f"Abstract: {paper.summary}\n")
         print(f"PDF URL: {paper.pdf_url}\n")
         print(f"Entry ID: {paper.entry_id}\n")
+        print("=================================")
+        print(f"[DEBUG] - Current Category: {*paper.categories,}")
     else:
         print("No Paper!")
 
