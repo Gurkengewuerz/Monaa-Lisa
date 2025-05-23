@@ -1,5 +1,6 @@
 import arxiv as arx
 import feedparser
+import requests
 import random
 
 
@@ -68,6 +69,9 @@ def read_meta(paper: arx.Result):
         print(f"Entry ID: {paper.entry_id}\n")
         print("=================================")
         print(f"[DEBUG] - Current Category: {*paper.categories,}")
+        print("=================================")
+        fetch_influence_flower(paper.entry_id)
+
     else:
         print("No Paper!")
 
@@ -106,10 +110,29 @@ def fetch_papers(category: str = CS_CG_CATEGORY, amount: int = 10) -> list:
     )
     return list(search.results())
 
-
-
-
-
+def fetch_influence_flower(entry_id: str):
+    if entry_id.startswith("http"):
+        arxiv_id = entry_id.split("/")[-1]
+    else:
+        arxiv_id = entry_id
+    arxiv_id_no_version = arxiv_id.split('v')[0]
+    url = (
+        f"https://api.semanticscholar.org/graph/v1/paper/arXiv:{arxiv_id_no_version}"
+        "?fields=title,authors,year,referenceCount,citationCount,references.paperId,citations.paperId"
+    )
+    response = requests.get(url)
+    if response.status_code == 404:
+        print(f"Semantic Scholar: Paper {arxiv_id_no_version} not found (may be too new).")
+        return None
+    if response.status_code != 200:
+        print(f"Semantic Scholar error: {response.status_code} - {response.text}")
+        return None
+    data = response.json()
+    references = [ref["paperId"] for ref in data.get("references", [])]
+    citations = [cit["paperId"] for cit in data.get("citations", [])]
+    print(f"References (Semantic Scholar IDs): {references}")
+    print(f"Citations (Semantic Scholar IDs): {citations}")
+    return {"references": references, "citations": citations}
 
 
 

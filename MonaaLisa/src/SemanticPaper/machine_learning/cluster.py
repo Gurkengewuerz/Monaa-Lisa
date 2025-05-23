@@ -66,20 +66,22 @@ Args:
 Returns: A .png file of the generated cluster on the local disk!
 """
 def cluster_papers_in_category(amount: int, n_clusters: int = 5):
-    papers = fetch_papers(category=CS_CG_CATEGORY,amount=amount)
+    papers = fetch_papers(category=CS_CG_CATEGORY, amount=amount)
     if not papers:
         print("No papers fetched.")
-        return
-    embeddings, titles = [], []
+        return [], [], []
+    embeddings, titles, paper_objs = [], [], []
     for paper in papers:
         parsed = parse_full_data(paper)
         if parsed is None:
             continue
         embeddings.append(parsed["Embedding"])
         titles.append(paper.title)
-        # categories.append(getattr(paper, "categories", [getattr(paper, "category", "unknown")])[0])
+        paper_objs.append(paper)
     if not embeddings:
         print("No embeddings generated.")
-        return
+        return [], [], []
     labels, _ = cluster(embeddings, n_clusters)
-    visualize(embeddings, labels, titles)
+    # left out for now, wont be necessary on the server (doesnt have that much computing power anyway)
+    # visualize(embeddings, labels, titles) 
+    return paper_objs, embeddings, labels
