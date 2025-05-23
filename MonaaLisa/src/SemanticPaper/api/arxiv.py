@@ -110,6 +110,14 @@ def fetch_papers(category: str = CS_CG_CATEGORY, amount: int = 10) -> list:
     )
     return list(search.results())
 
+"""
+23-May-2025 - Basti
+Abstract: Fetches references and citations for a given arXiv paper using the Semantic Scholar API (no API key required, but rate-limited).
+Args:
+    - entry_id: The arXiv entry ID (can be a URL or just the ID, with or without version)
+Returns:
+    Dictionary with lists of reference and citation Semantic Scholar IDs, or None if not found.
+"""
 def fetch_influence_flower(entry_id: str):
     if entry_id.startswith("http"):
         arxiv_id = entry_id.split("/")[-1]
