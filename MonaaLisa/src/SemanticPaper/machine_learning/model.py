@@ -44,7 +44,7 @@ def parse_description_data(paper: arx.Result) -> dict:
     }
 """
 06-May-2025 - Basti
-Abstract: Takes a whole paper and embeds them chunk by chunk (chunk size pre-defined in constructor)
+Abstract: Takes a whole paper and embeds them chunk by chunk (chunk size - in chars! - pre-defined in constructor)
 Args:
 
 - paper: The to be worked with paper
