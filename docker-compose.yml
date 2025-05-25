@@ -1,0 +1,26 @@
+version: "3.9"
+services:
+  db:
+    image: postgres:15
+    restart: always
+    environment:
+      POSTGRES_USER: 
+      POSTGRES_PASSWORD: secretpassword
+      POSTGRES_DB: monaa_lisa
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+
+  app:
+    build: .
+    depends_on:
+      - db
+    environment:
+      DATABASE_URL: postgresql+psycopg2://monaa:secretpassword@db:5432/monaa_lisa
+    volumes:
+      - .:/app
+    command: ["python", "main.py"]
+
+volumes:
+  pgdata:
