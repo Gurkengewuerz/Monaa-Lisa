@@ -28,7 +28,16 @@ class Paper(Base):
     url = Column(String)
     hash = Column(String, unique=True, index=True)
     related_papers = Column(JSON, nullable=True) 
-    citations = Column(JSON, nullable=True)       
+    citations = Column(JSON, nullable=True)    
+
+"""
+25-May-2025 - Basti
+Abstract: Saves one given arXiv paper into the Postgres database
+Args:
+- paper: The given arXiv paper
+- paper_hash: The corresponding hash
+Returns: bool -> True if: paper was successfully committed to the database | False if: commit failed/Exception occured
+"""  
 def save_to_db(paper, paper_hash):
     session = SessionLocal()
     db_paper = Paper(
@@ -53,11 +62,25 @@ def save_to_db(paper, paper_hash):
         return False
     finally:
         session.close()
-
+"""
+25-May-2025 - Basti
+Abstract: Checks if a paper hash already exists in the database
+Args:
+- session: -> Current database session
+- paper_hash: -> the hash of the given arXiv paper
+Returns: bool -> True if: query of the paper is not Null/None | False if: query of the paper is None 
+"""
 def paper_exists(session, paper_hash):
     return session.query(Paper).filter_by(hash=paper_hash).first() is not None
 
-# Add a function to update citations and related papers later
+"""
+25-May-2025 - Basti
+Abstract: (for future development) - 
+Args:
+- None
+Returns: 
+"""
+@FutureWarning
 def update_paper_references(paper_id, related_papers, citations):
     session = SessionLocal()
     try:

@@ -1,10 +1,12 @@
 import logging
-
+"""
+25-May-2025 - Basti
+Abstract:     Sets up logging to both file (overwrite on each run) and console.
+Args:
+- logfile: Name of the logfile (default value: latest_semanticpaper.log)
+Returns: Returns a logger instance.
+"""
 def setup_logger(logfile='latest_semanticpaper.log'):
-    """
-    Sets up logging to both file (overwrite on each run) and console.
-    Returns a logger instance.
-    """
     logger = logging.getLogger("SemanticPaper")
     logger.setLevel(logging.INFO)
 

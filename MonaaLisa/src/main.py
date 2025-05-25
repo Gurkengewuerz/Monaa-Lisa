@@ -15,16 +15,35 @@ load_dotenv(".env_public")
 UPDATE_INTERVAL = int(os.environ.get("ARXIV_FETCH_INTERVAL", 3600))
 HASH_FILE = 'parsed_hashes.txt'
 
+"""
+25-May-2025 - Basti
+Abstract: Loads the local parsed_hashes file
+Args:
+- None
+Returns: Set filled with all parsed/known papers (hashed)
+"""
 def load_hashes():
     if not os.path.exists(HASH_FILE):
         return set()
     with open(HASH_FILE, "r") as f:
         return set(line.strip() for line in f)
-
+"""
+25-May-2025 - Basti
+Abstract: Saves one hash string to the local parsed_hashes file
+Args:
+- hash_str: -> the hash of a peper
+Returns: None
+"""
 def save_hash(hash_str):
     with open(HASH_FILE, "a") as f:
         f.write(hash_str + "\n")
-
+"""
+25-May-2025 - Basti
+Abstract: Entry method that allows the program to run continuesly in a infinite loop
+Args:
+- None
+Returns: None
+"""
 def entry():
     logger.info(f"Starting SemanticPaper! Updating arXiv every {UPDATE_INTERVAL}s")
     known_hashes = load_hashes()
