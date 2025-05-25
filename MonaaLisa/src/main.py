@@ -1,8 +1,9 @@
 from SemanticPaper.api.semanticscholar import SemanticScholarAPI
-from SemanticPaper.api.arxiv import hash_paper_details, fetch_latest_paper
+from SemanticPaper.api.arxiv import hash_paper_details, fetch_latest_paper, fetch_papers
 from SemanticPaper.logger.logger import setup_logger
 from dotenv import load_dotenv
 import os
+import time
 
 logger = setup_logger()
 
@@ -11,11 +12,46 @@ semantic = SemanticScholarAPI()
 load_dotenv(".env_public")
 
 UPDATE_INTERVAL = int(os.environ.get("ARXIV_FETCH_INTERVAL", 3600))
+HASH_FILE = 'parsed_hashes.txt'
+
+def load_hashes():
+    if not os.path.exists(HASH_FILE):
+        return set()
+    with open(HASH_FILE, "r") as f:
+        return set(line.strip() for line in f)
+
+def save_hash(hash_str):
+    with open(HASH_FILE, "a") as f:
+        f.write(hash_str + "\n")
 
 def entry():
-    logger.info(f"Starting SemanticPaper! Updating arXiv every {UPDATE_INTERVAL}")
-    curr_hash=hash_paper_details(fetch_latest_paper())
-    print(curr_hash)
+    logger.info(f"Starting SemanticPaper! Updating arXiv every {UPDATE_INTERVAL}s")
+    known_hashes = load_hashes()
+
+    while True:
+        logger.info("Fetching latest 10 papers from arXiv...")
+        latest_papers = fetch_papers(amount=10)
+        new_papers = []
+
+        for paper in latest_papers:
+            paper_hash = hash_paper_details(paper)
+            if paper_hash not in known_hashes:
+                logger.info(f"New paper found: {paper.title} ({paper.entry_id})")
+                # TODO: Parse and save to DB here
+                # Example: save_to_db(paper)
+                save_hash(paper_hash)
+                known_hashes.add(paper_hash)
+                new_papers.append(paper)
+            else:
+                logger.info(f"Paper already processed: {paper.title} ({paper.entry_id})")
+
+        if not new_papers:
+            logger.info("No new papers to process.")
+
+        logger.info(f"Sleeping for {UPDATE_INTERVAL} seconds...")
+        time.sleep(UPDATE_INTERVAL)
+
+
 def main():
     entry()
 
