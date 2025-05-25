@@ -4,7 +4,7 @@ from sklearn.cluster import KMeans
 from sklearn.manifold import TSNE
 import matplotlib.pyplot as plt
 import matplotlib.cm as cm
-from ..api.arxiv import fetch_papers, fetch_one_random_paper, CS_CG_CATEGORY
+from ..api.arxiv import fetch_papers, fetch_latest_paper, CS_CG_CATEGORY
 from ..machine_learning.model import parse_description_data, parse_full_data
 
 """

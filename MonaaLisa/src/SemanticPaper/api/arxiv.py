@@ -2,6 +2,7 @@ import arxiv as arx
 import feedparser
 import requests
 import random
+import hashlib
 
 
 
@@ -70,7 +71,7 @@ def read_meta(paper: arx.Result):
         print("=================================")
         print(f"[DEBUG] - Current Category: {*paper.categories,}")
         print("=================================")
-        fetch_influence_flower(paper.entry_id)
+        # fetch_influence_flower(paper.entry_id)
 
     else:
         print("No Paper!")
@@ -81,7 +82,7 @@ Abstract: Takes one paper from the cs_CG category and proceeds to retrieve the n
 Args: None 
 Returns: One arXiv paper -> Result
 """
-def fetch_one_random_paper() -> arx.Result:
+def fetch_latest_paper() -> arx.Result:
     search = arx.Search(
         query=f"cat:{CS_CG_CATEGORY}", 
         max_results=1, 
@@ -111,38 +112,19 @@ def fetch_papers(category: str = CS_CG_CATEGORY, amount: int = 10) -> list:
     return list(search.results())
 
 """
-23-May-2025 - Basti
-Abstract: Fetches references and citations for a given arXiv paper using the Semantic Scholar API (no API key required, but rate-limited).
+25-May-2025 - Basti
+Abstract: Hashes the data of a arXiv Paper using SHA256 and returns its hash
 Args:
-    - entry_id: The arXiv entry ID (can be a URL or just the ID, with or without version)
-Returns:
-    Dictionary with lists of reference and citation Semantic Scholar IDs, or None if not found.
-"""
-def fetch_influence_flower(entry_id: str):
-    if entry_id.startswith("http"):
-        arxiv_id = entry_id.split("/")[-1]
-    else:
-        arxiv_id = entry_id
-    arxiv_id_no_version = arxiv_id.split('v')[0]
-    url = (
-        f"https://api.semanticscholar.org/graph/v1/paper/arXiv:{arxiv_id_no_version}"
-        "?fields=title,authors,year,referenceCount,citationCount,references.paperId,citations.paperId"
-    )
-    response = requests.get(url)
-    if response.status_code == 404:
-        print(f"Semantic Scholar: Paper {arxiv_id_no_version} not found (may be too new).")
-        return None
-    if response.status_code != 200:
-        print(f"Semantic Scholar error: {response.status_code} - {response.text}")
-        return None
-    data = response.json()
-    references = [ref["paperId"] for ref in data.get("references", [])]
-    citations = [cit["paperId"] for cit in data.get("citations", [])]
-    print(f"References (Semantic Scholar IDs): {references}")
-    print(f"Citations (Semantic Scholar IDs): {citations}")
-    return {"references": references, "citations": citations}
 
+- paper: arxiv.Resukt -> A given paper returned from a Result() object
 
+Returns: str -> Unique hash of the paper
+"""  
+def hash_paper_details(paper: arx.Result) -> str:
+    to_hash = paper.title+paper.summary
+    print(f"[DEBUG] Printing to hash text: {to_hash}")
+
+    return hashlib.sha256(to_hash.encode()).hexdigest()
 
 
 

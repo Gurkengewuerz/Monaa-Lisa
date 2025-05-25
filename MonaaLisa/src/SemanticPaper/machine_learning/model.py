@@ -1,6 +1,6 @@
 import numpy as np
 from sentence_transformers import SentenceTransformer
-from ..api.arxiv import fetch_one_random_paper, read_meta, CS_CG_CATEGORY
+from ..api.arxiv import fetch_latest_paper, read_meta, CS_CG_CATEGORY
 from ..utils.paper import get_paper_text
 import arxiv as arx
 import torch
@@ -105,7 +105,7 @@ Returns: The metadata of the random paper
 Additional Comment: I should start writing unit tests..
 """
 def fetch_test():
-    paper = fetch_one_random_paper()
+    paper = fetch_latest_paper()
     if paper:
         print(f"Title: {paper.title}")
         print(f"Authors: {', '.join(str(author) for author in paper.authors)}")
