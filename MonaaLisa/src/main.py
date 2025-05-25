@@ -1,6 +1,7 @@
 from SemanticPaper.api.semanticscholar import SemanticScholarAPI
 from SemanticPaper.api.arxiv import hash_paper_details, fetch_latest_paper, fetch_papers
 from SemanticPaper.logger.logger import setup_logger
+from Database.db import SessionLocal, Paper, save_to_db
 from dotenv import load_dotenv
 import os
 import time
@@ -37,8 +38,7 @@ def entry():
             paper_hash = hash_paper_details(paper)
             if paper_hash not in known_hashes:
                 logger.info(f"New paper found: {paper.title} ({paper.entry_id})")
-                # TODO: Parse and save to DB here
-                # Example: save_to_db(paper)
+                save_to_db(paper, paper_hash)
                 save_hash(paper_hash)
                 known_hashes.add(paper_hash)
                 new_papers.append(paper)
