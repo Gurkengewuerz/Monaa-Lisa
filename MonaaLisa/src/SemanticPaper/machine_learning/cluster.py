@@ -4,7 +4,7 @@ from sklearn.cluster import KMeans
 from sklearn.manifold import TSNE
 import matplotlib.pyplot as plt
 import matplotlib.cm as cm
-from ..api.arxiv import fetch_papers, fetch_one_random_paper
+from ..api.arxiv import fetch_papers, fetch_latest_paper, CS_CG_CATEGORY
 from ..machine_learning.model import parse_description_data, parse_full_data
 
 """
@@ -35,32 +35,15 @@ TO-DO: better description of what is happening here, this stuff is a little conf
 
 Returns: a image File of the clustered result
 """
-def visualize(embeddings, labels, titles=None, categories=None):
+def visualize(embeddings, labels, titles=None):
     embeddings = np.array(embeddings)
     perplexity = min(30, len(embeddings) - 1)
     tsne = TSNE(n_components=2, random_state=42, perplexity=perplexity)
     reduced = tsne.fit_transform(embeddings)
     plt.figure(figsize=(18,13))
-    if categories:
-        unique_cats = sorted(set(categories))
-        cat_to_idx = {cat: i for i, cat in enumerate(unique_cats)}
-        color_vals = [cat_to_idx[cat] for cat in categories]
-        n_colors = len(unique_cats)
-        if n_colors <= 20:
-            cmap = cm.get_cmap('tab20', n_colors)
-        else:
-            cmap = cm.get_cmap('hsv', n_colors)
-        scatter = plt.scatter(reduced[:,0], reduced[:,1], c=color_vals, cmap=cmap)
-        plt.xticks([])
-        plt.yticks([])
-        handles = [plt.Line2D([0], [0], marker='o', color='w', label=cat,
-                              markerfacecolor=cmap(i), markersize=10)
-                   for i, cat in enumerate(unique_cats)]
-        plt.legend(handles=handles, bbox_to_anchor=(1.05, 1), loc='upper left', title="Categories")
-    else:
-        scatter = plt.scatter(reduced[:,0], reduced[:,1], c=labels, cmap='tab10')
-        plt.colorbar(scatter, label="cluster")
-    plt.title("Paper Clusters by Category")
+    scatter = plt.scatter(reduced[:,0], reduced[:,1], c=labels, cmap='tab10')
+    plt.colorbar(scatter, label="cluster")
+    plt.title("Paper Clusters (cs.CG)")
     plt.xlabel("t-SNE1")
     plt.ylabel("t-SNE2")
     if titles:
@@ -83,24 +66,22 @@ Args:
 Returns: A .png file of the generated cluster on the local disk!
 """
 def cluster_papers_in_category(amount: int, n_clusters: int = 5):
-    papers = []
-    seen_ids = set()
-    tries = 0
-    while len(papers) < amount and tries < amount*5:
-        paper = fetch_one_random_paper()
-        paper_id = getattr(paper, "entry_id", getattr(paper, "id", None))
-        if paper and paper_id and paper_id not in seen_ids:
-            papers.append(paper)
-            seen_ids.add(paper_id)
-        tries += 1
+    papers = fetch_papers(category=CS_CG_CATEGORY, amount=amount)
     if not papers:
         print("No papers fetched.")
-        return
-    embeddings, titles, categories = [], [], []
+        return [], [], []
+    embeddings, titles, paper_objs = [], [], []
     for paper in papers:
         parsed = parse_full_data(paper)
+        if parsed is None:
+            continue
         embeddings.append(parsed["Embedding"])
         titles.append(paper.title)
-        categories.append(getattr(paper, "categories", [getattr(paper, "category", "unknown")])[0])
+        paper_objs.append(paper)
+    if not embeddings:
+        print("No embeddings generated.")
+        return [], [], []
     labels, _ = cluster(embeddings, n_clusters)
-    visualize(embeddings, labels, titles, categories)
+    # left out for now, wont be necessary on the server (doesnt have that much computing power anyway)
+    # visualize(embeddings, labels, titles) 
+    return paper_objs, embeddings, labels

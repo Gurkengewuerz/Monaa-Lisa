@@ -1,6 +1,6 @@
 import numpy as np
 from sentence_transformers import SentenceTransformer
-from ..api.arxiv import fetch_one_random_paper, read_meta, categories
+from ..api.arxiv import fetch_latest_paper, read_meta, CS_CG_CATEGORY
 from ..utils.paper import get_paper_text
 import arxiv as arx
 import torch
@@ -44,7 +44,7 @@ def parse_description_data(paper: arx.Result) -> dict:
     }
 """
 06-May-2025 - Basti
-Abstract: Takes a whole paper and embeds them chunk by chunk (chunk size pre-defined in constructor)
+Abstract: Takes a whole paper and embeds them chunk by chunk (chunk size - in chars! - pre-defined in constructor)
 Args:
 
 - paper: The to be worked with paper
@@ -87,11 +87,11 @@ Abstract:
 Args:
 Returns: 
 """
-def parse_category(category: str, amount: int):
-    if category not in categories:
-        print("Invalid category! Choose one of these: \n")
-        print(categories)
-        return
+# def parse_category(category: str, amount: int):
+#     if category not in categories:
+#         print("Invalid category! Choose one of these: \n")
+#         print(categories)
+#         return
 
 
 
@@ -105,7 +105,7 @@ Returns: The metadata of the random paper
 Additional Comment: I should start writing unit tests..
 """
 def fetch_test():
-    paper = fetch_one_random_paper()
+    paper = fetch_latest_paper()
     if paper:
         print(f"Title: {paper.title}")
         print(f"Authors: {', '.join(str(author) for author in paper.authors)}")

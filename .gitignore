@@ -3,6 +3,8 @@ __pycache__/
 *.py[cod]
 *$py.class
 
+parsed_hashes.txt
+
 # C extensions
 *.so
 
