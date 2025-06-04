@@ -26,8 +26,8 @@ docker-compose run --rm -e PYTHONPATH=/app/MonaaLisa/src app python MonaaLisa/sr
 echo "🔍 Verifying database tables:"
 docker exec -it $(docker-compose ps -q db) psql -U monaa -d monaa_lisa -c "\dt"
 
-echo "🚀 Starting the application..."
-docker-compose up -d app
+echo "🚀 Starting the application and frontend..."
+docker-compose up -d app frontend
 
 echo "📋 Showing application logs (press Ctrl+C to exit)..."
 echo "The app will start fetching and processing papers..."

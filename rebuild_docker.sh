@@ -14,4 +14,7 @@ echo "Initializing database..."
 echo "Starting app..."
 docker-compose up -d app
 
+echo "Starting frontend in dev mode (hot reload)..."
+docker-compose up -d frontend
+
 echo "All done! Your application is running."

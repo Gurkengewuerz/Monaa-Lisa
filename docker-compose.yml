@@ -21,6 +21,20 @@ services:
     volumes:
       - .:/app
     command: ["python", "MonaaLisa/src/main.py"]
+
+  frontend:
+    build:
+      context: ./MonaaLisa/src/Frontend
+    ports:
+      - "5173:5173"
+    depends_on:
+      - app
+    volumes:
+      - ./MonaaLisa/src/Frontend:/app
+    environment:
+      VITE_API_URL: "http://app:5000"
+    command: ["npm", "run", "dev", "--", "--host", "0.0.0.0", "--port", "5173"]
+
     
 volumes:
   pgdata:
