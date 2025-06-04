@@ -33,7 +33,8 @@ services:
       - ./MonaaLisa/src/Frontend:/app
     environment:
       VITE_API_URL: "http://app:5000"
-    command: ["npm", "run", "dev", "--", "--host", "0.0.0.0", "--port", "5173"]
+    command: ["sh", "-c", "npm install && npx vite dev --host 0.0.0.0 --port 5173"]
+
 
     
 volumes:
