@@ -21,3 +21,5 @@ coverage.xml
 .idea/
 .vscode/
 *.png
+node_modules
+*.log
