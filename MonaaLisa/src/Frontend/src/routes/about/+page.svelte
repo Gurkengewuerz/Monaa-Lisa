@@ -1,4 +1,6 @@
-<script>
+<script lang="ts">
+    // Basti: Check out the SampleComponent to see how creating a component looks like
+    //  This Example shows how to bind a component into a SvelteKit routing page
     import SampleComponent from "./SampleComponent.svelte";
 
     let current = 0;
