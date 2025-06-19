@@ -47,7 +47,7 @@ def save_hash(hash_str):
 25-May-2025 - Basti
 Abstract: Saves one hash string to the local parsed_hashes file
 Args:
-- hash_str: -> the hash of a peper
+- hash_str: -> the hash of a paper
 Returns: None
 """
 def process_paper(paper, known_hashes):
