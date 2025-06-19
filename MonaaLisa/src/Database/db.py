@@ -3,7 +3,7 @@ import sys
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(__file__))))
 
-from sqlalchemy import create_engine, Column, String, DateTime, Integer, JSON
+from sqlalchemy import create_engine, Column, String, Float, DateTime, Integer, JSON
 from sqlalchemy.orm import declarative_base, sessionmaker
 from dotenv import load_dotenv
 from SemanticPaper.logger.logger import setup_logger
@@ -28,7 +28,9 @@ class Paper(Base):
     url = Column(String)
     hash = Column(String, unique=True, index=True)
     related_papers = Column(JSON, nullable=True) 
-    citations = Column(JSON, nullable=True)    
+    citations = Column(JSON, nullable=True)
+    tsne1 = Column(Float, nullable=True)
+    tsne2 = Column(Float, nullable=True)    
 
 """
 25-May-2025 - Basti
@@ -36,10 +38,22 @@ Abstract: Saves one given arXiv paper into the Postgres database
 Args:
 - paper: The given arXiv paper
 - paper_hash: The corresponding hash
+- embedding: dict -> numpy dictionary containing coordinates, datatype and parsed 
 Returns: bool -> True if: paper was successfully committed to the database | False if: commit failed/Exception occured
 """  
-def save_to_db(paper, paper_hash):
+def save_to_db(paper, paper_hash, embedding: dict):
     session = SessionLocal()
+    tsne1 = embedding.get("tsne1") or embedding.get("tSNE1")
+    tsne2 = embedding.get("tsne2") or embedding.get("tSNE2")
+    try:
+        tsne1 = float(tsne1) if tsne1 is not None else None
+    except (ValueError, TypeError):
+        tsne1 = None
+    try:
+        tsne2 = float(tsne2) if tsne2 is not None else None
+    except (ValueError, TypeError):
+        tsne2 = None
+
     db_paper = Paper(
         entry_id=paper.entry_id,
         title=paper.title,
@@ -49,7 +63,9 @@ def save_to_db(paper, paper_hash):
         url=paper.pdf_url,
         hash=paper_hash,
         related_papers=None,  
-        citations=None        
+        citations=None,
+        tsne1=tsne1,
+        tsne2=tsne2
     )
     session.add(db_paper)
     try:
