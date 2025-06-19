@@ -4,8 +4,10 @@ from SemanticPaper.logger.logger import setup_logger
 from Database.db import SessionLocal, Paper, save_to_db
 from dotenv import load_dotenv
 from SemanticPaper.machine_learning.model import parse_full_data, extract_tsne_coordinates
+import concurrent.futures
 import os
 import time
+import threading
 
 logger = setup_logger()
 
@@ -38,6 +40,32 @@ Returns: None
 def save_hash(hash_str):
     with open(HASH_FILE, "a") as f:
         f.write(hash_str + "\n")
+
+
+
+"""
+25-May-2025 - Basti
+Abstract: Saves one hash string to the local parsed_hashes file
+Args:
+- hash_str: -> the hash of a peper
+Returns: None
+"""
+def process_paper(paper, known_hashes):
+    worker_name = threading.current_thread().name
+    logger.info(f"[{worker_name}] Processing paper: {getattr(paper, 'title', 'Unknown Title')}")
+    paper_hash = hash_paper_details(paper)
+
+    if paper_hash not in known_hashes:
+        current_embedding = parse_full_data(paper)
+        if current_embedding is not None:
+            logger.info(f"[{worker_name}] Finished embedding for: {getattr(paper, 'title', 'Unknown Title')}")
+            return (paper, paper_hash, current_embedding["Embedding"])
+        logger.info(f"[{worker_name}] Failed to embed: {getattr(paper, 'title', 'Unknown Title')}")
+        return None
+    logger.info(f"[{worker_name}] Paper already processed: {getattr(paper, 'title', 'Unknown Title')}")
+    return None
+
+
 """
 25-May-2025 - Basti
 Abstract: Entry method that allows the program to run continuesly in a infinite loop
@@ -45,9 +73,11 @@ Args:
 - None
 Returns: None
 """
-def entry():
+def entry(max_workers = 4):
     logger.info(f"Starting SemanticPaper! Updating arXiv every {UPDATE_INTERVAL}s")
     known_hashes = load_hashes()
+
+    logger.info(f"ThreadPoolExecutor will use {max_workers} workers.")
 
     while True:
         logger.info("Fetching latest 10 papers from arXiv...")
@@ -57,17 +87,18 @@ def entry():
         paper_objs = []
         paper_hashes = []
 
-        for paper in latest_papers:
-            paper_hash = hash_paper_details(paper)
-            if paper_hash not in known_hashes:
-                current_embedding = parse_full_data(paper)
-                if current_embedding is not None:
-                    embeddings.append(current_embedding["Embedding"])
+        with concurrent.futures.ThreadPoolExecutor(max_workers=max_workers) as executor:
+            futures = [executor.submit(process_paper, paper, known_hashes) for paper in latest_papers]
+            for future in concurrent.futures.as_completed(futures):
+                result = future.result()
+                if result:
+                    paper, paper_hash, embedding = result
+                    embeddings.append(embedding)
                     paper_objs.append(paper)
                     paper_hashes.append(paper_hash)
                     new_papers.append(paper)
-            else:
-                logger.info(f"Paper already processed: {paper.title} ({paper.entry_id})")
+                else:
+                    pass
 
         if embeddings:
             tsne_coords = extract_tsne_coordinates(embeddings)
@@ -90,7 +121,7 @@ def entry():
 
 
 def main():
-    entry()
+    entry(max_workers=5)
 
 if __name__ == "__main__":
     main()

@@ -30,7 +30,8 @@ echo 1. Start application (quick start)
 echo 2. Reset everything and start fresh
 echo 3. Check database status
 echo 4. Shutdown Docker/Server
-echo 5. Exit
+echo 5. Visit the db_shell
+echo 9. Exit
 echo.
 
 set /p choice="Enter your choice (1-5): "
@@ -39,7 +40,8 @@ if "%choice%"=="1" goto start_app
 if "%choice%"=="2" goto reset_app
 if "%choice%"=="3" goto check_db
 if "%choice%"=="4" goto shutdown_app
-if "%choice%"=="5" goto end
+if "%choice%"=="5" goto enter_db_shell
+if "%choice%"=="9" goto end
 echo Invalid choice. Please try again.
 pause
 goto menu
@@ -138,6 +140,28 @@ if "%DB_CONTAINER%"=="" (
     echo.
     echo Number of papers in database:
     docker exec -it %DB_CONTAINER% psql -U monaa -d monaa_lisa -c "SELECT count(*) FROM papers;"
+)
+
+echo.
+echo Press any key to return to the menu
+pause >nul
+goto menu
+
+REM Check contents of whats inside the PostgreSQL Database inside the Container
+REM From there you can use psql Syntax like \d to see the Tables
+REM and query the DB like SELECT * FROM papers; to see the contents
+:enter_db_shell
+echo.
+echo Opening interactive psql shell in the database container...
+
+REM Get the running db container ID
+for /f "tokens=*" %%a in ('docker-compose ps -q db') do set DB_CONTAINER=%%a
+
+if "%DB_CONTAINER%"=="" (
+    echo [ERROR] No database container found. Please start the application first.
+) else (
+    echo Connecting to database...
+    docker exec -it %DB_CONTAINER% psql -U monaa -d monaa_lisa
 )
 
 echo.

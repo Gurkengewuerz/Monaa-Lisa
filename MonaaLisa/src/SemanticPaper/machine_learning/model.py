@@ -36,7 +36,7 @@ def parse_description_data(paper: arx.Result) -> dict:
     Later on in development it should somehow use the full paper
 
     Havent tried out the full text yet, it will probably not fit into the model as of now.
-    Update: it does and this method is deprected.
+    Update: it does now in another method and this method is deprected.
      
     """
     text = paper.title + ". " + paper.summary
