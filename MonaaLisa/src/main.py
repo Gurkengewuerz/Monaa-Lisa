@@ -68,12 +68,13 @@ def process_paper(paper, known_hashes):
 
 """
 25-May-2025 - Basti
-Abstract: Entry method that allows the program to run continuesly in a infinite loop
+Abstract: Continuously fetches the latest papers from arXiv, processes new ones in parallel, embeds them,
+     saves results to the database and updates known hashes. Runs in an infinite loop with periodic updates (Default: Every Hours/3600s).
 Args:
-- None
+- max_workers: int -> Number of threads to use for parallel paper processing.
 Returns: None
 """
-def entry(max_workers = 4):
+def entry(max_workers:int = 4):
     logger.info(f"Starting SemanticPaper! Updating arXiv every {UPDATE_INTERVAL}s")
     known_hashes = load_hashes()
 
@@ -88,9 +89,9 @@ def entry(max_workers = 4):
         paper_hashes = []
 
         with concurrent.futures.ThreadPoolExecutor(max_workers=max_workers) as executor:
-            futures = [executor.submit(process_paper, paper, known_hashes) for paper in latest_papers]
-            for future in concurrent.futures.as_completed(futures):
-                result = future.result()
+
+            results = executor.map(lambda paper: process_paper(paper, known_hashes), latest_papers)
+            for result in results:
                 if result:
                     paper, paper_hash, embedding = result
                     embeddings.append(embedding)
