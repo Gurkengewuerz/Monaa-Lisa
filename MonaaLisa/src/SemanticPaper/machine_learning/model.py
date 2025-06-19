@@ -1,7 +1,9 @@
 import numpy as np
 from sentence_transformers import SentenceTransformer
 from ..api.arxiv import fetch_latest_paper, read_meta, CS_CG_CATEGORY
+from sklearn.manifold import TSNE
 from ..utils.paper import get_paper_text
+import numpy as np
 import arxiv as arx
 import torch
 """
@@ -22,6 +24,7 @@ Args:
 
 Returns: Dict containing the title and its abstracted data
 """
+@DeprecationWarning
 def parse_description_data(paper: arx.Result) -> dict:
     print("Reading current paper...\n")
     read_meta(paper)
@@ -33,6 +36,7 @@ def parse_description_data(paper: arx.Result) -> dict:
     Later on in development it should somehow use the full paper
 
     Havent tried out the full text yet, it will probably not fit into the model as of now.
+    Update: it does now in another method and this method is deprected.
      
     """
     text = paper.title + ". " + paper.summary
@@ -79,7 +83,24 @@ def parse_full_data(paper: arx.Result, chunk_size: int = 512):
     except Exception as e:
         print(f"Error processing embeddings for {paper.title} with error: {str(e)}")
         return None
-    
+"""
+19-06-2025 - Basti
+Abstract: Reduces a list of high-dimensional embedding vectors to 2D t-SNE coordinates for visualization/saving them easily into the database.
+Args:
+- embeddings: List or array of embedding vectors (e.g., output from parse_full_data)
+- random_state: Seed for reproducibility (default: 42) - this ensures determinism
+
+Returns: 
+- Tuple -> of (tsne1, tsne2) tuples one per embedding (x,y)
+"""
+def extract_tsne_coordinates(embeddings, random_state=42):
+    embeddings = np.array(embeddings)
+    if len(embeddings) < 2:
+        raise ValueError("At least two embeddings are required for t-SNE.")
+    perplexity = min(30, len(embeddings) - 1)
+    tsne = TSNE(n_components=2, random_state=random_state, perplexity=perplexity)
+    reduced = tsne.fit_transform(embeddings)
+    return [tuple(map(float, coords)) for coords in reduced]
   
 """
 04-May-2025 - Basti
