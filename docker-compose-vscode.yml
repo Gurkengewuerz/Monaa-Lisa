@@ -34,7 +34,7 @@ services:
       - .:/app
       - python_cache:/root/.cache/pip
     working_dir: /app
-    command: ["/bin/sh", "-c", "python MonaaLisa/src/Database/db.py && tail -f /dev/null"]
+    command: ["/bin/sh", "-c", "tail -f /dev/null"]
     ports:
       - "5000:5000"
       - "8000:8000"
