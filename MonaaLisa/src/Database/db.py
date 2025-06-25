@@ -12,7 +12,6 @@ load_dotenv(os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file_
 logger = setup_logger()
 
 DATABASE_URL = os.environ.get("DATABASE_URL")
-print(f"Database URL: {DATABASE_URL}")
 engine = create_engine(DATABASE_URL)
 SessionLocal = sessionmaker(bind=engine)
 Base = declarative_base()
