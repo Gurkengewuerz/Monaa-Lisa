@@ -1,21 +1,26 @@
 {
-    "name": "SemanticPaper Dev Environment for VSCode",
-    "dockerFile": "../Dockerfile",
-    "customizations": {
-        "vscode": {
-            "extensions": [
-                "ms-python.python",
-                "ms-python.vscode-pylance",
-                "ms-azuretools.vscode-docker"
-            ],
-            "settings": {
-                "python.defaultInterpreterPath": "/usr/local/bin/python",
-                "python.linting.enabled": true,
-                "python.formatting.provider": "black"
-            }
-        }
-    },
-    "forwardPorts": [],
-    "postCreateCommand": "pip install --user -r requirements.txt",
-    "remoteUser": "vscode"
+  "name": "SemanticPaper Dev Environment for VSCode",
+  "dockerComposeFile": [
+    "../docker-compose.yml"
+  ],
+  "service": "app",
+  "workspaceFolder": "/app",
+  "remoteUser": "vscode",
+  "overrideCommand": false,
+  "shutdownAction": "stopCompose",
+  "customizations": {
+    "vscode": {
+      "extensions": [
+        "ms-python.python",
+        "ms-python.vscode-pylance",
+        "ms-azuretools.vscode-docker"
+      ],
+      "settings": {
+        "python.defaultInterpreterPath": "/usr/local/bin/python",
+        "python.linting.enabled": true,
+        "python.formatting.provider": "black"
+      }
+    }
+  },
+  "postCreateCommand": "pip install --user -r requirements.txt"
 }

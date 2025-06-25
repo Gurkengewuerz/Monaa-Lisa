@@ -43,6 +43,12 @@ Returns: bool -> True if: paper was successfully committed to the database | Fal
 """  
 def save_to_db(paper, paper_hash, embedding: dict):
     session = SessionLocal()
+
+    if paper_exists(session, paper_hash):
+        logger.info(f"Paper already exists in DB: {paper.title} (hash: {paper_hash})")
+        session.close()
+        return True
+
     tsne1 = embedding.get("tsne1") or embedding.get("tSNE1")
     tsne2 = embedding.get("tsne2") or embedding.get("tSNE2")
     try:
