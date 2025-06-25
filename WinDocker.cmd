@@ -5,6 +5,9 @@ echo ===========================================
 echo Monaa-Lisa Application Docker Launcher
 echo ===========================================
 
+REM Load .env variables
+for /f "usebackq tokens=1,2 delims==" %%a in (".env") do set %%a=%%b
+
 REM Check if Docker is installed
 where docker >nul 2>&1
 if %ERRORLEVEL% NEQ 0 (
@@ -156,11 +159,10 @@ if "%DB_CONTAINER%"=="" (
     echo [ERROR] No database container found. Please start the application first.
 ) else (
     echo Checking database tables:
-    docker exec -it %DB_CONTAINER% psql -U monaa -d monaa_lisa -c "\dt"
-    
+    docker exec -it %DB_CONTAINER% psql -U %POSTGRES_USER% -d %POSTGRES_DB% -c "\dt"
     echo.
     echo Number of papers in database:
-    docker exec -it %DB_CONTAINER% psql -U monaa -d monaa_lisa -c "SELECT count(*) FROM papers;"
+    docker exec -it %DB_CONTAINER% psql -U %POSTGRES_USER% -d %POSTGRES_DB% -c "SELECT count(*) FROM papers;"
 )
 
 echo.
@@ -182,7 +184,7 @@ if "%DB_CONTAINER%"=="" (
     echo [ERROR] No database container found. Please start the application first.
 ) else (
     echo Connecting to database...
-    docker exec -it %DB_CONTAINER% psql -U monaa -d monaa_lisa
+    docker exec -it %DB_CONTAINER% psql -U %POSTGRES_USER% -d %POSTGRES_DB%
 )
 
 echo.
