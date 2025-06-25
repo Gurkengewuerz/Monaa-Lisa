@@ -31,16 +31,18 @@ echo 2. Reset everything and start fresh
 echo 3. Check database status
 echo 4. Shutdown Docker/Server
 echo 5. Visit the db_shell
+echo 6. Reset containers and volumes (no rebuild)
 echo 9. Exit
 echo.
 
-set /p choice="Enter your choice (1-5): "
+set /p choice="Enter your choice (1-6 - 9): "
 
 if "%choice%"=="1" goto start_app
 if "%choice%"=="2" goto reset_app
 if "%choice%"=="3" goto check_db
 if "%choice%"=="4" goto shutdown_app
 if "%choice%"=="5" goto enter_db_shell
+if "%choice%"=="6" goto reset_containers_only
 if "%choice%"=="9" goto end
 echo Invalid choice. Please try again.
 pause
@@ -122,6 +124,25 @@ echo.
 echo Press any key to see application logs (Ctrl+C to exit logs)
 pause >nul
 docker-compose logs -f app
+goto menu
+
+:reset_containers_only
+echo.
+echo Resetting all containers and removing volumes (no rebuild)...
+
+echo 1. Stopping and removing all containers and volumes...
+docker-compose down -v
+
+echo 2. Removing hash files...
+if exist MonaaLisa\src\parsed_hashes.txt del MonaaLisa\src\parsed_hashes.txt
+if exist parsed_hashes.txt del parsed_hashes.txt
+
+echo.
+echo All containers and volumes have been removed.
+echo Use option 1 to start the application when ready.
+echo.
+echo Press any key to return to the menu
+pause >nul
 goto menu
 
 :check_db
