@@ -28,8 +28,6 @@ services:
       DATABASE_URL: postgresql+psycopg2://${POSTGRES_USER}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB}
       PYTHONPATH: /app/MonaaLisa/src
       PYTHONUNBUFFERED: 1
-      FLASK_ENV: development
-      FLASK_DEBUG: 1
     volumes:
       - .:/app
       - python_cache:/root/.cache/pip
