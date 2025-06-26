@@ -1,5 +1,6 @@
 import os
 import sys
+from datetime import datetime
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(__file__))))
 
@@ -7,8 +8,8 @@ from sqlalchemy import create_engine, Column, String, Float, DateTime, Integer, 
 from sqlalchemy.orm import declarative_base, sessionmaker
 from dotenv import load_dotenv
 from SemanticPaper.logger.logger import setup_logger
-
-load_dotenv(os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), ".env"))
+# os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), ".env")
+load_dotenv()
 logger = setup_logger()
 
 DATABASE_URL = os.environ.get("DATABASE_URL")
@@ -29,7 +30,8 @@ class Paper(Base):
     related_papers = Column(JSON, nullable=True) 
     citations = Column(JSON, nullable=True)
     tsne1 = Column(Float, nullable=True)
-    tsne2 = Column(Float, nullable=True)    
+    tsne2 = Column(Float, nullable=True)   
+    added = Column(DateTime, nullable=False)
 
 """
 25-May-2025 - Basti
@@ -70,7 +72,8 @@ def save_to_db(paper, paper_hash, embedding: dict):
         related_papers=None,  
         citations=None,
         tsne1=tsne1,
-        tsne2=tsne2
+        tsne2=tsne2,
+        added=datetime.now()
     )
     session.add(db_paper)
     try:
