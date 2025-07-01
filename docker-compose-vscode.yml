@@ -1,7 +1,9 @@
+# Please never run this docker-compose in Production! This is entirely serving as an dev environment.
+# 25-06-2025 - Basti
 services:
   db:
     image: postgres:15
-    restart: always
+    restart: unless-stopped
     environment:
       POSTGRES_USER: ${POSTGRES_USER}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
@@ -9,38 +11,54 @@ services:
     ports:
       - "5432:5432"
     volumes:
-      - pgdata:/var/lib/postgresql/data
+      - pgdata_dev:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready"]
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-monaa}"]
       interval: 10s
       timeout: 5s
       retries: 5
 
   app:
-    build: .
+    build:
+      context: .
     depends_on:
       db:
         condition: service_healthy
     environment:
       DATABASE_URL: postgresql+psycopg2://${POSTGRES_USER}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB}
+      PYTHONPATH: /app/MonaaLisa/src
+      PYTHONUNBUFFERED: 1
     volumes:
       - .:/app
-    command: ["/bin/sh", "-c", "export PYTHONPATH=/app/MonaaLisa/src && python MonaaLisa/src/Database/db.py && python MonaaLisa/src/main.py"]
+      - python_cache:/root/.cache/pip
+    working_dir: /app
+    command: ["/bin/sh", "-c", "cd /app/MonaaLisa/src && python Database/db.py && tail -f /dev/null"]
+    ports:
+      - "5000:5000"
+      - "8000:8000"
+    stdin_open: true
+    tty: true
 
   frontend:
     build:
       context: ./MonaaLisa/src/Frontend
     ports:
       - "5173:5173"
+      - "24678:24678"
     depends_on:
       - app
     volumes:
       - ./MonaaLisa/src/Frontend:/app
+      - frontend_node_modules:/app/node_modules
     environment:
       VITE_API_URL: "http://app:5000"
+      NODE_ENV: development
+      CHOKIDAR_USEPOLLING: "true"
     command: ["sh", "-c", "npm install && npx vite dev --host 0.0.0.0 --port 5173"]
+    stdin_open: true
+    tty: true
 
-
-    
 volumes:
-  pgdata:
+  pgdata_dev:
+  python_cache:
+  frontend_node_modules:
