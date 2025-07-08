@@ -1,13 +1,13 @@
 <script lang="ts">
   import * as d3 from 'd3';
-  import { dummyPapers } from '../testdata/dummyData';
+import { dummyPapers } from '../testdata/dummyData';
   import type { Paper } from '../testdata/dummyData';
   import { onMount } from 'svelte';
 
   import "../app.css";
 
 
-  // Responsive visualization dimensions
+  // Initial visualization dimensions
   let vizContainer: HTMLDivElement;
   let WIDTH = 800;
   let HEIGHT = 600;
@@ -31,6 +31,7 @@
   let group: d3.Selection<SVGGElement, unknown, null, undefined>;
   let nodes: d3.Selection<SVGCircleElement, Paper, SVGGElement, unknown>;
   let links: d3.Selection<SVGLineElement, { source: Paper; target: Paper }, SVGGElement, unknown>;
+  let hulls: d3.Selection<SVGPathElement, {cluster: string, points: [number, number][]}, SVGGElement, unknown>;
   let xScale: d3.ScaleLinear<number, number, never>;
   let yScale: d3.ScaleLinear<number, number, never>;
   let zoom: d3.ZoomBehavior<Element, unknown>;
@@ -113,7 +114,38 @@
       .domain([yExtent[0] - 5, yExtent[1] + 5])
       .range([HEIGHT - margin.bottom, margin.top]);
 
-    // Build links from related papers
+    // --- CLUSTER HULLS ---
+    // Group papers by cluster
+    const clusters: Record<string, Paper[]> = {};
+    dummyPapers.forEach(p => {
+      if (!clusters[p.cluster]) clusters[p.cluster] = [];
+      clusters[p.cluster].push(p);
+    });
+
+    // Compute convex hulls for each cluster
+    const hullData = Object.entries(clusters).map(([cluster, papers]) => {
+      // Points in [x, y] for d3.polygonHull
+      const points: [number, number][] = papers.map(p => [xScale(p.tsne1), yScale(p.tsne2)]);
+      // d3.polygonHull returns null if <3 points
+      const hull = points.length >= 3 ? d3.polygonHull(points) : points;
+      return { cluster, points: hull || points };
+    });
+
+    // Draw hulls (paths)
+    hulls = group.selectAll<SVGPathElement, {cluster: string, points: [number, number][]}>("path.cluster-hull")
+      .data(hullData)
+      .enter()
+      .append("path")
+      .attr("class", "cluster-hull")
+      .attr("d", d => d.points.length >= 3 ?
+        "M" + d.points.map(p => p.join(",")).join("L") + "Z" :
+        null)
+      .attr("fill", (d, i) => ["#2a3a44", "#3b4a5a", "#1e2d3a", "#4a3b5a"][i % 4])
+      .attr("fill-opacity", 0.18)
+      .attr("stroke", (d, i) => ["#4fd1c5", "#f6ad55", "#63b3ed", "#f56565"][i % 4])
+      .attr("stroke-width", 3);
+
+    // --- LINKS ---
     const linkData: { source: Paper; target: Paper }[] = [];
     dummyPapers.forEach((paper: Paper) => {
       (paper.related_papers || []).forEach((relId: number) => {
@@ -132,9 +164,10 @@
       .attr('x2', d => xScale(d.target.tsne1 || 0))
       .attr('y2', d => yScale(d.target.tsne2 || 0))
       .attr('stroke', 'gray')
-      .attr('stroke-width', 1);
+      .attr('stroke-width', 1)
+      .attr('opacity', 0.5);
 
-    // Draw nodes (circles)
+    // --- NODES ---
     nodes = group.selectAll<SVGCircleElement, Paper>('circle')
       .data(dummyPapers.filter((p: Paper) => p.id))
       .enter()
@@ -142,7 +175,13 @@
       .attr('cx', d => xScale(d.tsne1 || 0))
       .attr('cy', d => yScale(d.tsne2 || 0))
       .attr('r', 8)
-      .attr('fill', 'steelblue')
+      .attr('fill', d => {
+        // Color by cluster
+        if (d.cluster === 'A') return '#4fd1c5';
+        if (d.cluster === 'B') return '#f6ad55';
+        if (d.cluster === 'C') return '#63b3ed';
+        return '#b794f4';
+      })
       .attr('stroke', 'black')
       .attr('stroke-width', 1)
       .on('click', (event: MouseEvent, d: Paper) => {
@@ -176,6 +215,10 @@
               .attr('y1', l => yScale(l.source.tsne2 || 0))
               .attr('x2', l => xScale(l.target.tsne1 || 0))
               .attr('y2', l => yScale(l.target.tsne2 || 0));
+
+            // Update hulls
+            hulls.attr('d', d => d.points.length >= 3 ?
+              "M" + d.points.map(p => p.join(",")).join("L") + "Z" : null);
           })
           .on('end', function () {
             d3.select(this).attr('stroke-width', 1);
