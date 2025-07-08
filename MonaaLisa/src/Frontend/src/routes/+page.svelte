@@ -8,9 +8,13 @@
   const WIDTH = 800;
   const HEIGHT = 600;
 
+
   // State: selected paper and search filter
   let selectedPaper: Paper | null = null;
   let filterTerm: string = '';
+
+  // Efficient lookup map for papers by ID
+  const paperMap: Map<number, Paper> = new Map(dummyPapers.map(p => [p.id, p]));
 
   // Filter papers by search term (case-insensitive)
   let filteredPapers: Paper[] = dummyPapers;
@@ -74,7 +78,7 @@
   // Initialize visualization on component mount
   onMount(() => {
     const margin = { top: 20, right: 20, bottom: 20, left: 20 };
-
+    //@ts-expect-error d3 types mismatch, works at runtime
     svg = d3.select('#paper-viz')
       .append('svg')
       .attr('width', WIDTH)
@@ -183,7 +187,7 @@
 
   // Select a paper by ID, highlight and center view
   function selectPaper(paperId: number) {
-    const paper = dummyPapers.find((p: Paper) => p.id === paperId);
+    const paper = paperMap.get(paperId);
     if (!paper) return;
 
     updateVisualization(paper);
@@ -203,6 +207,7 @@
         d3.zoomIdentity.translate(translateX, translateY).scale(k)
       );
   }
+
 </script>
 
 <style>
@@ -316,18 +321,17 @@
 
   <p><strong>Related Papers:</strong></p>
   <ul>
-    {#each (selectedPaper.related_papers || []) as rid}
-      <li>
-        <span
-          class="clickable"
-          role="button"
-          tabindex="0"
-          on:click={() => selectPaper(rid)}
-          on:keydown={e => e.key === 'Enter' && selectPaper(rid)}
-        >
-          {dummyPapers.find(p => p.id === rid)?.title || 'Unknown'}
-        </span>
-      </li>
+        {#each (selectedPaper.related_papers || []) as rid}
+          <li>
+            <span
+              class="clickable"
+              role="button"
+              tabindex="0"
+              on:click={() => selectPaper(rid)}
+            >
+              {paperMap.get(rid)?.title || 'Unknown'}
+            </span>
+          </li>
     {:else}
       <li>None</li>
     {/each}
@@ -335,18 +339,17 @@
 
   <p><strong>Citations:</strong></p>
   <ul>
-    {#each (selectedPaper.citations || []) as cid}
-      <li>
-        <span
-          class="clickable"
-          role="button"
-          tabindex="0"
-          on:click={() => selectPaper(cid)}
-          on:keydown={e => e.key === 'Enter' && selectPaper(cid)}
-        >
-          {dummyPapers.find(p => p.id === cid)?.title || 'Unknown'}
-        </span>
-      </li>
+        {#each (selectedPaper.citations || []) as cid}
+          <li>
+            <span
+              class="clickable"
+              role="button"
+              tabindex="0"
+              on:click={() => selectPaper(cid)}
+            >
+              {paperMap.get(cid)?.title || 'Unknown'}
+            </span>
+          </li>
     {:else}
       <li>None</li>
     {/each}
