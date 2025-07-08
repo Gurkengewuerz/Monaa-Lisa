@@ -12,6 +12,7 @@ export interface Paper {
   tsne1: number;
   tsne2: number;
   added: string;
+  cluster: string;
 }
 
 export const dummyPapers: Paper[] = [
@@ -24,11 +25,12 @@ export const dummyPapers: Paper[] = [
     published: "2023-01-10T00:00:00Z",
     url: "https://arxiv.org/abs/1234.5678",
     hash: "hash_001",
-    related_papers: [2, 3, 4],
-    citations: [5, 6],
-    tsne1: 10.5,
-    tsne2: 20.3,
-    added: "2023-02-01T10:00:00Z"
+    related_papers: [3, 5],
+    citations: [6, 7],
+    tsne1: 10.0,
+    tsne2: 10.0,
+    added: "2023-02-01T10:00:00Z",
+    cluster: "A"
   },
   {
     id: 2,
@@ -39,11 +41,12 @@ export const dummyPapers: Paper[] = [
     published: "2023-03-15T00:00:00Z",
     url: "https://arxiv.org/abs/1234.5679",
     hash: "hash_002",
-    related_papers: [1, 3, 5],
-    citations: [4, 7],
-    tsne1: -15.2,
-    tsne2: 8.7,
-    added: "2023-04-01T12:00:00Z"
+    related_papers: [6, 8],
+    citations: [10, 12],
+    tsne1: 0.0,
+    tsne2: 10.0,
+    added: "2023-04-01T12:00:00Z",
+    cluster: "B"
   },
   {
     id: 3,
@@ -54,11 +57,12 @@ export const dummyPapers: Paper[] = [
     published: "2023-05-20T00:00:00Z",
     url: "https://arxiv.org/abs/1234.5680",
     hash: "hash_003",
-    related_papers: [1, 2, 6],
-    citations: [8],
-    tsne1: 5.8,
-    tsne2: -12.4,
-    added: "2023-06-01T09:00:00Z"
+    related_papers: [1, 5],
+    citations: [7, 9],
+    tsne1: 10.8,
+    tsne2: 9.2,
+    added: "2023-06-01T09:00:00Z",
+    cluster: "A"
   },
   {
     id: 4,
@@ -69,11 +73,12 @@ export const dummyPapers: Paper[] = [
     published: "2023-07-01T00:00:00Z",
     url: "https://arxiv.org/abs/1234.5681",
     hash: "hash_004",
-    related_papers: [1, 5, 7],
-    citations: [2, 9],
-    tsne1: -8.3,
-    tsne2: 15.6,
-    added: "2023-07-15T14:00:00Z"
+    related_papers: [7, 9],
+    citations: [11, 13],
+    tsne1: 5.0,
+    tsne2: 0.0,
+    added: "2023-07-15T14:00:00Z",
+    cluster: "C"
   },
   {
     id: 5,
@@ -84,11 +89,12 @@ export const dummyPapers: Paper[] = [
     published: "2023-08-10T00:00:00Z",
     url: "https://arxiv.org/abs/1234.5682",
     hash: "hash_005",
-    related_papers: [2, 4, 6],
-    citations: [1, 10],
-    tsne1: 12.1,
-    tsne2: -5.4,
-    added: "2023-08-20T11:00:00Z"
+    related_papers: [3, 13],
+    citations: [1, 17],
+    tsne1: 9.2,
+    tsne2: 10.7,
+    added: "2023-08-20T11:00:00Z",
+    cluster: "A"
   },
   {
     id: 6,
@@ -99,11 +105,12 @@ export const dummyPapers: Paper[] = [
     published: "2023-09-05T00:00:00Z",
     url: "https://arxiv.org/abs/1234.5683",
     hash: "hash_006",
-    related_papers: [3, 5, 8],
-    citations: [1, 11],
-    tsne1: -10.7,
-    tsne2: -18.2,
-    added: "2023-09-10T08:00:00Z"
+    related_papers: [2, 8],
+    citations: [10, 12],
+    tsne1: 1.2,
+    tsne2: 9.3,
+    added: "2023-09-10T08:00:00Z",
+    cluster: "B"
   },
   {
     id: 7,
@@ -114,11 +121,12 @@ export const dummyPapers: Paper[] = [
     published: "2023-10-12T00:00:00Z",
     url: "https://arxiv.org/abs/1234.5684",
     hash: "hash_007",
-    related_papers: [4, 8, 9],
-    citations: [2, 12],
-    tsne1: 18.4,
-    tsne2: 10.9,
-    added: "2023-10-20T15:00:00Z"
+    related_papers: [4, 9],
+    citations: [11, 14],
+    tsne1: 4.2,
+    tsne2: 1.1,
+    added: "2023-10-20T15:00:00Z",
+    cluster: "C"
   },
   {
     id: 8,
@@ -129,11 +137,12 @@ export const dummyPapers: Paper[] = [
     published: "2023-11-01T00:00:00Z",
     url: "https://arxiv.org/abs/1234.5685",
     hash: "hash_008",
-    related_papers: [6, 7, 10],
-    citations: [3, 13],
-    tsne1: -5.6,
-    tsne2: 22.3,
-    added: "2023-11-10T13:00:00Z"
+    related_papers: [2, 10],
+    citations: [12, 15],
+    tsne1: 0.8,
+    tsne2: 11.1,
+    added: "2023-11-10T13:00:00Z",
+    cluster: "B"
   },
   {
     id: 9,
@@ -144,11 +153,12 @@ export const dummyPapers: Paper[] = [
     published: "2023-12-15T00:00:00Z",
     url: "https://arxiv.org/abs/1234.5686",
     hash: "hash_009",
-    related_papers: [7, 10, 11],
-    citations: [4, 14],
-    tsne1: 7.2,
-    tsne2: -15.8,
-    added: "2023-12-20T10:00:00Z"
+    related_papers: [5, 11],
+    citations: [13, 16],
+    tsne1: 5.8,
+    tsne2: 0.9,
+    added: "2023-12-20T10:00:00Z",
+    cluster: "C"
   },
   {
     id: 10,
@@ -159,11 +169,12 @@ export const dummyPapers: Paper[] = [
     published: "2024-01-10T00:00:00Z",
     url: "https://arxiv.org/abs/1234.5687",
     hash: "hash_010",
-    related_papers: [8, 9, 12],
-    citations: [5, 15],
-    tsne1: -12.9,
-    tsne2: 5.1,
-    added: "2024-01-15T09:00:00Z"
+    related_papers: [6, 12],
+    citations: [14, 17],
+    tsne1: -0.9,
+    tsne2: 9.2,
+    added: "2024-01-15T09:00:00Z",
+    cluster: "B"
   },
   {
     id: 11,
@@ -174,11 +185,12 @@ export const dummyPapers: Paper[] = [
     published: "2024-02-01T00:00:00Z",
     url: "https://arxiv.org/abs/1234.5688",
     hash: "hash_011",
-    related_papers: [9, 12, 13],
-    citations: [6, 16],
-    tsne1: 15.3,
-    tsne2: -8.7,
-    added: "2024-02-10T14:00:00Z"
+    related_papers: [7, 13],
+    citations: [15, 18],
+    tsne1: 4.7,
+    tsne2: 0.3,
+    added: "2024-02-10T14:00:00Z",
+    cluster: "C"
   },
   {
     id: 12,
@@ -189,11 +201,12 @@ export const dummyPapers: Paper[] = [
     published: "2024-03-05T00:00:00Z",
     url: "https://arxiv.org/abs/1234.5689",
     hash: "hash_012",
-    related_papers: [10, 11, 14],
-    citations: [7, 17],
-    tsne1: -3.4,
-    tsne2: 17.2,
-    added: "2024-03-15T11:00:00Z"
+    related_papers: [8, 14],
+    citations: [16, 19],
+    tsne1: 0.2,
+    tsne2: 10.8,
+    added: "2024-03-15T11:00:00Z",
+    cluster: "B"
   },
   {
     id: 13,
@@ -204,11 +217,12 @@ export const dummyPapers: Paper[] = [
     published: "2024-04-10T00:00:00Z",
     url: "https://arxiv.org/abs/1234.5690",
     hash: "hash_013",
-    related_papers: [11, 12, 15],
-    citations: [8, 18],
-    tsne1: 9.8,
-    tsne2: 12.6,
-    added: "2024-04-20T12:00:00Z"
+    related_papers: [9, 15],
+    citations: [17, 20],
+    tsne1: 9.5,
+    tsne2: 9.3,
+    added: "2024-04-20T12:00:00Z",
+    cluster: "A"
   },
   {
     id: 14,
@@ -219,11 +233,12 @@ export const dummyPapers: Paper[] = [
     published: "2024-05-01T00:00:00Z",
     url: "https://arxiv.org/abs/1234.5691",
     hash: "hash_014",
-    related_papers: [12, 13, 16],
-    citations: [9, 19],
-    tsne1: -17.5,
-    tsne2: -10.3,
-    added: "2024-05-10T08:00:00Z"
+    related_papers: [10, 16],
+    citations: [18, 21],
+    tsne1: -0.8,
+    tsne2: 11.2,
+    added: "2024-05-10T08:00:00Z",
+    cluster: "B"
   },
   {
     id: 15,
@@ -234,11 +249,12 @@ export const dummyPapers: Paper[] = [
     published: "2024-06-15T00:00:00Z",
     url: "https://arxiv.org/abs/1234.5692",
     hash: "hash_015",
-    related_papers: [13, 14, 17],
-    citations: [10, 20],
-    tsne1: 4.2,
-    tsne2: 19.8,
-    added: "2024-06-20T15:00:00Z"
+    related_papers: [11, 17],
+    citations: [19, 22],
+    tsne1: 10.7,
+    tsne2: 9.5,
+    added: "2024-06-20T15:00:00Z",
+    cluster: "A"
   },
   {
     id: 16,
@@ -249,11 +265,12 @@ export const dummyPapers: Paper[] = [
     published: "2024-07-01T00:00:00Z",
     url: "https://arxiv.org/abs/1234.5693",
     hash: "hash_016",
-    related_papers: [14, 15, 18],
-    citations: [11],
-    tsne1: -9.1,
-    tsne2: -14.5,
-    added: "2024-07-10T10:00:00Z"
+    related_papers: [12, 18],
+    citations: [20, 23],
+    tsne1: 0.5,
+    tsne2: 9.5,
+    added: "2024-07-10T10:00:00Z",
+    cluster: "B"
   },
   {
     id: 17,
@@ -264,10 +281,203 @@ export const dummyPapers: Paper[] = [
     published: "2024-08-05T00:00:00Z",
     url: "https://arxiv.org/abs/1234.5694",
     hash: "hash_017",
-    related_papers: [15, 16, 19],
-    citations: [12],
-    tsne1: 13.7,
-    tsne2: 7.4,
-    added: "2024-08-15T13:00:00Z"
+    related_papers: [13, 19],
+    citations: [21, 24],
+    tsne1: 9.3,
+    tsne2: 10.2,
+    added: "2024-08-15T13:00:00Z",
+    cluster: "A"
   },
+  {
+    id: 18,
+    entry_id: "paper_018",
+    title: "Single-Cluster Outlier A",
+    authors: "Isolated Author",
+    summary: "A paper in cluster A with no relations.",
+    published: "2024-09-01T00:00:00Z",
+    url: "https://arxiv.org/abs/1234.5695",
+    hash: "hash_018",
+    related_papers: [14, 20],
+    citations: [22, 25],
+    tsne1: 11.2,
+    tsne2: 8.7,
+    added: "2024-09-10T10:00:00Z",
+    cluster: "A"
+  },
+  {
+    id: 19,
+    entry_id: "paper_019",
+    title: "Single-Cluster Outlier B",
+    authors: "Isolated Author",
+    summary: "A paper in cluster B with no relations.",
+    published: "2024-09-15T00:00:00Z",
+    url: "https://arxiv.org/abs/1234.5696",
+    hash: "hash_019",
+    related_papers: [15, 21],
+    citations: [23, 26],
+    tsne1: 1.0,
+    tsne2: 12.0,
+    added: "2024-09-20T10:00:00Z",
+    cluster: "B"
+  },
+  {
+    id: 20,
+    entry_id: "paper_020",
+    title: "Single-Cluster Outlier C",
+    authors: "Isolated Author",
+    summary: "A paper in cluster C with no relations.",
+    published: "2024-10-01T00:00:00Z",
+    url: "https://arxiv.org/abs/1234.5697",
+    hash: "hash_020",
+    related_papers: [16, 22],
+    citations: [24, 27],
+    tsne1: 6.0,
+    tsne2: 2.0,
+    added: "2024-10-10T10:00:00Z",
+    cluster: "C"
+  },
+  {
+    id: 21,
+    entry_id: "paper_021",
+    title: "Another Isolated A",
+    authors: "Solo A",
+    summary: "Another paper in cluster A with no relations.",
+    published: "2024-10-15T00:00:00Z",
+    url: "https://arxiv.org/abs/1234.5698",
+    hash: "hash_021",
+    related_papers: [17, 23],
+    citations: [25, 28],
+    tsne1: 12.0,
+    tsne2: 11.0,
+    added: "2024-10-20T10:00:00Z",
+    cluster: "A"
+  },
+  {
+    id: 22,
+    entry_id: "paper_022",
+    title: "Another Isolated B",
+    authors: "Solo B",
+    summary: "Another paper in cluster B with no relations.",
+    published: "2024-11-01T00:00:00Z",
+    url: "https://arxiv.org/abs/1234.5699",
+    hash: "hash_022",
+    related_papers: [18, 24],
+    citations: [26, 29],
+    tsne1: -1.0,
+    tsne2: 8.0,
+    added: "2024-11-10T10:00:00Z",
+    cluster: "B"
+  },
+  {
+    id: 23,
+    entry_id: "paper_023",
+    title: "Another Isolated C",
+    authors: "Solo C",
+    summary: "Another paper in cluster C with no relations.",
+    published: "2024-11-15T00:00:00Z",
+    url: "https://arxiv.org/abs/1234.5700",
+    hash: "hash_023",
+    related_papers: [19, 25],
+    citations: [27, 1],
+    tsne1: 3.0,
+    tsne2: 2.0,
+    added: "2024-11-20T10:00:00Z",
+    cluster: "C"
+  },
+  {
+    id: 24,
+    entry_id: "paper_024",
+    title: "Lone A",
+    authors: "Lone Author",
+    summary: "A lone paper in cluster A.",
+    published: "2024-12-01T00:00:00Z",
+    url: "https://arxiv.org/abs/1234.5701",
+    hash: "hash_024",
+    related_papers: [20, 26],
+    citations: [28, 2],
+    tsne1: 13.0,
+    tsne2: 8.0,
+    added: "2024-12-10T10:00:00Z",
+    cluster: "A"
+  },
+  {
+    id: 25,
+    entry_id: "paper_025",
+    title: "Lone B",
+    authors: "Lone Author",
+    summary: "A lone paper in cluster B.",
+    published: "2024-12-15T00:00:00Z",
+    url: "https://arxiv.org/abs/1234.5702",
+    hash: "hash_025",
+    related_papers: [21, 27],
+    citations: [29, 3],
+    tsne1: 2.0,
+    tsne2: 7.0,
+    added: "2024-12-20T10:00:00Z",
+    cluster: "B"
+  },
+  {
+    id: 26,
+    entry_id: "paper_026",
+    title: "Lone C",
+    authors: "Lone Author",
+    summary: "A lone paper in cluster C.",
+    published: "2025-01-01T00:00:00Z",
+    url: "https://arxiv.org/abs/1234.5703",
+    hash: "hash_026",
+    related_papers: [22, 28],
+    citations: [1, 4],
+    tsne1: 7.0,
+    tsne2: 3.0,
+    added: "2025-01-10T10:00:00Z",
+    cluster: "C"
+  },
+  {
+    id: 27,
+    entry_id: "paper_027",
+    title: "Singular A",
+    authors: "Singular Author",
+    summary: "A singular paper in cluster A.",
+    published: "2025-01-15T00:00:00Z",
+    url: "https://arxiv.org/abs/1234.5704",
+    hash: "hash_027",
+    related_papers: [23, 29],
+    citations: [2, 5],
+    tsne1: 14.0,
+    tsne2: 12.0,
+    added: "2025-01-20T10:00:00Z",
+    cluster: "A"
+  },
+  {
+    id: 28,
+    entry_id: "paper_028",
+    title: "Singular B",
+    authors: "Singular Author",
+    summary: "A singular paper in cluster B.",
+    published: "2025-02-01T00:00:00Z",
+    url: "https://arxiv.org/abs/1234.5705",
+    hash: "hash_028",
+    related_papers: [],
+    citations: [],
+    tsne1: 3.0,
+    tsne2: 13.0,
+    added: "2025-02-10T10:00:00Z",
+    cluster: "B"
+  },
+  {
+    id: 29,
+    entry_id: "paper_029",
+    title: "Singular C",
+    authors: "Singular Author",
+    summary: "A singular paper in cluster C.",
+    published: "2025-02-15T00:00:00Z",
+    url: "https://arxiv.org/abs/1234.5706",
+    hash: "hash_029",
+    related_papers: [],
+    citations: [],
+    tsne1: 8.0,
+    tsne2: 1.0,
+    added: "2025-02-20T10:00:00Z",
+    cluster: "C"
+  }
 ];

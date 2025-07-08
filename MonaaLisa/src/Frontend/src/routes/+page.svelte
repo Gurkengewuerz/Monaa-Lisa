@@ -1,12 +1,16 @@
 <script lang="ts">
   import * as d3 from 'd3';
-  import { dummyPapers } from '../testdata/dummyData';
+import { dummyPapers } from '../testdata/dummyData';
   import type { Paper } from '../testdata/dummyData';
   import { onMount } from 'svelte';
 
-  // Visualization dimensions
-  const WIDTH = 800;
-  const HEIGHT = 600;
+  import "../app.css";
+
+
+  // Initial visualization dimensions
+  let vizContainer: HTMLDivElement;
+  let WIDTH = 800;
+  let HEIGHT = 600;
 
 
   // State: selected paper and search filter
@@ -27,6 +31,7 @@
   let group: d3.Selection<SVGGElement, unknown, null, undefined>;
   let nodes: d3.Selection<SVGCircleElement, Paper, SVGGElement, unknown>;
   let links: d3.Selection<SVGLineElement, { source: Paper; target: Paper }, SVGGElement, unknown>;
+  let hulls: d3.Selection<SVGPathElement, {cluster: string, points: [number, number][]}, SVGGElement, unknown>;
   let xScale: d3.ScaleLinear<number, number, never>;
   let yScale: d3.ScaleLinear<number, number, never>;
   let zoom: d3.ZoomBehavior<Element, unknown>;
@@ -78,6 +83,16 @@
   // Initialize visualization on component mount
   onMount(() => {
     const margin = { top: 20, right: 20, bottom: 20, left: 20 };
+    // Responsive: get container size
+    const resize = () => {
+      if (vizContainer) {
+        WIDTH = vizContainer.clientWidth;
+        HEIGHT = vizContainer.clientHeight;
+      }
+    };
+    resize();
+    window.addEventListener('resize', resize);
+
     //@ts-expect-error d3 types mismatch, works at runtime
     svg = d3.select('#paper-viz')
       .append('svg')
@@ -99,7 +114,38 @@
       .domain([yExtent[0] - 5, yExtent[1] + 5])
       .range([HEIGHT - margin.bottom, margin.top]);
 
-    // Build links from related papers
+    // --- CLUSTER HULLS ---
+    // Group papers by cluster
+    const clusters: Record<string, Paper[]> = {};
+    dummyPapers.forEach(p => {
+      if (!clusters[p.cluster]) clusters[p.cluster] = [];
+      clusters[p.cluster].push(p);
+    });
+
+    // Compute convex hulls for each cluster
+    const hullData = Object.entries(clusters).map(([cluster, papers]) => {
+      // Points in [x, y] for d3.polygonHull
+      const points: [number, number][] = papers.map(p => [xScale(p.tsne1), yScale(p.tsne2)]);
+      // d3.polygonHull returns null if <3 points
+      const hull = points.length >= 3 ? d3.polygonHull(points) : points;
+      return { cluster, points: hull || points };
+    });
+
+    // Draw hulls (paths)
+    hulls = group.selectAll<SVGPathElement, {cluster: string, points: [number, number][]}>("path.cluster-hull")
+      .data(hullData)
+      .enter()
+      .append("path")
+      .attr("class", "cluster-hull")
+      .attr("d", d => d.points.length >= 3 ?
+        "M" + d.points.map(p => p.join(",")).join("L") + "Z" :
+        null)
+      .attr("fill", (d, i) => ["#2a3a44", "#3b4a5a", "#1e2d3a", "#4a3b5a"][i % 4])
+      .attr("fill-opacity", 0.18)
+      .attr("stroke", (d, i) => ["#4fd1c5", "#f6ad55", "#63b3ed", "#f56565"][i % 4])
+      .attr("stroke-width", 3);
+
+    // --- LINKS ---
     const linkData: { source: Paper; target: Paper }[] = [];
     dummyPapers.forEach((paper: Paper) => {
       (paper.related_papers || []).forEach((relId: number) => {
@@ -118,9 +164,10 @@
       .attr('x2', d => xScale(d.target.tsne1 || 0))
       .attr('y2', d => yScale(d.target.tsne2 || 0))
       .attr('stroke', 'gray')
-      .attr('stroke-width', 1);
+      .attr('stroke-width', 1)
+      .attr('opacity', 0.5);
 
-    // Draw nodes (circles)
+    // --- NODES ---
     nodes = group.selectAll<SVGCircleElement, Paper>('circle')
       .data(dummyPapers.filter((p: Paper) => p.id))
       .enter()
@@ -128,7 +175,13 @@
       .attr('cx', d => xScale(d.tsne1 || 0))
       .attr('cy', d => yScale(d.tsne2 || 0))
       .attr('r', 8)
-      .attr('fill', 'steelblue')
+      .attr('fill', d => {
+        // Color by cluster
+        if (d.cluster === 'A') return '#4fd1c5';
+        if (d.cluster === 'B') return '#f6ad55';
+        if (d.cluster === 'C') return '#63b3ed';
+        return '#b794f4';
+      })
       .attr('stroke', 'black')
       .attr('stroke-width', 1)
       .on('click', (event: MouseEvent, d: Paper) => {
@@ -162,6 +215,10 @@
               .attr('y1', l => yScale(l.source.tsne2 || 0))
               .attr('x2', l => xScale(l.target.tsne1 || 0))
               .attr('y2', l => yScale(l.target.tsne2 || 0));
+
+            // Update hulls
+            hulls.attr('d', d => d.points.length >= 3 ?
+              "M" + d.points.map(p => p.join(",")).join("L") + "Z" : null);
           })
           .on('end', function () {
             d3.select(this).attr('stroke-width', 1);
@@ -182,7 +239,10 @@
     svg.on('click', () => updateVisualization(null));
 
     // Cleanup SVG on component unmount
-    return () => d3.select('#paper-viz svg').remove();
+    return () => {
+      window.removeEventListener('resize', resize);
+      d3.select('#paper-viz svg').remove();
+    };
   });
 
   // Select a paper by ID, highlight and center view
@@ -210,88 +270,29 @@
 
 </script>
 
-<style>
-  .container {
-    display: flex;
-    gap: 20px;
-    padding: 20px;
-  }
 
-  .viz {
-    flex: 2;
-  }
 
-  .details {
-    flex: 1;
-    padding: 20px;
-    border: 1px solid #ccc;
-    border-radius: 5px;
-  }
-
-  h1 {
-    color: #333;
-  }
-  h2 {
-    color: #555;
-  }
-
-  /* search input */
-  .paper-selector input {
-    width: 100%;
-    margin-bottom: 8px;
-    padding: 6px 8px;
-    border: 1px solid #aaa;
-    border-radius: 4px;
-  }
-
-  /* paper list */
-  .paper-list {
-    max-height: 220px;
-    overflow-y: auto;
-    margin: 0;
-    padding-left: 0;
-    list-style: none;
-    border: 1px solid #ddd;
-    border-radius: 4px;
-  }
-  .paper-list li {
-    padding: 4px 8px;
-  }
-  .paper-list li.selected {
-    background: #e7f1ff;
-  }
-
-  /* clickable spans */
-  .clickable {
-    color: #007bff;
-    cursor: pointer;
-    text-decoration: underline;
-  }
-  .clickable:hover {
-    color: #0056b3;
-  }
-</style>
-
-<div class="container">
-  <div class="viz">
-    <h1>monaa lisa frontend early early prototype/demo</h1>
-    <p>Visualizing connections between currently available papers (dummy data)</p>
-    <div id="paper-viz"></div>
+<div class="flex flex-col md:flex-row gap-8 p-8 min-h-screen bg-[#181f23]">
+  <div class="viz flex-[3_3_0%] bg-[#1c2526] rounded-xl shadow-lg p-6 flex flex-col items-center border border-[#27313a]">
+    <h1 class="text-3xl font-bold text-[#e0e6ed] mb-2 tracking-tight">Monaa Lisa: Paper Graph Demo</h1>
+    <p class="text-[#8fa2b7] mb-4">Visualizing connections between currently available papers (dummy data)</p>
+    <div id="paper-viz" bind:this={vizContainer} class="w-full grow min-h-[400px] rounded-lg border border-[#27313a] shadow-inner bg-[#1c2526]"></div>
   </div>
 
-  <div class="details">
-    <div class="paper-selector">
+  <div class="details flex-[1_1_0%] max-w-md bg-[#232b32] rounded-xl shadow-lg p-4 md:p-6 border border-[#27313a]">
+    <div class="paper-selector mb-4">
       <input
         type="text"
         placeholder="Search papers..."
         bind:value={filterTerm}
         aria-label="Search papers"
+        class="w-full mb-2 px-4 py-2 border border-[#27313a] rounded-md focus:outline-none focus:ring-2 focus:ring-[#3b4a5a] bg-[#1c2526] text-[#e0e6ed] placeholder-[#8fa2b7]"
       />
-      <ul class="paper-list">
+      <ul class="paper-list max-h-48 overflow-y-auto rounded-md border border-[#27313a] bg-[#232b32] divide-y divide-[#1c2526]">
         {#each filteredPapers as paper}
           <li class:selected={paper.id === selectedPaper?.id}>
             <span
-              class="clickable"
+              class="block px-3 py-2 cursor-pointer rounded hover:bg-[#27313a] transition-colors focus:outline-none focus:ring-2 focus:ring-[#3b4a5a] {paper.id === selectedPaper?.id ? 'bg-[#1c2526] font-semibold text-[#e0e6ed]' : 'text-[#b6c2cf]'}"
               role="button"
               tabindex="0"
               on:click={() => selectPaper(paper.id)}
@@ -304,57 +305,58 @@
       </ul>
     </div>
 
-{#if selectedPaper}
-  <h2>{selectedPaper.title || 'Untitled'}</h2>
-  <p><strong>Authors:</strong> {selectedPaper.authors || 'Unknown'}</p>
-  <p><strong>Summary:</strong> {selectedPaper.summary || 'No summary available'}</p>
-  <p><strong>Published:</strong> 
-    {selectedPaper.published
-      ? new Date(selectedPaper.published).toLocaleDateString()
-      : 'Unknown'}
-  </p>
-  <p><strong>URL:</strong> 
-    <a href={selectedPaper.url || '#'} target="_blank" rel="noopener noreferrer">
-      {selectedPaper.url || 'No URL'}
-    </a>
-  </p>
+    {#if selectedPaper}
+      <div class="space-y-2">
+        <h2 class="text-2xl font-bold text-[#e0e6ed] mb-2">{selectedPaper.title || 'Untitled'}</h2>
+        <p class="text-[#b6c2cf]"><span class="font-semibold text-[#8fa2b7]">Authors:</span> {selectedPaper.authors || 'Unknown'}</p>
+        <p class="text-[#b6c2cf]"><span class="font-semibold text-[#8fa2b7]">Summary:</span> {selectedPaper.summary || 'No summary available'}</p>
+        <p class="text-[#b6c2cf]"><span class="font-semibold text-[#8fa2b7]">Published:</span> {selectedPaper.published ? new Date(selectedPaper.published).toLocaleDateString() : 'Unknown'}</p>
+        <p class="text-[#b6c2cf]"><span class="font-semibold text-[#8fa2b7]">URL:</span> <a href={selectedPaper.url || '#'} target="_blank" rel="noopener noreferrer" class="text-[#8fa2b7] underline hover:text-[#e0e6ed]">{selectedPaper.url || 'No URL'}</a></p>
 
-  <p><strong>Related Papers:</strong></p>
-  <ul>
-        {#each (selectedPaper.related_papers || []) as rid}
-          <li>
-            <span
-              class="clickable"
-              role="button"
-              tabindex="0"
-              on:click={() => selectPaper(rid)}
-            >
-              {paperMap.get(rid)?.title || 'Unknown'}
-            </span>
-          </li>
-    {:else}
-      <li>None</li>
-    {/each}
-  </ul>
+        <div>
+          <p class="font-semibold text-[#8fa2b7] mt-4">Related Papers:</p>
+          <ul class="list-disc list-inside ml-2">
+            {#each (selectedPaper.related_papers || []) as rid}
+              <li>
+                <span
+                  class="text-[#8fa2b7] underline cursor-pointer hover:text-[#e0e6ed]"
+                  role="button"
+                  tabindex="0"
+                  on:click={() => selectPaper(rid)}
+                >
+                  {paperMap.get(rid)?.title || 'Unknown'}
+                </span>
+              </li>
+            {:else}
+              <li class="text-[#27313a]">None</li>
+            {/each}
+          </ul>
+        </div>
 
-  <p><strong>Citations:</strong></p>
-  <ul>
-        {#each (selectedPaper.citations || []) as cid}
-          <li>
-            <span
-              class="clickable"
-              role="button"
-              tabindex="0"
-              on:click={() => selectPaper(cid)}
-            >
-              {paperMap.get(cid)?.title || 'Unknown'}
-            </span>
-          </li>
+        <div>
+          <p class="font-semibold text-[#8fa2b7] mt-4">Citations:</p>
+          <ul class="list-disc list-inside ml-2">
+            {#each (selectedPaper.citations || []) as cid}
+              <li>
+                <span
+                  class="text-[#8fa2b7] underline cursor-pointer hover:text-[#e0e6ed]"
+                  role="button"
+                  tabindex="0"
+                  on:click={() => selectPaper(cid)}
+                >
+                  {paperMap.get(cid)?.title || 'Unknown'}
+                </span>
+              </li>
+            {:else}
+              <li class="text-[#27313a]">None</li>
+            {/each}
+          </ul>
+        </div>
+      </div>
     {:else}
-      <li>None</li>
-    {/each}
-  </ul>
-{:else}
-  <p>Click on a paper in the list or any node in the graph</p>
-{/if}  </div>
+      <div class="text-[#8fa2b7] mt-8 text-center">
+        <p>Click on a paper in the list or any node in the graph</p>
+      </div>
+    {/if}
+  </div>
 </div>
