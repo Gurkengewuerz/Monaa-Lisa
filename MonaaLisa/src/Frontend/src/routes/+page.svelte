@@ -4,6 +4,8 @@
   import type { Paper } from '../testdata/dummyData';
   import { onMount } from 'svelte';
 
+  import "../app.css";
+
   // Visualization dimensions
   const WIDTH = 800;
   const HEIGHT = 600;
