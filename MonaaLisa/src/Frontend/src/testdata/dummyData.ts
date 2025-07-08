@@ -1,4 +1,20 @@
-export const dummyPapers = [
+export interface Paper {
+  id: number;
+  entry_id: string;
+  title: string;
+  authors: string;
+  summary: string;
+  published: string;
+  url: string;
+  hash: string;
+  related_papers: number[];
+  citations: number[];
+  tsne1: number;
+  tsne2: number;
+  added: string;
+}
+
+export const dummyPapers: Paper[] = [
   {
     id: 1,
     entry_id: "paper_001",
@@ -254,4 +270,4 @@ export const dummyPapers = [
     tsne2: 7.4,
     added: "2024-08-15T13:00:00Z"
   },
-]
+];

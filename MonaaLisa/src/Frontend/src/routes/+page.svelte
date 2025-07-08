@@ -1,66 +1,65 @@
-<script>
-  // @ts-nocheck
-  // it surpresses errors - no idea whats causing it currently
-
-  // not important as this file exists solely for demo purposes
+<script lang="ts">
   import * as d3 from 'd3';
-  import { dummyPapers } from '../testdata/dummyData.js';
+  import { dummyPapers } from '../testdata/dummyData';
+  import type { Paper } from '../testdata/dummyData';
   import { onMount } from 'svelte';
 
-  //dimensions for visualization
+  // Visualization dimensions
   const WIDTH = 800;
   const HEIGHT = 600;
 
-  //state: selected paper and search filter
-  let selectedPaper = null;
-  let filterTerm = '';
+  // State: selected paper and search filter
+  let selectedPaper: Paper | null = null;
+  let filterTerm: string = '';
 
-  //filter papers by search term (case-insensitive)
-  $: filteredPapers = dummyPapers.filter(p =>
+  // Filter papers by search term (case-insensitive)
+  let filteredPapers: Paper[] = dummyPapers;
+  $: filteredPapers = dummyPapers.filter((p: Paper) =>
     (p.title || '').toLowerCase().includes(filterTerm.toLowerCase())
   );
 
-  //D3 elements and scales
-  let svg, group;
-  let nodes, links;
-  let xScale, yScale;
-  let zoom;
+  // D3 elements and scales
+  let svg: d3.Selection<SVGSVGElement, unknown, null, undefined>;
+  let group: d3.Selection<SVGGElement, unknown, null, undefined>;
+  let nodes: d3.Selection<SVGCircleElement, Paper, SVGGElement, unknown>;
+  let links: d3.Selection<SVGLineElement, { source: Paper; target: Paper }, SVGGElement, unknown>;
+  let xScale: d3.ScaleLinear<number, number, never>;
+  let yScale: d3.ScaleLinear<number, number, never>;
+  let zoom: d3.ZoomBehavior<Element, unknown>;
 
-  //Update node and link styles based on selected paper
-  function updateVisualization(selected) {
+  // Update node and link styles based on selected paper
+  function updateVisualization(selected: Paper | null) {
     selectedPaper = selected;
 
-    //If paper is selected, highlight it and its relations
     if (selected && selected.id) {
-      const connectedIds = new Set([
+      const connectedIds = new Set<number>([
         selected.id,
         ...(selected.related_papers || []),
         ...(selected.citations || [])
       ]);
 
-      nodes.each(function (nodeData) {
+      nodes.each(function (nodeData: Paper) {
         const isSelected = nodeData.id === selected.id;
         const isConnected = connectedIds.has(nodeData.id);
 
-        d3.select(this)
+        d3.select(this as SVGCircleElement)
           .attr('fill', isSelected ? 'green' : isConnected ? 'yellow' : '#d3d3d3')
           .attr('opacity', isConnected ? 1 : 0.2)
           .attr('r', isSelected ? 12 : isConnected ? 10 : 8);
       });
 
-      links.each(function (linkData) {
+      links.each(function (linkData: { source: Paper; target: Paper }) {
         const srcId = linkData.source?.id;
         const tgtId = linkData.target?.id;
         const connected =
           srcId && tgtId && connectedIds.has(srcId) && connectedIds.has(tgtId);
 
-        d3.select(this)
+        d3.select(this as SVGLineElement)
           .attr('stroke', connected ? 'gray' : '#d3d3d3')
           .attr('opacity', connected ? 1 : 0.05);
       });
-
     } else {
-      //reset all elements to default style
+      // Reset all elements to default style
       nodes
         .attr('fill', 'steelblue')
         .attr('opacity', 1)
@@ -72,11 +71,10 @@
     }
   }
 
-  //initialize visualization on component mount
+  // Initialize visualization on component mount
   onMount(() => {
     const margin = { top: 20, right: 20, bottom: 20, left: 20 };
 
-    //create SVG and group for zoom/pan
     svg = d3.select('#paper-viz')
       .append('svg')
       .attr('width', WIDTH)
@@ -85,9 +83,9 @@
 
     group = svg.append('g');
 
-    //create scales with padding
-    const xExtent = d3.extent(dummyPapers, d => d.tsne1 || 0);
-    const yExtent = d3.extent(dummyPapers, d => d.tsne2 || 0);
+    // Create scales with padding
+    const xExtent = d3.extent(dummyPapers, (d: Paper) => d.tsne1 || 0) as [number, number];
+    const yExtent = d3.extent(dummyPapers, (d: Paper) => d.tsne2 || 0) as [number, number];
 
     xScale = d3.scaleLinear()
       .domain([xExtent[0] - 5, xExtent[1] + 5])
@@ -97,17 +95,17 @@
       .domain([yExtent[0] - 5, yExtent[1] + 5])
       .range([HEIGHT - margin.bottom, margin.top]);
 
-    //build links from related papers
-    const linkData = [];
-    dummyPapers.forEach(paper => {
-      (paper.related_papers || []).forEach(relId => {
-        const target = dummyPapers.find(p => p.id === relId);
+    // Build links from related papers
+    const linkData: { source: Paper; target: Paper }[] = [];
+    dummyPapers.forEach((paper: Paper) => {
+      (paper.related_papers || []).forEach((relId: number) => {
+        const target = dummyPapers.find((p: Paper) => p.id === relId);
         if (target) linkData.push({ source: paper, target });
       });
     });
 
-    //draw links (lines)
-    links = group.selectAll('line')
+    // Draw links (lines)
+    links = group.selectAll<SVGLineElement, { source: Paper; target: Paper }>('line')
       .data(linkData)
       .enter()
       .append('line')
@@ -118,9 +116,9 @@
       .attr('stroke', 'gray')
       .attr('stroke-width', 1);
 
-    //draw nodes (circles)
-    nodes = group.selectAll('circle')
-      .data(dummyPapers.filter(p => p.id))
+    // Draw nodes (circles)
+    nodes = group.selectAll<SVGCircleElement, Paper>('circle')
+      .data(dummyPapers.filter((p: Paper) => p.id))
       .enter()
       .append('circle')
       .attr('cx', d => xScale(d.tsne1 || 0))
@@ -129,32 +127,32 @@
       .attr('fill', 'steelblue')
       .attr('stroke', 'black')
       .attr('stroke-width', 1)
-      .on('click', (event, d) => {
+      .on('click', (event: MouseEvent, d: Paper) => {
         event.stopPropagation();
         updateVisualization(d);
       })
       .call(
-        d3.drag()
+        d3.drag<SVGCircleElement, Paper>()
           .on('start', function () {
             d3.select(this).raise().attr('stroke-width', 2);
           })
-          .on('drag', function (event, d) {
-            const rect = svg.node().getBoundingClientRect();
-            const transform = d3.zoomTransform(svg.node());
+          .on('drag', function (event: any, d: Paper) {
+            const rect = svg.node()!.getBoundingClientRect();
+            const transform = d3.zoomTransform(svg.node()!);
 
-            //calculate new coordinates accounting for zoom/pan
+            // Calculate new coordinates accounting for zoom/pan
             const mouseX = event.sourceEvent.clientX - rect.left;
             const mouseY = event.sourceEvent.clientY - rect.top;
 
             d.tsne1 = xScale.invert((mouseX - transform.x) / transform.k);
             d.tsne2 = yScale.invert((mouseY - transform.y) / transform.k);
 
-            //update node position
-            d3.select(this)
+            // Update node position
+            d3.select(this as SVGCircleElement)
               .attr('cx', xScale(d.tsne1))
               .attr('cy', yScale(d.tsne2));
 
-            //update links connected to this node
+            // Update links connected to this node
             links
               .attr('x1', l => xScale(l.source.tsne1 || 0))
               .attr('y1', l => yScale(l.source.tsne2 || 0))
@@ -166,38 +164,38 @@
           })
       );
 
-    //add tooltips showing paper titles
+    // Add tooltips showing paper titles
     nodes.append('title').text(d => d.title || 'Untitled');
 
-    //zoom behavior setup
-    zoom = d3.zoom()
+    // Zoom behavior setup
+    zoom = d3.zoom<Element, unknown>()
       .scaleExtent([0.5, 5])
-      .on('zoom', e => group.attr('transform', e.transform));
+      .on('zoom', (e) => group.attr('transform', e.transform));
 
     svg.call(zoom);
 
-    //clicking SVG background clears selection
+    // Clicking SVG background clears selection
     svg.on('click', () => updateVisualization(null));
 
-    //cleanup SVG on component unmount
+    // Cleanup SVG on component unmount
     return () => d3.select('#paper-viz svg').remove();
   });
 
-  //select a paper by ID, highlight and center view
-  function selectPaper(paperId) {
-    const paper = dummyPapers.find(p => p.id === paperId);
+  // Select a paper by ID, highlight and center view
+  function selectPaper(paperId: number) {
+    const paper = dummyPapers.find((p: Paper) => p.id === paperId);
     if (!paper) return;
 
     updateVisualization(paper);
 
-    //get current zoom scale
-    const { k } = d3.zoomTransform(svg.node());
+    // Get current zoom scale
+    const { k } = d3.zoomTransform(svg.node()!);
 
-    //calculate translation to center node
+    // Calculate translation to center node
     const translateX = WIDTH / 2 - xScale(paper.tsne1 || 0) * k;
     const translateY = HEIGHT / 2 - yScale(paper.tsne2 || 0) * k;
 
-    //animate zoom transform to center on selected node
+    // Animate zoom transform to center on selected node
     svg.transition()
       .duration(600)
       .call(
