@@ -81,10 +81,16 @@ docker-compose run --rm -e PYTHONPATH=/app/MonaaLisa/src app python MonaaLisa/sr
 echo 4. Starting application and frontend...
 docker-compose up -d app frontend
 
+echo 5. Starting Grobid service...
+docker-compose up -d grobid
+echo Waiting for Grobid to initialize (5 seconds)...
+timeout /t 5 /nobreak >nul
+
 echo.
 echo Docker has been contacted - wait a good minute and check the logs =)!
 echo   - Frontend: http://localhost:5173
 echo   - Database: localhost:5432
+echo   - Grobid: http://localhost:8070
 echo.
 echo Press any key to see application logs (Ctrl+C to exit logs)
 pause >nul
@@ -123,6 +129,7 @@ echo.
 echo Docker has been contacted - wait a good minute and check the logs =)!
 echo   - Frontend: http://localhost:5173
 echo   - Database: localhost:5432
+echo   - Grobid: http://localhost:8070
 echo.
 echo Press any key to see application logs (Ctrl+C to exit logs)
 pause >nul

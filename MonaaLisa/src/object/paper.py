@@ -89,7 +89,7 @@ class Paper:
                 doc.close()
                 os.unlink(tmp_file.name)
                 print("READING FULL TEXT FINISHED! =)")
-                return text.strip()
+                return text
 
         except Exception as e:
             title = self.title if hasattr(self, 'title') else "Unknown paper"
