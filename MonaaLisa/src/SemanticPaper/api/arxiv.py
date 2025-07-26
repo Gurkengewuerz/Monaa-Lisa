@@ -4,7 +4,7 @@ import requests
 import random
 import hashlib
 
-
+from object.paper import Paper
 
 # Funny test comment ! :D
 
@@ -60,16 +60,16 @@ Args:
 
 Returns: Metadata of the provided Paper
 """
-def read_meta(paper: arx.Result):
+def read_meta(paper: Paper):
     if paper:
         print(f"Title: {paper.title}\n")
         print(f"Authors: {', '.join(str(author) for author in paper.authors)}\n")
         print(f"Published: {paper.published}\n")
-        print(f"Abstract: {paper.summary}\n")
-        print(f"PDF URL: {paper.pdf_url}\n")
+        print(f"Abstract: {paper.abstract}\n")
+        print(f"PDF URL: {paper.url}\n")
         print(f"Entry ID: {paper.entry_id}\n")
         print("=================================")
-        print(f"[DEBUG] - Current Category: {*paper.categories,}")
+        #print(f"[DEBUG] - Current Category: {*paper.categories,}")
         print("=================================")
         # fetch_influence_flower(paper.entry_id)
 
@@ -82,7 +82,7 @@ Abstract: Takes one paper from the cs_CG category and proceeds to retrieve the n
 Args: None 
 Returns: One arXiv paper -> Result
 """
-def fetch_latest_paper() -> arx.Result:
+def fetch_latest_paper() -> Paper:
     search = arx.Search(
         query=f"cat:{CS_CG_CATEGORY}", 
         max_results=1, 
@@ -90,7 +90,7 @@ def fetch_latest_paper() -> arx.Result:
         sort_order=arx.SortOrder.Descending
     )
     results = list(client.results(search))
-    return results[0] if results else None
+    return Paper.from_arxiv(results[0]) if results else None
 
 """
 04-May-2025 - Basti
@@ -109,19 +109,22 @@ def fetch_papers(category: str = CS_CG_CATEGORY, amount: int = 10) -> list:
         sort_by=arx.SortCriterion.SubmittedDate, 
         sort_order=arx.SortOrder.Descending
     )
-    return list(search.results())
+    papers = []
+    for result in search.results():
+        papers.append(Paper.from_arxiv(result) if result else None)
+    return papers
 
 """
-25-May-2025 - Basti
+25-May-2025 - Basti, updated 26-July-2025 - Lenio
 Abstract: Hashes the data of a arXiv Paper using SHA256 and returns its hash
 Args:
 
-- paper: arxiv.Resukt -> A given paper returned from a Result() object
+- paper: Paper -> A given paper object
 
 Returns: str -> Unique hash of the paper
 """  
-def hash_paper_details(paper: arx.Result) -> str:
-    to_hash = paper.title+paper.summary
+def hash_paper_details(paper: Paper) -> str:
+    to_hash = paper.title+paper.abstract
     print(f"[DEBUG] Printing to hash text: {to_hash}")
 
     return hashlib.sha256(to_hash.encode()).hexdigest()
@@ -181,7 +184,7 @@ def testing_feedparser():
 Abstract: Tests if every category is accessible and is reachable through the arXiv API
 Args:
 Returns: 
-"""
+
 @DeprecationWarning
 def test_categories():
     print("Deprecated now! Categories have all passed the check as of 4th May 2025")
@@ -194,5 +197,5 @@ def test_categories():
             break
 
         print(f"Category {cat} passed!")
-        
+"""
 

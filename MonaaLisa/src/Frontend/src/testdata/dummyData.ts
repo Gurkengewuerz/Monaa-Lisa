@@ -2,8 +2,7 @@ export interface Paper {
   id: number;
   entry_id: string;
   title: string;
-  authors: string;
-  summary: string;
+  authors: string;  summary: string;
   published: string;
   url: string;
   hash: string;

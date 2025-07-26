@@ -2,10 +2,12 @@ import numpy as np
 from sentence_transformers import SentenceTransformer
 from ..api.arxiv import fetch_latest_paper, read_meta, CS_CG_CATEGORY
 from sklearn.manifold import TSNE
-from ..utils.paper import get_paper_text
 import numpy as np
 import arxiv as arx
 import torch
+
+from object.paper import Paper
+
 """
 Testing it as of 4th May 2025 with this Pretrained Sentence Transformer
 replace this later with SciBERT or allenai/specter
@@ -56,11 +58,11 @@ Args:
 
 Returns: dict -> containing the Result/Embedding + total of processed chunks
 """
-def parse_full_data(paper: arx.Result, chunk_size: int = 512):
+def parse_full_data(paper: Paper, chunk_size: int = 512):
     print("Reading current paper...\n")
     read_meta(paper)
 
-    full_text = get_paper_text(paper)
+    full_text = paper.extract_paper_text()
     if not full_text:
         print("Processing PDF failed!")
         return
@@ -83,6 +85,8 @@ def parse_full_data(paper: arx.Result, chunk_size: int = 512):
     except Exception as e:
         print(f"Error processing embeddings for {paper.title} with error: {str(e)}")
         return None
+
+
 """
 19-06-2025 - Basti
 Abstract: Reduces a list of high-dimensional embedding vectors to 2D t-SNE coordinates for visualization/saving them easily into the database.
@@ -101,7 +105,8 @@ def extract_tsne_coordinates(embeddings, random_state=42):
     tsne = TSNE(n_components=2, random_state=random_state, perplexity=perplexity)
     reduced = tsne.fit_transform(embeddings)
     return [tuple(map(float, coords)) for coords in reduced]
-  
+
+
 """
 04-May-2025 - Basti
 Abstract: 
@@ -131,8 +136,8 @@ def fetch_test():
         print(f"Title: {paper.title}")
         print(f"Authors: {', '.join(str(author) for author in paper.authors)}")
         print(f"Published: {paper.published}")
-        print(f"Abstract: {paper.summary}")
-        print(f"PDF URL: {paper.pdf_url}")
+        print(f"Abstract: {paper.abstract}")
+        print(f"PDF URL: {paper.url}")
         print(f"Entry ID: {paper.entry_id}")
     else:
         print("No paper found! Something went wrong fetching the arXiv API... or my code :(")
