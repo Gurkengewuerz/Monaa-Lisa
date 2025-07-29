@@ -1,7 +1,8 @@
+from object.paper import Paper
 from SemanticPaper.api.semanticscholar import SemanticScholarAPI
 from SemanticPaper.api.arxiv import hash_paper_details, fetch_latest_paper, fetch_papers
 from SemanticPaper.logger.logger import setup_logger
-from Database.db import SessionLocal, save_to_db
+from Database.db import SessionLocal, save_paper_to_db
 from dotenv import load_dotenv
 from SemanticPaper.machine_learning.model import parse_full_data, extract_tsne_coordinates
 import concurrent.futures
@@ -95,6 +96,13 @@ def entry(max_workers:int = 4):
                 if result:
                     paper, paper_hash, embedding = result
                     embeddings.append(embedding)
+                    # Extract metadata from the paper object
+                    """Annotation 29-July-2025: - Lenio
+                    Since grobid does take some time to process the paper, we should later replace the extract_metadata
+                    method with a more generalized way to analyze the paper and extract metadata. Then save that to the paper
+                    object. This way each paper only gets analyzed once and we can use the metadata for further processing.
+                    """
+                    paper.extract_metadata()
                     paper_objs.append(paper)
                     paper_hashes.append(paper_hash)
                     new_papers.append(paper)
@@ -109,7 +117,7 @@ def entry(max_workers:int = 4):
                     "tsne1": tsne_coords[i][0],
                     "tsne2": tsne_coords[i][1]
                 }
-                save_to_db(paper, paper_hashes[i], embedding_dict)
+                save_paper_to_db(paper, paper_hashes[i], embedding_dict)
                 save_hash(paper_hashes[i])
                 known_hashes.add(paper_hashes[i])
                 logger.info(f"Saved paper with tSNE coords: {paper.title}")

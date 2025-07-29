@@ -37,7 +37,7 @@ Args:
 - embedding: dict -> numpy dictionary containing coordinates, datatype and parsed 
 Returns: bool -> True if: paper was successfully committed to the database | False if: commit failed/Exception occured
 """  
-def save_to_db(paper: Paper, paper_hash, embedding: dict):
+def save_paper_to_db(paper: Paper, paper_hash, embedding: dict):
     session = SessionLocal()
 
     if paper_exists(session, paper_hash):
@@ -62,6 +62,12 @@ def save_to_db(paper: Paper, paper_hash, embedding: dict):
     db_paper.tsne1 = tsne1
     db_paper.tsne2 = tsne2
     db_paper.hash = paper_hash
+    # in the future when we have more calls to grobid this should not happen but rather in a sooner step so we process each paper only once
+    references = paper.references if paper.references else []
+    for ref in references:
+        db_reference = ref.to_db_model()
+        logger.info(f"Adding reference to DB: {db_reference.title}")
+        session.add(db_reference)
     session.add(db_paper)
     try:
         session.commit()

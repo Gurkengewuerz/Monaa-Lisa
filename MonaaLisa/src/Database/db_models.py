@@ -23,7 +23,7 @@ Parameters:
 - added: Date and time when the paper was added to the database.
 """
 class DBPaper(db_base):
-    __tablename__ = "papers"
+    __tablename__ = "paper"
     id = Column(Integer, primary_key=True, index=True)
     entry_id = Column(String, unique=True, index=True)
     title = Column(String)
@@ -32,7 +32,6 @@ class DBPaper(db_base):
     published = Column(DateTime)
     url = Column(String)
     hash = Column(String, unique=True, index=True)
-    related_papers = Column(JSON, nullable=True)
     citations = Column(JSON, nullable=True)
     tsne1 = Column(Float, nullable=True)
     tsne2 = Column(Float, nullable=True)
@@ -49,7 +48,21 @@ Parameters:
 """
 class PaperRelation(db_base):
     __tablename__ = "paper_relations"
-    id = Column(Integer, primary_key=True, index=True)
-    source_id = Column(Integer, ForeignKey("papers.id"))
-    target_id = Column(Integer, ForeignKey("papers.id"))
+    source_id = Column(Integer, ForeignKey("paper.id"), primary_key=True)
+    target_id = Column(Integer, ForeignKey("paper.id"), primary_key=True)
     confidence = Column(Float)
+
+
+"""
+17-July-2025 - Lenio
+Abstract: Represents a reference found in a paper.
+Parameters:
+- belonging_paper_id: The ID of the first paper.
+- target_id: The ID of the second paper that relates to the first.
+- confidence: A float representing the confidence level of the relation.
+"""
+class DBReference(db_base):
+    __tablename__ = "reference"
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    belonging_paper_entry_id = Column(String, ForeignKey("paper.entry_id"), primary_key=True)
+    title = Column(String, nullable=False)

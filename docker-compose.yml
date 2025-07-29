@@ -30,15 +30,16 @@ services:
   frontend:
     build:
       context: ./MonaaLisa/src/Frontend
+      dockerfile: Dockerfile
     ports:
       - "5173:5173"
     depends_on:
       - app
     volumes:
       - ./MonaaLisa/src/Frontend:/app
+      - /app/node_modules
     environment:
       VITE_API_URL: "http://app:5000"
-    command: ["sh", "-c", "npm install && npx vite dev --host 0.0.0.0 --port 5173"]
 
   grobid:
     image: lfoppiano/grobid:0.7.3
