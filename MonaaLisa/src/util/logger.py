@@ -5,6 +5,8 @@ from pathlib import Path
 
 
 class Logger:
+    _instances = {}
+    
     def __init__(
             self,
             name: str,
@@ -12,39 +14,41 @@ class Logger:
     ):
         self.name = name
         self.logger = logging.getLogger(name)
-        self.logger.setLevel(logging.DEBUG)
+        
+        if not self.logger.handlers:
+            self.logger.setLevel(logging.DEBUG)
 
-        self.config = {
-            'log_format': '%(asctime)s [%(levelname)s] [%(name)s] - %(message)s',
-            'date_format': '%d-%m-%Y %H:%M:%S',
-            'max_bytes': 10485760,  # 10MB
-            'backup_count': 5,
-            'file_level': 'INFO',
-            'console_level': 'DEBUG'
-        }
+            self.config = {
+                'log_format': '%(asctime)s [%(levelname)s] [%(name)s] - %(message)s',
+                'date_format': '%d-%m-%Y %H:%M:%S',
+                'max_bytes': 10485760,  # 10MB
+                'backup_count': 5,
+                'file_level': 'INFO',
+                'console_level': 'INFO'
+            }
 
-        # format everything like in the config
-        formatter = logging.Formatter(
-            fmt=self.config['log_format'],
-            datefmt=self.config['date_format']
-        )
+            # format everything like in the config
+            formatter = logging.Formatter(
+                fmt=self.config['log_format'],
+                datefmt=self.config['date_format']
+            )
 
-        # add console handler
-        console_handler = logging.StreamHandler()
-        console_handler.setLevel(self.config['console_level'])
-        console_handler.setFormatter(formatter)
-        self.logger.addHandler(console_handler)
+            # add console handler
+            console_handler = logging.StreamHandler()
+            console_handler.setLevel(self.config['console_level'])
+            console_handler.setFormatter(formatter)
+            self.logger.addHandler(console_handler)
 
-        # Add file handler to keep track oc
-        os.makedirs(log_path, exist_ok=True)
-        file_handler = logging.handlers.RotatingFileHandler(
-            filename=Path(log_path) / f"{name}.log",
-            maxBytes=self.config['max_bytes'],
-            backupCount=self.config['backup_count']
-        )
-        file_handler.setLevel(self.config['file_level'])
-        file_handler.setFormatter(formatter)
-        self.logger.addHandler(file_handler)
+            # Add file handler to keep track oc
+            os.makedirs(log_path, exist_ok=True)
+            file_handler = logging.handlers.RotatingFileHandler(
+                filename=Path(log_path) / f"{name}.log",
+                maxBytes=self.config['max_bytes'],
+                backupCount=self.config['backup_count']
+            )
+            file_handler.setLevel(self.config['file_level'])
+            file_handler.setFormatter(formatter)
+            self.logger.addHandler(file_handler)
 
     def info(self, message: str, **kwargs):
         self.logger.info(message, extra=kwargs)

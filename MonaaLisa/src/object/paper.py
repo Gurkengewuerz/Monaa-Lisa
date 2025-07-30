@@ -32,8 +32,21 @@ class Paper:
     tsne2: Optional[float] = None
     embedding: Optional[Dict] = None
     added: Optional[datetime] = None
-    _grobid_xml: Optional[str] = None  
-    logger = Logger("Paper")
+    _grobid_xml: Optional[str] = None
+    _paper_logger = None
+    _grobid_logger = None
+
+    @property
+    def logger(self):
+        if Paper._paper_logger is None:
+            Paper._paper_logger = Logger("Paper")
+        return Paper._paper_logger
+
+    @staticmethod
+    def get_grobid_logger():
+        if Paper._grobid_logger is None:
+            Paper._grobid_logger = Logger("Grobid")
+        return Paper._grobid_logger
 
     """
     26-July-2025 - Lenio
@@ -115,13 +128,13 @@ class Paper:
     def extract_metadata(self):
         references = self.extract_references()
         if references:
-            self.logger.info(f"Extracted references from the paper {self.title}!")
-            self.references = references
             """Annotation 30-July-2025: - Bastian
-            This could be removed in prod, causes extreme log spam
+            Changed from evvery paper, to just the length - otherwise we have extreme log spam
             """
-            for reference in self.references:
-                self.logger.debug(f"{self.title} referencing {reference.title}")
+            self.logger.info(f"Extracted {len(references)} references from {self.title}")
+            self.references = references
+        else:
+            self.logger.warning(f"No references found for {self.title}")
 
 
     """
@@ -167,7 +180,7 @@ class Paper:
     """
     @staticmethod
     def extract_paper_text_semantic(url: str) -> Optional[str]:
-        local_logger = Logger("Grobid")
+        local_logger = Paper.get_grobid_logger()  
         temp_file_path = None
         try:
             response = requests.get(url)
@@ -191,7 +204,7 @@ class Paper:
 
             if not grobid_response.ok:
                 raise Exception(f"Grobid-Processing failed: {grobid_response.status_code}")
-            local_logger.info(f"Grobid processing finished successfully for {url}!")
+            local_logger.info(f"Grobid processing finished successfully!")
             return grobid_response.text
 
         except Exception as e:
