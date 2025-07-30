@@ -12,6 +12,7 @@ import requests
 from sqlalchemy import Column, Integer, String, DateTime, JSON, Float
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(__file__))))
 from Database.db_models import DBPaper
+from util.logger import Logger
 from object.reference import Reference
 from lxml import etree
 
@@ -31,6 +32,21 @@ class Paper:
     tsne2: Optional[float] = None
     embedding: Optional[Dict] = None
     added: Optional[datetime] = None
+    _grobid_xml: Optional[str] = None
+    _paper_logger = None
+    _grobid_logger = None
+
+    @property
+    def logger(self):
+        if Paper._paper_logger is None:
+            Paper._paper_logger = Logger("Paper")
+        return Paper._paper_logger
+
+    @staticmethod
+    def get_grobid_logger():
+        if Paper._grobid_logger is None:
+            Paper._grobid_logger = Logger("Grobid")
+        return Paper._grobid_logger
 
     """
     26-July-2025 - Lenio
@@ -95,12 +111,12 @@ class Paper:
 
                 doc.close()
                 os.unlink(tmp_file.name)
-                print("READING FULL TEXT FINISHED! =)")
+                self.logger.info(f"Reading full text finished successfully for {self.title}!")
                 return text.strip()
 
         except Exception as e:
             title = self.title if hasattr(self, 'title') else "Unknown paper"
-            print(f"Failed processing or fetching the PDF {title} with error: {str(e)}")
+            self.logger.error(f"Failed processing or fetching the PDF {title} with error: {str(e)}")
             return None
 
     """
@@ -112,10 +128,13 @@ class Paper:
     def extract_metadata(self):
         references = self.extract_references()
         if references:
-            print("successfully extracted references from the paper!")
+            """Annotation 30-July-2025: - Bastian
+            Changed from evvery paper, to just the length - otherwise we have extreme log spam
+            """
+            self.logger.info(f"Extracted {len(references)} references from {self.title}")
             self.references = references
-            for reference in self.references:
-                print(f" - {reference.title}")
+        else:
+            self.logger.warning(f"No references found for {self.title}")
 
 
     """
@@ -124,27 +143,34 @@ class Paper:
     returns: List[Reference] -> A list of Reference objects found in the paper.
     """
     def extract_references(self) -> List['Reference']:
+        if self._grobid_xml is None:
+            self._grobid_xml = self.extract_paper_text_semantic(self.url)
+        
+        if self._grobid_xml is None:
+            return []
+            
         references = []
-        text_as_xml = self.extract_paper_text_semantic(self.url)
-        if text_as_xml is not None:
-            data = text_as_xml.encode("utf-8")
+        try:
+            data = self._grobid_xml.encode("utf-8")
             root = etree.fromstring(data)
             ns = {'tei': 'http://www.tei-c.org/ns/1.0'}
-            # Search for <div type="references"> in the <back> section
             references_xml = root.findall('.//tei:div[@type="references"]//tei:biblStruct', ns)
+            
             for ref in references_xml:
                 titles = ref.findall('.//tei:title', ns)
-                if len(titles) > 0:
-                    # Filter None values and use empty string as fallback
+                if titles:
                     title_texts = [title.text or "" for title in titles]
-                    # Only join non-empty strings
                     combined_title = ", ".join(filter(None, title_texts))
-                    if combined_title:  # Only create reference if there is a title
+                    if combined_title:
                         references.append(Reference(self.entry_id, combined_title))
-            else:
-                    print(f"No titles found in reference: {etree.tostring(ref, pretty_print=True).decode('utf-8')}")
-            return references
-        return []
+                        
+            if not references:
+                self.logger.warning(f"Could not extract references from paper {self.title} or none were found!")
+                
+        except Exception as e:
+            self.logger.error(f"Error parsing references for {self.title}: {str(e)}")
+            
+        return references
 
     """
     27-July-2025 - Lenio
@@ -154,6 +180,7 @@ class Paper:
     """
     @staticmethod
     def extract_paper_text_semantic(url: str) -> Optional[str]:
+        local_logger = Paper.get_grobid_logger()  
         temp_file_path = None
         try:
             response = requests.get(url)
@@ -177,11 +204,11 @@ class Paper:
 
             if not grobid_response.ok:
                 raise Exception(f"Grobid-Processing failed: {grobid_response.status_code}")
-            print("Grobid processing finished successfully!")
+            local_logger.info(f"Grobid processing finished successfully!")
             return grobid_response.text
 
         except Exception as e:
-            print(f"Error while extracting text: {str(e)}")
+            local_logger.error(f"Error while extracting text: {str(e)}")
             return None
 
         finally:
@@ -190,6 +217,6 @@ class Paper:
                 try:
                     os.unlink(temp_file_path)
                 except Exception as e:
-                    print(f"Failed to delete temporary file: {str(e)}")
+                    local_logger.error(f"Failed to delete temporary file: {str(e)}")
 
 #print(Paper.extract_paper_text_semantic("https://arxiv.org/pdf/2401.00001.pdf"))

@@ -7,7 +7,9 @@ import arxiv as arx
 import torch
 
 from object.paper import Paper
+from util.logger import Logger
 
+logger = Logger("Model")
 """
 Testing it as of 4th May 2025 with this Pretrained Sentence Transformer
 replace this later with SciBERT or allenai/specter
@@ -15,7 +17,7 @@ replace this later with SciBERT or allenai/specter
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 model = SentenceTransformer("all-MiniLM-L6-v2")
 model = model.to(device)
-print("Using device:", device)
+logger.info(f"Using device: {device}")
 
 """
 04-May-2025 - Basti
@@ -28,7 +30,7 @@ Returns: Dict containing the title and its abstracted data
 """
 @DeprecationWarning
 def parse_description_data(paper: arx.Result) -> dict:
-    print("Reading current paper...\n")
+    logger.info("Reading current paper...\n")
     read_meta(paper)
 
     """ 
@@ -59,12 +61,12 @@ Args:
 Returns: dict -> containing the Result/Embedding + total of processed chunks
 """
 def parse_full_data(paper: Paper, chunk_size: int = 512):
-    print("Reading current paper...\n")
+    logger.info("Reading current paper...\n")
     read_meta(paper)
 
     full_text = paper.extract_paper_text_legacy()
     if not full_text:
-        print("Processing PDF failed!")
+        logger.info("Processing PDF failed!")
         return
 
     try:
@@ -83,7 +85,7 @@ def parse_full_data(paper: Paper, chunk_size: int = 512):
             "Chunks_Processed": len(chunks)
         }
     except Exception as e:
-        print(f"Error processing embeddings for {paper.title} with error: {str(e)}")
+        logger.info(f"Error processing embeddings for {paper.title} with error: {str(e)}")
         return None
 
 
@@ -115,8 +117,8 @@ Returns:
 """
 # def parse_category(category: str, amount: int):
 #     if category not in categories:
-#         print("Invalid category! Choose one of these: \n")
-#         print(categories)
+#         logger.debug(("Invalid category! Choose one of these: \n")
+#         logger.debug(categories)
 #         return
 
 
@@ -133,11 +135,11 @@ Additional Comment: I should start writing unit tests..
 def fetch_test():
     paper = fetch_latest_paper()
     if paper:
-        print(f"Title: {paper.title}")
-        print(f"Authors: {', '.join(str(author) for author in paper.authors)}")
-        print(f"Published: {paper.published}")
-        print(f"Abstract: {paper.abstract}")
-        print(f"PDF URL: {paper.url}")
-        print(f"Entry ID: {paper.entry_id}")
+        logger.debug(f"Title: {paper.title}")
+        logger.debug(f"Authors: {', '.join(str(author) for author in paper.authors)}")
+        logger.debug(f"Published: {paper.published}")
+        logger.debug(f"Abstract: {paper.abstract}")
+        logger.debug(f"PDF URL: {paper.url}")
+        logger.debug(f"Entry ID: {paper.entry_id}")
     else:
-        print("No paper found! Something went wrong fetching the arXiv API... or my code :(")
+        logger.debug("No paper found! Something went wrong fetching the arXiv API... or my code :(")
