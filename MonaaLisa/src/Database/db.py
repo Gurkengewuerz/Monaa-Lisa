@@ -18,10 +18,10 @@ from sqlalchemy.orm import declarative_base, sessionmaker
 from dotenv import load_dotenv
 from Database.db_models import db_base, DBPaper
 from object.paper import Paper
-from SemanticPaper.logger.logger import setup_logger
+from util.logger import Logger
 # os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), ".env")
 load_dotenv()
-logger = setup_logger()
+logger = Logger("Database")
 
 DATABASE_URL = os.environ.get("DATABASE_URL")
 engine = create_engine(DATABASE_URL)
@@ -119,6 +119,6 @@ def update_paper_references(paper_id, related_papers, citations):
         session.close()
 
 if __name__ == "__main__":
-    print("Creating database tables...")
+    logger.info("Creating database tables...")
     db_base.metadata.create_all(bind=engine)
-    print("Tables created successfully!")
+    logger.info("Tables created successfully!")

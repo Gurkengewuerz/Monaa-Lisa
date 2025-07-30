@@ -1,7 +1,7 @@
 from object.paper import Paper
 from SemanticPaper.api.semanticscholar import SemanticScholarAPI
 from SemanticPaper.api.arxiv import hash_paper_details, fetch_latest_paper, fetch_papers
-from SemanticPaper.logger.logger import setup_logger
+from util.logger import Logger
 from Database.db import SessionLocal, save_paper_to_db
 from dotenv import load_dotenv
 from SemanticPaper.machine_learning.model import parse_full_data, extract_tsne_coordinates
@@ -10,7 +10,7 @@ import os
 import time
 import threading
 
-logger = setup_logger()
+logger = Logger("Main")
 
 semantic = SemanticScholarAPI()
 

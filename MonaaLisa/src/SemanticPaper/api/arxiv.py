@@ -5,6 +5,9 @@ import random
 import hashlib
 
 from object.paper import Paper
+from util.logger import Logger
+
+logger = Logger("arxiv")
 
 # Funny test comment ! :D
 
@@ -62,19 +65,19 @@ Returns: Metadata of the provided Paper
 """
 def read_meta(paper: Paper):
     if paper:
-        print(f"Title: {paper.title}\n")
-        print(f"Authors: {', '.join(str(author) for author in paper.authors)}\n")
-        print(f"Published: {paper.published}\n")
-        print(f"Abstract: {paper.abstract}\n")
-        print(f"PDF URL: {paper.url}\n")
-        print(f"Entry ID: {paper.entry_id}\n")
-        print("=================================")
+        logger.info(f"Title: {paper.title}\n")
+        logger.info(f"Authors: {', '.join(str(author) for author in paper.authors)}\n")
+        logger.info(f"Published: {paper.published}\n")
+        logger.info(f"Abstract: {paper.abstract}\n")
+        logger.info(f"PDF URL: {paper.url}\n")
+        logger.info(f"Entry ID: {paper.entry_id}\n")
+        logger.info("=================================")
         #print(f"[DEBUG] - Current Category: {*paper.categories,}")
-        print("=================================")
+        logger.info("=================================")
         # fetch_influence_flower(paper.entry_id)
 
     else:
-        print("No Paper!")
+        logger.error("No Paper!")
 
 """
 04-May-2025 - Basti
@@ -125,7 +128,7 @@ Returns: str -> Unique hash of the paper
 """  
 def hash_paper_details(paper: Paper) -> str:
     to_hash = paper.title+paper.abstract
-    print(f"[DEBUG] Printing to hash text: {to_hash}")
+    logger.debug(f"[DEBUG] Printing to hash text: {to_hash}")
 
     return hashlib.sha256(to_hash.encode()).hexdigest()
 
@@ -158,7 +161,7 @@ def testing_arxiv():
     results = client.results(search)
 
     for r in results:
-        print(f"Title: {r.title}\nDate: {r.published}")
+        logger.debug(f"Title: {r.title}\nDate: {r.published}")
 
 
 """
@@ -170,12 +173,12 @@ Returns:
 def testing_feedparser():
     url = "http://export.arxiv.org/api/query?search_query=all:*&sortBy=lastUpdatedDate&sortOrder=descending&max_results=5&version=2"
     feed = feedparser.parse(url)
-    print(len(feed.entries))
+    logger.debug(len(feed.entries))
     for entry in feed.entries:
-        print(f"Title: {entry.title}")
-        print(f"Updated: {entry.updated}")
-        print(f"Link: {entry.link}")
-        print('-' * 80)
+        logger.debug(f"Title: {entry.title}")
+        logger.debug(f"Updated: {entry.updated}")
+        logger.debug(f"Link: {entry.link}")
+        logger.debug('-' * 80)
 
 
 

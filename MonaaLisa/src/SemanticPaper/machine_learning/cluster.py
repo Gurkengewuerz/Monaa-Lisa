@@ -4,8 +4,11 @@ from sklearn.cluster import KMeans
 from sklearn.manifold import TSNE
 import matplotlib.pyplot as plt
 import matplotlib.cm as cm
+from util.logger import Logger
 from ..api.arxiv import fetch_papers, fetch_latest_paper, CS_CG_CATEGORY
 from ..machine_learning.model import parse_description_data, parse_full_data
+
+logger = Logger("Cluster")
 
 """
 04-May-2025 - Basti
@@ -68,7 +71,7 @@ Returns: A .png file of the generated cluster on the local disk!
 def cluster_papers_in_category(amount: int, n_clusters: int = 5):
     papers = fetch_papers(category=CS_CG_CATEGORY, amount=amount)
     if not papers:
-        print("No papers fetched.")
+        logger.warning("No papers fetched.")
         return [], [], []
     embeddings, titles, paper_objs = [], [], []
     for paper in papers:
@@ -79,7 +82,7 @@ def cluster_papers_in_category(amount: int, n_clusters: int = 5):
         titles.append(paper.title)
         paper_objs.append(paper)
     if not embeddings:
-        print("No embeddings generated.")
+        logger.warning("No embeddings generated.")
         return [], [], []
     labels, _ = cluster(embeddings, n_clusters)
     # left out for now, wont be necessary on the server (doesnt have that much computing power anyway)
