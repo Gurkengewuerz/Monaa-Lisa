@@ -1,5 +1,5 @@
 <script lang="ts">
-  import Graph from '../Graph.svelte'; 
+  import Graph from '../components/Graph.svelte'; 
 </script>
 
 <main>

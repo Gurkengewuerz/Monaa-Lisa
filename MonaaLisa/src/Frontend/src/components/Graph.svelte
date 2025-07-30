@@ -2,7 +2,7 @@
   import { onMount } from 'svelte';
   import Graph from 'graphology';
   import Sigma from 'sigma';
-  import { dummyPapers, type Paper } from './testdata/dummyData'; 
+  import { dummyPapers, type Paper } from '../testdata/dummyData'; 
 
   let container: HTMLDivElement | null = null; 
   let selectedPaper: Paper | null = null; 
