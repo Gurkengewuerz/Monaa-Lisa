@@ -62,7 +62,7 @@ def parse_full_data(paper: Paper, chunk_size: int = 512):
     print("Reading current paper...\n")
     read_meta(paper)
 
-    full_text = paper.extract_paper_text()
+    full_text = paper.extract_paper_text_legacy()
     if not full_text:
         print("Processing PDF failed!")
         return
