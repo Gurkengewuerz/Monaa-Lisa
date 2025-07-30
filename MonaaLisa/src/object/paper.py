@@ -1,6 +1,7 @@
 import os
 import sys
 import tempfile
+import textwrap
 from dataclasses import dataclass
 from datetime import datetime
 import arxiv as arx
@@ -32,6 +33,7 @@ class Paper:
     tsne2: Optional[float] = None
     embedding: Optional[Dict] = None
     added: Optional[datetime] = None
+    text_as_xml = None
     logger = Logger("Paper")
 
     """
@@ -43,7 +45,7 @@ class Paper:
     @classmethod
     def from_arxiv(cls, arxiv_result: arx.Result):
         return cls(
-            entry_id=arxiv_result.entry_id,
+            entry_id=arxiv_result.entry_id.split("/")[-1],  # Extract the last part of the entry_id
             title=arxiv_result.title,
             authors=[str(a) for a in arxiv_result.authors], # TODO # Normalize authors as objects
             abstract=arxiv_result.summary,
@@ -112,12 +114,26 @@ class Paper:
     Returns: None
     """
     def extract_metadata(self):
+        self.text_as_xml = self.extract_paper_text_semantic()
         references = self.extract_references()
         if references:
             self.logger.info("Extracted references from the paper!")
             self.references = references
             for reference in self.references:
                 self.logger.debug(f"{self.title} referencing {reference.title}")
+        sections = self.get_sections()
+        if sections:
+            for section in sections:
+                self.logger.info(f"{section['title']}")
+                # format text
+                content = section['content'].strip().lstrip('.')
+                wrapped_text = textwrap.fill(content,
+                                             width=100,
+                                             break_long_words=False,
+                                             replace_whitespace=True,
+                                             break_on_hyphens=True)
+
+                self.logger.info(f"{wrapped_text}\n")
 
 
     """
@@ -127,9 +143,8 @@ class Paper:
     """
     def extract_references(self) -> List['Reference']:
         references = []
-        text_as_xml = self.extract_paper_text_semantic(self.url)
-        if text_as_xml is not None:
-            data = text_as_xml.encode("utf-8")
+        if self.text_as_xml is not None:
+            data = self.text_as_xml.encode("utf-8")
             root = etree.fromstring(data)
             ns = {'tei': 'http://www.tei-c.org/ns/1.0'}
             # Search for <div type="references"> in the <back> section
@@ -150,17 +165,54 @@ class Paper:
         return []
 
     """
-    27-July-2025 - Lenio
-    Abstract: Extracts the full text of a paper using grobid from a given URL, only for testing right now.
-    Args: url: str -> The URL of the paper to extract text from.
-    Returns: Optional[str] -> The extracted text from the paper, or None if extraction fails.
+    30-July-2025 - Lenio
+    Abstract: Extracts sections from the paper's XML text.
+    Args: 
+    - root: ET.Element -> The root element of the XML document.
+    - ns: dict -> A dictionary containing XML namespaces.
     """
-    @staticmethod
-    def extract_paper_text_semantic(url: str) -> Optional[str]:
+    def get_sections(self) -> list[dict]:
+        data = self.text_as_xml.encode("utf-8")
+        root = etree.fromstring(data)
+        ns = {'tei': 'http://www.tei-c.org/ns/1.0'}
+        sections = []
+        for section in root.findall('.//tei:body//tei:div', ns):
+            # Get the section header and content xml elements
+            head_element = section.find('.//tei:head', ns)
+            content_elements = section.findall('.//tei:p', ns)
+            # The section data dictionary
+            section_data = {}
+            # The index indicating the section number
+            section_header_index = head_element.attrib.get('n', '')
+            content = ""
+            # Get all paragraphs in a section
+            for paragraph in content_elements:
+                content += paragraph.text.strip() + "\n"
+            if section_header_index != "":
+                # If section has a number in its attribute 'n'
+                section_data['title'] = section_header_index + " " + (
+                    head_element.text if head_element is not None else "")
+            else:
+                """ Sometimes grobid get's Sections wrong so if there is a section without an index
+                    we merge its content with the previous section.
+                """
+                sections[-1]['content'] += "\n" + content
+                continue
+            # If section has a title add it's content to the section data
+            section_data['content'] = content
+            sections.append(section_data)
+        return sections
+
+    """
+    27-July-2025 - Lenio
+    Abstract: Extracts the full text of a paper using grobid and sets the text_as_xml attribute.
+    Returns: Optional[str] -> Returns text of the paper as xml if successful, otherwise None.
+    """
+    def extract_paper_text_semantic(self) -> Optional[str]:
         local_logger = Logger("Grobid")
         temp_file_path = None
         try:
-            response = requests.get(url)
+            response = requests.get(self.url)
             if not response.ok:
                 raise Exception(f"Failed to download PDF: HTTP Error Code is - {response.status_code}")
 
