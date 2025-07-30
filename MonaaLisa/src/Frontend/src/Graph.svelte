@@ -56,6 +56,13 @@
         defaultEdgeType: 'line',
         minCameraRatio: 0.1,
         maxCameraRatio: 10,
+        //node label control
+        /*labelFont: 'Arial',
+        labelSize: 12,
+        labelWeight: 'normal',
+        labelColor: { color: '#ffffff' },*/
+        renderLabels: false, //disables labels
+        
       });
 
       //node hover handling
