@@ -2,7 +2,8 @@
 Softwarepraktikum von Basti, Nick, Lenio und Nico
 
 ## Quickstart (Development)
-
+**Note:**
+- You must have a valid `.env` file before starting!!
 1. **Copy the example environment file:**
    ```sh
    cp .env.example .env
@@ -31,5 +32,4 @@ Softwarepraktikum von Basti, Nick, Lenio und Nico
     python3 main.py
     ```
 
-**Note:**
-- You must have a valid `.env` file before starting!!
+
