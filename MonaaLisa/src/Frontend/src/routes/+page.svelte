@@ -1,17 +1,17 @@
 <script lang="ts">
-  import * as d3 from 'd3';
-import { dummyPapers } from '../testdata/dummyData';
-  import type { Paper } from '../testdata/dummyData';
   import { onMount } from 'svelte';
-
+  import Sigma from 'sigma';
+  import { UndirectedGraph } from 'graphology';
+  import { dummyPapers } from '../testdata/dummyData';
+  import type { Paper } from '../testdata/dummyData';
+  import * as d3 from 'd3'; // Used only for convex hull calculation
   import "../app.css";
 
 
-  // Initial visualization dimensions
+  // Visualization container and dimensions
   let vizContainer: HTMLDivElement;
   let WIDTH = 800;
   let HEIGHT = 600;
-
 
   // State: selected paper and search filter
   let selectedPaper: Paper | null = null;
@@ -26,64 +26,48 @@ import { dummyPapers } from '../testdata/dummyData';
     (p.title || '').toLowerCase().includes(filterTerm.toLowerCase())
   );
 
-  // D3 elements and scales
-  let svg: d3.Selection<SVGSVGElement, unknown, null, undefined>;
-  let group: d3.Selection<SVGGElement, unknown, null, undefined>;
-  let nodes: d3.Selection<SVGCircleElement, Paper, SVGGElement, unknown>;
-  let links: d3.Selection<SVGLineElement, { source: Paper; target: Paper }, SVGGElement, unknown>;
-  let hulls: d3.Selection<SVGPathElement, {cluster: string, points: [number, number][]}, SVGGElement, unknown>;
+  // Sigma.js and graph variables
+  let sigmaInstance: Sigma | null = null;
+  let graph: UndirectedGraph;
+
+  // Scales for positioning (same as D3 for consistency)
   let xScale: d3.ScaleLinear<number, number, never>;
   let yScale: d3.ScaleLinear<number, number, never>;
-  let zoom: d3.ZoomBehavior<Element, unknown>;
 
-  // Update node and link styles based on selected paper
+  // Update node and edge styles based on selected paper
   function updateVisualization(selected: Paper | null) {
     selectedPaper = selected;
 
-    if (selected && selected.id) {
-      const connectedIds = new Set<number>([
-        selected.id,
-        ...(selected.related_papers || []),
-        ...(selected.citations || [])
-      ]);
+    if (!graph || !sigmaInstance) return;
 
-      nodes.each(function (nodeData: Paper) {
-        const isSelected = nodeData.id === selected.id;
-        const isConnected = connectedIds.has(nodeData.id);
+    const connectedIds = selected
+      ? new Set<number>([selected.id, ...(selected.related_papers || []), ...(selected.citations || [])])
+      : new Set<number>();
 
-        d3.select(this as SVGCircleElement)
-          .attr('fill', isSelected ? 'green' : isConnected ? 'yellow' : '#d3d3d3')
-          .attr('opacity', isConnected ? 1 : 0.2)
-          .attr('r', isSelected ? 12 : isConnected ? 10 : 8);
-      });
+    graph.forEachNode((node, attributes) => {
+      const isSelected = selected && attributes.id === selected.id;
+      const isConnected = connectedIds.has(attributes.id);
 
-      links.each(function (linkData: { source: Paper; target: Paper }) {
-        const srcId = linkData.source?.id;
-        const tgtId = linkData.target?.id;
-        const connected =
-          srcId && tgtId && connectedIds.has(srcId) && connectedIds.has(tgtId);
+      graph.setNodeAttribute(node, 'color', isSelected ? 'green' : isConnected ? 'yellow' : '#d3d3d3');
+      graph.setNodeAttribute(node, 'size', isSelected ? 12 : isConnected ? 10 : 8);
+      graph.setNodeAttribute(node, 'opacity', isConnected ? 1 : 0.2);
+    });
 
-        d3.select(this as SVGLineElement)
-          .attr('stroke', connected ? 'gray' : '#d3d3d3')
-          .attr('opacity', connected ? 1 : 0.05);
-      });
-    } else {
-      // Reset all elements to default style
-      nodes
-        .attr('fill', 'steelblue')
-        .attr('opacity', 1)
-        .attr('r', 8);
+    graph.forEachEdge((edge, attributes) => {
+      const srcId = attributes.sourceId;
+      const tgtId = attributes.targetId;
+      const connected = srcId && tgtId && connectedIds.has(srcId) && connectedIds.has(tgtId);
 
-      links
-        .attr('stroke', 'gray')
-        .attr('opacity', 1);
-    }
+      graph.setEdgeAttribute(edge, 'color', connected ? 'gray' : '#d3d3d3');
+      graph.setEdgeAttribute(edge, 'opacity', connected ? 1 : 0.05);
+    });
+
+    sigmaInstance.refresh();
   }
 
   // Initialize visualization on component mount
   onMount(() => {
-    const margin = { top: 20, right: 20, bottom: 20, left: 20 };
-    // Responsive: get container size
+    // Responsive container sizing
     const resize = () => {
       if (vizContainer) {
         WIDTH = vizContainer.clientWidth;
@@ -91,186 +75,169 @@ import { dummyPapers } from '../testdata/dummyData';
       }
     };
     resize();
-    window.addEventListener('resize', resize);
+    window.addEventListener('resize', () => {
+      resize();
+      if (sigmaInstance) {
+        sigmaInstance.getCamera().setState({ x: 0.5, y: 0.5, ratio: 1 });
+        sigmaInstance.refresh();
+      }
+    });
 
-    //@ts-expect-error d3 types mismatch, works at runtime
-    svg = d3.select('#paper-viz')
-      .append('svg')
-      .attr('width', WIDTH)
-      .attr('height', HEIGHT)
-      .style('background-color', '#1C2526');
-
-    group = svg.append('g');
+    // Initialize graph
+    graph = new UndirectedGraph();
 
     // Create scales with padding
+    const margin = { top: 20, right: 20, bottom: 20, left: 20 };
     const xExtent = d3.extent(dummyPapers, (d: Paper) => d.tsne1 || 0) as [number, number];
     const yExtent = d3.extent(dummyPapers, (d: Paper) => d.tsne2 || 0) as [number, number];
 
     xScale = d3.scaleLinear()
       .domain([xExtent[0] - 5, xExtent[1] + 5])
-      .range([margin.left, WIDTH - margin.right]);
+      .range([margin.left / WIDTH, 1 - margin.right / WIDTH]);
 
     yScale = d3.scaleLinear()
       .domain([yExtent[0] - 5, yExtent[1] + 5])
-      .range([HEIGHT - margin.bottom, margin.top]);
+      .range([1 - margin.bottom / HEIGHT, margin.top / HEIGHT]);
 
-    // --- CLUSTER HULLS ---
-    // Group papers by cluster
-    const clusters: Record<string, Paper[]> = {};
-    dummyPapers.forEach(p => {
-      if (!clusters[p.cluster]) clusters[p.cluster] = [];
-      clusters[p.cluster].push(p);
+    // Add nodes
+    dummyPapers.forEach((paper: Paper) => {
+      if (paper.id) {
+        graph.addNode(paper.id.toString(), {
+          id: paper.id,
+          x: xScale(paper.tsne1 || 0),
+          y: yScale(paper.tsne2 || 0),
+          size: 8,
+          label: paper.title || 'Untitled',
+          color: paper.cluster === 'A' ? '#4fd1c5' : paper.cluster === 'B' ? '#f6ad55' : paper.cluster === 'C' ? '#63b3ed' : '#b794f4',
+          opacity: 1
+        });
+      }
     });
 
-    // Compute convex hulls for each cluster
-    const hullData = Object.entries(clusters).map(([cluster, papers]) => {
-      // Points in [x, y] for d3.polygonHull
-      const points: [number, number][] = papers.map(p => [xScale(p.tsne1), yScale(p.tsne2)]);
-      // d3.polygonHull returns null if <3 points
-      const hull = points.length >= 3 ? d3.polygonHull(points) : points;
-      return { cluster, points: hull || points };
-    });
-
-    // Draw hulls (paths)
-    hulls = group.selectAll<SVGPathElement, {cluster: string, points: [number, number][]}>("path.cluster-hull")
-      .data(hullData)
-      .enter()
-      .append("path")
-      .attr("class", "cluster-hull")
-      .attr("d", d => d.points.length >= 3 ?
-        "M" + d.points.map(p => p.join(",")).join("L") + "Z" :
-        null)
-      .attr("fill", (d, i) => ["#2a3a44", "#3b4a5a", "#1e2d3a", "#4a3b5a"][i % 4])
-      .attr("fill-opacity", 0.18)
-      .attr("stroke", (d, i) => ["#4fd1c5", "#f6ad55", "#63b3ed", "#f56565"][i % 4])
-      .attr("stroke-width", 3);
-
-    // --- LINKS ---
-    const linkData: { source: Paper; target: Paper }[] = [];
+    // Add edges
     dummyPapers.forEach((paper: Paper) => {
       (paper.related_papers || []).forEach((relId: number) => {
-        const target = dummyPapers.find((p: Paper) => p.id === relId);
-        if (target) linkData.push({ source: paper, target });
+        if (paper.id && paperMap.has(relId)) {
+          graph.addEdgeWithKey(`${paper.id}-${relId}`, paper.id.toString(), relId.toString(), {
+            sourceId: paper.id,
+            targetId: relId,
+            color: 'gray',
+            size: 1,
+            opacity: 0.5
+          });
+        }
       });
     });
 
-    // Draw links (lines)
-    links = group.selectAll<SVGLineElement, { source: Paper; target: Paper }>('line')
-      .data(linkData)
-      .enter()
-      .append('line')
-      .attr('x1', d => xScale(d.source.tsne1 || 0))
-      .attr('y1', d => yScale(d.source.tsne2 || 0))
-      .attr('x2', d => xScale(d.target.tsne1 || 0))
-      .attr('y2', d => yScale(d.target.tsne2 || 0))
-      .attr('stroke', 'gray')
-      .attr('stroke-width', 1)
-      .attr('opacity', 0.5);
+    // Initialize Sigma.js
+    sigmaInstance = new Sigma(graph, vizContainer, {
+      allowInvalidContainer: false,
+      defaultNodeType: 'circle',
+      defaultEdgeType: 'line',
+      enableEdgeEvents: true,
+      minCameraRatio: 0.5,
+      maxCameraRatio: 5,
+      labelFont: 'Arial',
+      labelSize: 12,
+      labelColor: { color: '#e0e6ed' },
+      backgroundColor: '#1C2526'
+    });
 
-    // --- NODES ---
-    nodes = group.selectAll<SVGCircleElement, Paper>('circle')
-      .data(dummyPapers.filter((p: Paper) => p.id))
-      .enter()
-      .append('circle')
-      .attr('cx', d => xScale(d.tsne1 || 0))
-      .attr('cy', d => yScale(d.tsne2 || 0))
-      .attr('r', 8)
-      .attr('fill', d => {
-        // Color by cluster
-        if (d.cluster === 'A') return '#4fd1c5';
-        if (d.cluster === 'B') return '#f6ad55';
-        if (d.cluster === 'C') return '#63b3ed';
-        return '#b794f4';
-      })
-      .attr('stroke', 'black')
-      .attr('stroke-width', 1)
-      .on('click', (event: MouseEvent, d: Paper) => {
-        event.stopPropagation();
-        updateVisualization(d);
-      })
-      .call(
-        d3.drag<SVGCircleElement, Paper>()
-          .on('start', function () {
-            d3.select(this).raise().attr('stroke-width', 2);
-          })
-          .on('drag', function (event: any, d: Paper) {
-            const rect = svg.node()!.getBoundingClientRect();
-            const transform = d3.zoomTransform(svg.node()!);
+    // Draw cluster hulls using canvas
+    const canvas = vizContainer.querySelector('canvas')!;
+    const ctx = canvas.getContext('2d')!;
+    const drawHulls = () => {
+      ctx.clearRect(0, 0, WIDTH, HEIGHT);
+      const clusters: Record<string, Paper[]> = {};
+      dummyPapers.forEach(p => {
+        if (!clusters[p.cluster]) clusters[p.cluster] = [];
+        clusters[p.cluster].push(p);
+      });
 
-            // Calculate new coordinates accounting for zoom/pan
-            const mouseX = event.sourceEvent.clientX - rect.left;
-            const mouseY = event.sourceEvent.clientY - rect.top;
+      Object.entries(clusters).forEach(([cluster, papers], i) => {
+        const points: [number, number][] = papers.map(p => [
+          xScale(p.tsne1 || 0) * WIDTH,
+          yScale(p.tsne2 || 0) * HEIGHT
+        ]);
+        if (points.length < 3) return;
 
-            d.tsne1 = xScale.invert((mouseX - transform.x) / transform.k);
-            d.tsne2 = yScale.invert((mouseY - transform.y) / transform.k);
+        const hull = d3.polygonHull(points);
+        if (!hull) return;
 
-            // Update node position
-            d3.select(this as SVGCircleElement)
-              .attr('cx', xScale(d.tsne1))
-              .attr('cy', yScale(d.tsne2));
+        ctx.beginPath();
+        ctx.moveTo(hull[0][0], hull[0][1]);
+        hull.forEach(([x, y], i) => {
+          if (i > 0) ctx.lineTo(x, y);
+        });
+        ctx.closePath();
+        ctx.fillStyle = ["#2a3a44", "#3b4a5a", "#1e2d3a", "#4a3b5a"][i % 4];
+        ctx.globalAlpha = 0.18;
+        ctx.fill();
+        ctx.strokeStyle = ["#4fd1c5", "#f6ad55", "#63b3ed", "#f56565"][i % 4];
+        ctx.lineWidth = 3;
+        ctx.globalAlpha = 1;
+        ctx.stroke();
+      });
+    };
 
-            // Update links connected to this node
-            links
-              .attr('x1', l => xScale(l.source.tsne1 || 0))
-              .attr('y1', l => yScale(l.source.tsne2 || 0))
-              .attr('x2', l => xScale(l.target.tsne1 || 0))
-              .attr('y2', l => yScale(l.target.tsne2 || 0));
+    // Redraw hulls on camera change
+    sigmaInstance.on('afterRender', drawHulls);
 
-            // Update hulls
-            hulls.attr('d', d => d.points.length >= 3 ?
-              "M" + d.points.map(p => p.join(",")).join("L") + "Z" : null);
-          })
-          .on('end', function () {
-            d3.select(this).attr('stroke-width', 1);
-          })
-      );
+    // Node click handler
+    sigmaInstance.on('clickNode', ({ node }) => {
+      const paperId = parseInt(node);
+      const paper = paperMap.get(paperId);
+      if (paper) updateVisualization(paper);
+    });
 
-    // Add tooltips showing paper titles
-    nodes.append('title').text(d => d.title || 'Untitled');
+    // Background click clears selection
+    sigmaInstance.on('clickStage', () => updateVisualization(null));
 
-    // Zoom behavior setup
-    zoom = d3.zoom<Element, unknown>()
-      .scaleExtent([0.5, 5])
-      .on('zoom', (e) => group.attr('transform', e.transform));
+    // Node dragging
+    let draggedNode: string | null = null;
+    sigmaInstance.on('downNode', ({ node }) => {
+      draggedNode = node;
+      graph.setNodeAttribute(node, 'highlighted', true);
+    });
 
-    svg.call(zoom);
+    sigmaInstance.on('clickStage', ({ event }) => {
+      if (draggedNode) {
+        const rect = vizContainer.getBoundingClientRect();
+        const camera = sigmaInstance.getCamera();
+        const { x, y } = sigmaInstance.viewportToGraph({ x: event.clientX - rect.left, y: event.clientY - rect.top });
 
-    // Clicking SVG background clears selection
-    svg.on('click', () => updateVisualization(null));
+        graph.setNodeAttribute(draggedNode, 'x', x);
+        graph.setNodeAttribute(draggedNode, 'y', y);
+        graph.setNodeAttribute(draggedNode, 'highlighted', false);
+        draggedNode = null;
+        sigmaInstance.refresh();
+        drawHulls();
+      }
+    });
 
-    // Cleanup SVG on component unmount
+    // Cleanup on unmount
     return () => {
       window.removeEventListener('resize', resize);
-      d3.select('#paper-viz svg').remove();
+      if (sigmaInstance) {
+        sigmaInstance.kill();
+        sigmaInstance = null;
+      }
     };
   });
 
   // Select a paper by ID, highlight and center view
   function selectPaper(paperId: number) {
     const paper = paperMap.get(paperId);
-    if (!paper) return;
+    if (!paper || !sigmaInstance) return;
 
     updateVisualization(paper);
 
-    // Get current zoom scale
-    const { k } = d3.zoomTransform(svg.node()!);
-
-    // Calculate translation to center node
-    const translateX = WIDTH / 2 - xScale(paper.tsne1 || 0) * k;
-    const translateY = HEIGHT / 2 - yScale(paper.tsne2 || 0) * k;
-
-    // Animate zoom transform to center on selected node
-    svg.transition()
-      .duration(600)
-      .call(
-        zoom.transform,
-        d3.zoomIdentity.translate(translateX, translateY).scale(k)
-      );
+    // Center camera on selected node
+    const node = paper.id.toString();
+    const { x, y } = graph.getNodeAttributes(node);
+    sigmaInstance.getCamera().animate({ x, y, ratio: 1 }, { duration: 600 });
   }
-
 </script>
-
-
 
 <div class="flex flex-col md:flex-row gap-8 p-8 min-h-screen bg-[#181f23]">
   <div class="viz flex-[3_3_0%] bg-[#1c2526] rounded-xl shadow-lg p-6 flex flex-col items-center border border-[#27313a]">
