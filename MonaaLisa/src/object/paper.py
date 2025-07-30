@@ -32,6 +32,7 @@ class Paper:
     tsne2: Optional[float] = None
     embedding: Optional[Dict] = None
     added: Optional[datetime] = None
+    _grobid_xml: Optional[str] = None  
     logger = Logger("Paper")
 
     """
@@ -129,28 +130,34 @@ class Paper:
     returns: List[Reference] -> A list of Reference objects found in the paper.
     """
     def extract_references(self) -> List['Reference']:
+        if self._grobid_xml is None:
+            self._grobid_xml = self.extract_paper_text_semantic(self.url)
+        
+        if self._grobid_xml is None:
+            return []
+            
         references = []
-        text_as_xml = self.extract_paper_text_semantic(self.url)
-        if text_as_xml is not None:
-            data = text_as_xml.encode("utf-8")
+        try:
+            data = self._grobid_xml.encode("utf-8")
             root = etree.fromstring(data)
             ns = {'tei': 'http://www.tei-c.org/ns/1.0'}
-            # Search for <div type="references"> in the <back> section
             references_xml = root.findall('.//tei:div[@type="references"]//tei:biblStruct', ns)
+            
             for ref in references_xml:
                 titles = ref.findall('.//tei:title', ns)
-                if len(titles) > 0:
-                    # Filter None values and use empty string as fallback
+                if titles:
                     title_texts = [title.text or "" for title in titles]
-                    # Only join non-empty strings
                     combined_title = ", ".join(filter(None, title_texts))
-                    if combined_title:  # Only create reference if there is a title
+                    if combined_title:
                         references.append(Reference(self.entry_id, combined_title))
-            else:
-                    self.logger.warning(f"Could not extract references from paper {self.title} or none were found!")
-                    # Sometimes the xpath seems to fail, gotta look into this later
-            return references
-        return []
+                        
+            if not references:
+                self.logger.warning(f"Could not extract references from paper {self.title} or none were found!")
+                
+        except Exception as e:
+            self.logger.error(f"Error parsing references for {self.title}: {str(e)}")
+            
+        return references
 
     """
     27-July-2025 - Lenio
