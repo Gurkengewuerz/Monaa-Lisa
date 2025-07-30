@@ -46,7 +46,7 @@ services:
     ports:
       - "8070:8070"
     depends_on:
-      - app # Ensure app is ready before grobid starts
+      - app
     healthcheck:
       test: [ "CMD", "curl", "-f", "http://localhost:8070/api/isalive" ]
       interval: 30s

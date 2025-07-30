@@ -58,6 +58,18 @@ services:
     stdin_open: true
     tty: true
 
+  grobid:
+    image: lfoppiano/grobid:latest-develop
+    ports:
+      - "8070:8070"
+    depends_on:
+      - app
+    healthcheck:
+      test: [ "CMD", "curl", "-f", "http://localhost:8070/api/isalive" ]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+
 volumes:
   pgdata_dev:
   python_cache:
