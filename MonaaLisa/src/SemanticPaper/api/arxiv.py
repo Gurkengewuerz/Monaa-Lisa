@@ -71,10 +71,7 @@ def read_meta(paper: Paper):
         logger.info(f"Abstract: {paper.abstract}\n")
         logger.info(f"PDF URL: {paper.url}\n")
         logger.info(f"Entry ID: {paper.entry_id}\n")
-        logger.info("=================================")
-        #print(f"[DEBUG] - Current Category: {*paper.categories,}")
-        logger.info("=================================")
-        # fetch_influence_flower(paper.entry_id)
+
 
     else:
         logger.error("No Paper!")

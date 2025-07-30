@@ -97,7 +97,7 @@ class Paper:
 
                 doc.close()
                 os.unlink(tmp_file.name)
-                self.logger.info("Reading full text finished successfully!")
+                self.logger.info(f"Reading full text finished successfully for {self.title}!")
                 return text.strip()
 
         except Exception as e:
@@ -114,8 +114,11 @@ class Paper:
     def extract_metadata(self):
         references = self.extract_references()
         if references:
-            self.logger.info("Extracted references from the paper!")
+            self.logger.info(f"Extracted references from the paper {self.title}!")
             self.references = references
+            """Annotation 30-July-2025: - Bastian
+            This could be removed in prod, causes extreme log spam
+            """
             for reference in self.references:
                 self.logger.debug(f"{self.title} referencing {reference.title}")
 
@@ -144,7 +147,7 @@ class Paper:
                     if combined_title:  # Only create reference if there is a title
                         references.append(Reference(self.entry_id, combined_title))
             else:
-                    self.logger.warning("Could not extract references from paper or none were found!")
+                    self.logger.warning(f"Could not extract references from paper {self.title} or none were found!")
                     # Sometimes the xpath seems to fail, gotta look into this later
             return references
         return []
@@ -181,7 +184,7 @@ class Paper:
 
             if not grobid_response.ok:
                 raise Exception(f"Grobid-Processing failed: {grobid_response.status_code}")
-            local_logger.info("Grobid processing finished successfully!")
+            local_logger.info(f"Grobid processing finished successfully for {url}!")
             return grobid_response.text
 
         except Exception as e:
