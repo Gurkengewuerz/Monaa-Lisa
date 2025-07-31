@@ -13,9 +13,13 @@
   //do we need a way to dynamically set cluster colors based on the clusters in the db or
   // do we have a set amount of clusters? - Nick
   const clusterCol: Record<string, string> = {
-    A: '#FF6347',
-    B: '#4682B4',
-    C: '#32CD32',
+    A: '#CC6666', 
+    B: '#66B2B2', 
+    C: '#9966CC', 
+    D: '#CC66B2', 
+    E: '#6699CC', 
+    F: '#FF4500',
+    G: '#00CED1',
   };
 
   onMount(() => {
@@ -27,7 +31,7 @@
       graph.addNode(paper.id, {
         x: paper.tsne1,
         y: paper.tsne2,
-        size: 5 + (paper.citations.length * 2),
+        size: 5,
         label: paper.title,
         color: clusterCol[paper.cluster] || '#999999',
         originalColor: clusterCol[paper.cluster] || '#999999',
