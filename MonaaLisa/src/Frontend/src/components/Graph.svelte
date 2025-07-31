@@ -70,6 +70,12 @@
       renderer.on('clickNode', ({ node }) => {
         selectedNode = node.toString();
 
+        //clear all drawn edges
+        const edgesToRemove = graph.edges();
+        edgesToRemove.forEach(edge=> {
+          graph.dropEdge(edge);
+        });
+
         //reset all components to black with low opacity
         graph.forEachNode((n: string) => {
             graph.setNodeAttribute(n, 'color', 'rgba(0, 0, 0, 0.1)');
