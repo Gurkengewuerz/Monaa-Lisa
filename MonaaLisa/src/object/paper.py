@@ -34,6 +34,7 @@ class Paper:
     embedding: Optional[Dict] = None
     added: Optional[datetime] = None
     _grobid_xml: Optional[str] = None
+    _paper_txt: Optional[str] = None
     _paper_logger = None
     _grobid_logger = None
 
@@ -90,35 +91,13 @@ class Paper:
 
 
     """
-    29-July-2025 - Lenio
-    Abstract: Extracts the full text of a paper from its PDF URL.
-    Annotation: This method will be replaced by Grobid in the future.
+    31-July-2025 - Lenio
+    Abstract: Returns paper text if processed
+    Returns: Optional[str] -> The processed paper text or None if not processed.
     """
-    def extract_paper_text_legacy(self) -> Optional[str]:
-        try:
-            response = requests.get(self.url)
-            if not response.ok:
-                raise Exception(f"Failed to download PDF: HTTP Error Code is - {response.status_code}")
+    def get_formatted_text(self):
+        return self._paper_txt if self._paper_txt else None
 
-            with tempfile.NamedTemporaryFile(suffix='.pdf', delete=False) as tmp_file:
-                tmp_file.write(response.content)
-                tmp_file.flush()
-
-                doc = pymupdf.open(tmp_file.name)
-                text = ""
-
-                for page in doc:
-                    text += page.get_text()
-
-                doc.close()
-                os.unlink(tmp_file.name)
-                self.logger.info(f"Reading full text finished successfully for {self.title}!")
-                return text.strip()
-
-        except Exception as e:
-            title = self.title if hasattr(self, 'title') else "Unknown paper"
-            self.logger.error(f"Failed processing or fetching the PDF {title} with error: {str(e)}")
-            return None
 
     """
     29-July-2025 - Lenio
@@ -128,8 +107,6 @@ class Paper:
     """
     def extract_metadata(self):
         self._grobid_xml = self.extract_paper_text_semantic()
-        with open(f"{self.title}_grobid.xml", "w", encoding="utf-8") as f:
-            f.write(self._grobid_xml)
         references = self.extract_references()
         if references:
             """Annotation 30-July-2025: - Bastian
@@ -150,7 +127,7 @@ class Paper:
                                              break_long_words=False,
                                              replace_whitespace=True,
                                              break_on_hyphens=True)
-
+                self._paper_txt = wrapped_text
                 self.logger.debug(f"{wrapped_text}\n")
 
     """
