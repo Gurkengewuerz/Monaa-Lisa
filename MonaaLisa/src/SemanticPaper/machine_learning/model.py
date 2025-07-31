@@ -64,10 +64,10 @@ def parse_full_data(paper: Paper, chunk_size: int = 512):
     logger.info("Reading current paper...\n")
     read_meta(paper)
 
-    full_text = paper.extract_paper_text_legacy()
+    full_text = paper.get_formatted_text()
     if not full_text:
         logger.info("Processing PDF failed!")
-        return
+        return None
 
     try:
         chunks = [full_text[i:i + chunk_size] 

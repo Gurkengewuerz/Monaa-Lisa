@@ -55,7 +55,9 @@ def process_paper(paper, known_hashes):
     worker_name = threading.current_thread().name
     logger.info(f"[{worker_name}] Processing paper: {getattr(paper, 'title', 'Unknown Title')}")
     paper_hash = hash_paper_details(paper)
-
+    logger.info(f"Extracting metadata for: {paper.title}")
+    paper.extract_metadata()
+    logger.info(f"Finished extracting metadata for: {paper.title}")
     if paper_hash not in known_hashes:
         current_embedding = parse_full_data(paper)
         if current_embedding is not None:
@@ -103,17 +105,6 @@ def entry(max_workers:int = 4):
                     paper_objs.append(paper)
                     paper_hashes.append(paper_hash)
                     new_papers.append(paper)
-        """Annotation 30-July-2025: - Bastian
-        Moving the metadata extraction here ensures that GROBID processing happens sequentially 
-        rather than concurrently. This prevents log message flooding and reduces load on the 
-        GROBID service by processing one paper's metadata at a time.
-        """
-        logger.info(f"Starting metadata extraction for {len(paper_objs)} papers...")
-        for paper in paper_objs:
-            logger.info(f"Extracting metadata for: {paper.title}")
-            paper.extract_metadata()
-            logger.info(f"Finished extracting metadata for: {paper.title}")
-
         if embeddings:
             tsne_coords = extract_tsne_coordinates(embeddings)
             for i, paper in enumerate(paper_objs):
