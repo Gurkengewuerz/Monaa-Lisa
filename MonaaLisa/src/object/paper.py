@@ -127,18 +127,18 @@ class Paper:
     Returns: None
     """
     def extract_metadata(self):
-        self.text_as_xml = self.extract_paper_text_semantic()
+        self._grobid_xml = self.extract_paper_text_semantic()
+        with open(f"{self.title}_grobid.xml", "w", encoding="utf-8") as f:
+            f.write(self._grobid_xml)
         references = self.extract_references()
         if references:
             """Annotation 30-July-2025: - Bastian
-            Changed from evvery paper, to just the length - otherwise we have extreme log spam
+            Changed from every paper, to just the length - otherwise we have extreme log spam
             """
             self.logger.info(f"Extracted {len(references)} references from {self.title}")
             self.references = references
         else:
             self.logger.warning(f"No references found for {self.title}")
-            for reference in self.references:
-                self.logger.debug(f"{self.title} referencing {reference.title}")
         sections = self.get_sections()
         if sections:
             for section in sections:
@@ -151,8 +151,7 @@ class Paper:
                                              replace_whitespace=True,
                                              break_on_hyphens=True)
 
-                self.logger.info(f"{wrapped_text}\n")
-
+                self.logger.debug(f"{wrapped_text}\n")
 
     """
     29-July-2025 - Lenio
@@ -161,8 +160,8 @@ class Paper:
     """
     def extract_references(self) -> List['Reference']:
         references = []
-        if self.text_as_xml is not None:
-            data = self.text_as_xml.encode("utf-8")
+        if self._grobid_xml is not None:
+            data = self._grobid_xml.encode("utf-8")
             root = etree.fromstring(data)
             ns = {'tei': 'http://www.tei-c.org/ns/1.0'}
             # Search for <div type="references"> in the <back> section
@@ -189,7 +188,7 @@ class Paper:
     - ns: dict -> A dictionary containing XML namespaces.
     """
     def get_sections(self) -> list[dict]:
-        data = self.text_as_xml.encode("utf-8")
+        data = self._grobid_xml.encode("utf-8")
         root = etree.fromstring(data)
         ns = {'tei': 'http://www.tei-c.org/ns/1.0'}
         sections = []
@@ -197,27 +196,43 @@ class Paper:
             # Get the section header and content xml elements
             head_element = section.find('.//tei:head', ns)
             content_elements = section.findall('.//tei:p', ns)
-            # The section data dictionary
-            section_data = {}
-            # The index indicating the section number
-            section_header_index = head_element.attrib.get('n', '')
-            content = ""
-            # Get all paragraphs in a section
-            for paragraph in content_elements:
-                content += paragraph.text.strip() + "\n"
-            if section_header_index != "":
-                # If section has a number in its attribute 'n'
-                section_data['title'] = section_header_index + " " + (
-                    head_element.text if head_element is not None else "")
+            if head_element is not None and content_elements is not None:
+                # The section data dictionary
+                section_data = {}
+                # The index indicating the section number
+                section_header_index = head_element.attrib.get('n', '')
+                content = ""
+                # Get all paragraphs in a section
+                for paragraph in content_elements:
+                    content += paragraph.text.strip() + "\n"
+                if section_header_index != "":
+                    # If section has a number in its attribute 'n'
+                    section_data['title'] = section_header_index + " " + (
+                        head_element.text if head_element is not None else "")
+                else:
+                    """ Sometimes grobid get's Sections wrong so if there is a section without an index
+                        we merge its content with the previous section.
+                    """
+                    if len(sections) >= 1:
+                        sections[-1]['content'] += "\n" + content
+                        continue
+                    else:
+                        self.logger.warning("Section without index found but no previous section to merge with!")
+                        self.logger.warning(f"Section header: {head_element.text}")
+                        self.logger.warning(f"Section content: {content}")
+                        section_data['title'] = head_element.text if head_element is not None else ""
+                # If section has a title add it's content to the section data
+                section_data['content'] = content
+                sections.append(section_data)
             else:
-                """ Sometimes grobid get's Sections wrong so if there is a section without an index
-                    we merge its content with the previous section.
                 """
-                sections[-1]['content'] += "\n" + content
-                continue
-            # If section has a title add it's content to the section data
-            section_data['content'] = content
-            sections.append(section_data)
+                31-July-2025 - Lenio
+                This seems to happen when a section does not contain any head, its debatable if this should lead
+                to the sections content being merged with the previous section or if the section should be skipped.
+                for now we skip it and log an error.
+                """
+                self.logger.error("No valid section found in the XML data!")
+                self.logger.error(f"Section: {etree.tostring(section)}")
         return sections
 
     """
