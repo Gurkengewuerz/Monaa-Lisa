@@ -1,21 +1,20 @@
 <script lang="ts">
-  import Graph from '../components/Graph.svelte'; 
+  import GraphLayout from '../components/GraphLayout.svelte';
 </script>
 
 <main>
-  <h1>Monaa-Lisa: Academic Paper Graph Visualization</h1>
-  <Graph />
+  <GraphLayout />
 </main>
 
 <style>
-  main {
-    padding: 20px;
-    max-width: 1200px;
-    margin: 0 auto;
+  :global(body) {
+    margin: 0;
+    padding: 0;
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', sans-serif;
   }
-  h1 {
-    text-align: center;
-    font-size: 2rem;
-    margin-bottom: 20px;
+
+  main {
+    width: 100vw;
+    height: 100vh;
   }
 </style>
