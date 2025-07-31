@@ -1,13 +1,19 @@
 <script lang="ts">
+  import { createEventDispatcher } from 'svelte';
   import { onMount } from 'svelte';
   import Graph from 'graphology';
   import Sigma from 'sigma';
   import { dummyPapers, type Paper } from '../testdata/dummyData'; 
 
+  export let selectedPaperId: string | null = null; //props from the parent
+
   let container: HTMLDivElement | null = null; 
   let selectedPaper: Paper | null = null; 
   let selectedNode: string | null = null;
   let renderer: Sigma | null = null;
+  let graph: Graph | null = null;
+
+  const dispatch = createEventDispatcher();
 
   //def cluster colors
   //do we need a way to dynamically set cluster colors based on the clusters in the db or
@@ -22,9 +28,101 @@
     G: '#00CED1',
   };
 
+  //functionto select node
+  function selectNodeById(nodeId: string) {
+    if (!graph || !renderer || !graph.hasNode(nodeId)) return;
+
+    //clear all drawn edges
+    const edgesToRemove = graph.edges();
+    edgesToRemove.forEach(edge=> {
+      graph.dropEdge(edge);
+    });
+
+    //reset all components to black with low opacity
+    graph.forEachNode((n: string) => {
+        graph.setNodeAttribute(n, 'color', 'rgba(0, 0, 0, 0.1)');
+    });
+
+    //set color of selected node to green
+    graph.setNodeAttribute(nodeId, 'color', '#00FF00');
+
+    //look for related nodes (citations and related_papers)
+    const paper = graph.getNodeAttributes(nodeId).paper as Paper;
+    const relatednodes = new Set<number>([
+        ...paper.citations,
+        ...paper.related_papers,
+        ...dummyPapers
+        .filter(p => p.citations.includes(paper.id))
+        .map(p => p.id)
+    ]);
+
+    //set color of related nodes to yellow
+    relatednodes.forEach(relatedId => {
+      if (graph.hasNode(relatedId)) {
+        graph.setNodeAttribute(relatedId, 'color', '#FFFF00');
+      }
+    });
+
+    //ad edges dynamically for selected node and related nodes
+    const selectedId = parseInt(nodeId);
+    
+    //add edges from selected node to its citations
+    paper.citations.forEach(citedId => {
+      if (graph.hasNode(citedId)) {
+        graph.addEdge(selectedId, citedId, {
+          color: '#FFFFFF',
+          size: 2
+        });
+      }
+    });
+
+    //add edges from papers that cite the selected paper
+    dummyPapers
+      .filter(p => p.citations.includes(selectedId))
+      .forEach(citingPaper => {
+        if (graph.hasNode(citingPaper.id)) {
+          graph.addEdge(citingPaper.id, selectedId, {
+            color: '#FFFFFF',
+            size: 2
+          });
+        }
+      });
+
+    //add edges between related nodes if they exist in related_papers
+    paper.related_papers.forEach(relatedId => {
+      if (graph.hasNode(relatedId)) {
+        graph.addEdge(selectedId, relatedId, {
+          color: '#FFFFFF',
+          size: 2
+        });
+      }
+    });
+
+    //zoom on the selected node
+    const nodePosition = graph.getNodeAttributes(nodeId);
+    const camera = renderer.getCamera();
+    
+    camera.animate({
+      x: nodePosition.x,
+      y: nodePosition.y,
+      ratio: 0.15
+    }, { 
+      duration: 800,
+      easing: 'quadInOut'
+    });
+
+    selectedNode = nodeId;
+    renderer.refresh();
+  }
+
+  //react to external selection changes
+  $: if (selectedPaperId && selectedPaperId !== selectedNode && graph && renderer) {
+    selectNodeById(selectedPaperId);
+  }
+
   onMount(() => {
     //initialize graphology graph
-    const graph = new Graph();
+    graph = new Graph();
 
     //add nodes
     dummyPapers.forEach(paper => {
@@ -68,88 +166,8 @@
 
       //node click handling
       renderer.on('clickNode', ({ node }) => {
-        selectedNode = node.toString();
-
-        //clear all drawn edges
-        const edgesToRemove = graph.edges();
-        edgesToRemove.forEach(edge=> {
-          graph.dropEdge(edge);
-        });
-
-        //reset all components to black with low opacity
-        graph.forEachNode((n: string) => {
-            graph.setNodeAttribute(n, 'color', 'rgba(0, 0, 0, 0.1)');
-        });
-
-        //set color of selected node to green
-        graph.setNodeAttribute(node, 'color', '#00FF00');
-
-        //look for related nodes (citations and related_papers)
-        const paper = graph.getNodeAttributes(node).paper as Paper;
-        const relatednodes = new Set<number>([
-            ...paper.citations,
-            ...paper.related_papers,
-            ...dummyPapers
-            .filter(p => p.citations.includes(paper.id))
-            .map(p => p.id)
-        ]);
-
-        //set color of related nodes to yellow
-        relatednodes.forEach(relatedId => {
-          if (graph.hasNode(relatedId)) {
-            graph.setNodeAttribute(relatedId, 'color', '#FFFF00');
-          }
-        });
-
-        //ad edges dynamically for selected node and related nodes
-        const selectedId = parseInt(node);
-        
-        //add edges from selected node to its citations
-        paper.citations.forEach(citedId => {
-          if (graph.hasNode(citedId) && !graph.hasEdge(selectedId, citedId)) {
-            graph.addEdge(selectedId, citedId, {
-              color: '#FFFFFF',
-              size: 2
-            });
-          }
-        });
-
-        //add edges from papers that cite the selected paper
-        dummyPapers
-          .filter(p => p.citations.includes(selectedId))
-          .forEach(citingPaper => {
-            if (graph.hasNode(citingPaper.id) && !graph.hasEdge(citingPaper.id, selectedId)) {
-              graph.addEdge(citingPaper.id, selectedId, {
-                color: '#FFFFFF',
-                size: 2
-              });
-            }
-          });
-
-        //add edges between related nodes if they exist in related_papers
-        paper.related_papers.forEach(relatedId => {
-          if (graph.hasNode(relatedId) && !graph.hasEdge(selectedId, relatedId)) {
-            graph.addEdge(selectedId, relatedId, {
-              color: '#FFFFFF',
-              size: 2
-            });
-          }
-        });
-
-        //zoom on the selected node
-        const nodePosition = graph.getNodeAttributes(node);
-        const camera = renderer.getCamera();
-        
-        camera.animate({
-          x: nodePosition.x,
-          y: nodePosition.y,
-          ratio: 0.15
-        }, { 
-          duration: 800,
-          easing: 'quadInOut'
-        });
-
-        renderer.refresh();
+        selectNodeById(node.toString());
+        dispatch('nodeSelected', node.toString());
       });
 
       //reset cam pos on canvas click
@@ -162,7 +180,7 @@
           graph.setNodeAttribute(n, 'color', originalColor);
         });
         
-        // REMOVE ALL EDGES
+        //remove all da edges
         const edgesToRemove = graph.edges();
         edgesToRemove.forEach(edge => {
           graph.dropEdge(edge);
@@ -170,6 +188,8 @@
         
         renderer.getCamera().animatedReset({ duration: 800 });
         renderer.refresh();
+        
+        dispatch('nodeDeselected');
       });
 
       //cleanup function
