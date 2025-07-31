@@ -90,24 +90,29 @@ def entry(max_workers:int = 4):
         paper_hashes = []
 
         with concurrent.futures.ThreadPoolExecutor(max_workers=max_workers) as executor:
-
             results = executor.map(lambda paper: process_paper(paper, known_hashes), latest_papers)
             for result in results:
                 if result:
                     paper, paper_hash, embedding = result
                     embeddings.append(embedding)
-                    # Extract metadata from the paper object
                     """Annotation 29-July-2025: - Lenio
                     Since grobid does take some time to process the paper, we should later replace the extract_metadata
                     method with a more generalized way to analyze the paper and extract metadata. Then save that to the paper
                     object. This way each paper only gets analyzed once and we can use the metadata for further processing.
                     """
-                    paper.extract_metadata()
                     paper_objs.append(paper)
                     paper_hashes.append(paper_hash)
                     new_papers.append(paper)
-                else:
-                    pass
+        """Annotation 30-July-2025: - Bastian
+        Moving the metadata extraction here ensures that GROBID processing happens sequentially 
+        rather than concurrently. This prevents log message flooding and reduces load on the 
+        GROBID service by processing one paper's metadata at a time.
+        """
+        logger.info(f"Starting metadata extraction for {len(paper_objs)} papers...")
+        for paper in paper_objs:
+            logger.info(f"Extracting metadata for: {paper.title}")
+            paper.extract_metadata()
+            logger.info(f"Finished extracting metadata for: {paper.title}")
 
         if embeddings:
             tsne_coords = extract_tsne_coordinates(embeddings)

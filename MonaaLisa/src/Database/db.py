@@ -21,6 +21,7 @@ from object.paper import Paper
 from util.logger import Logger
 # os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), ".env")
 load_dotenv()
+
 logger = Logger("Database")
 
 DATABASE_URL = os.environ.get("DATABASE_URL")

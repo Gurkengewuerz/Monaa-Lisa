@@ -33,8 +33,21 @@ class Paper:
     tsne2: Optional[float] = None
     embedding: Optional[Dict] = None
     added: Optional[datetime] = None
-    text_as_xml = None
-    logger = Logger("Paper")
+    _grobid_xml: Optional[str] = None
+    _paper_logger = None
+    _grobid_logger = None
+
+    @property
+    def logger(self):
+        if Paper._paper_logger is None:
+            Paper._paper_logger = Logger("Paper")
+        return Paper._paper_logger
+
+    @staticmethod
+    def get_grobid_logger():
+        if Paper._grobid_logger is None:
+            Paper._grobid_logger = Logger("Grobid")
+        return Paper._grobid_logger
 
     """
     26-July-2025 - Lenio
@@ -99,7 +112,7 @@ class Paper:
 
                 doc.close()
                 os.unlink(tmp_file.name)
-                self.logger.info("Reading full text finished successfully!")
+                self.logger.info(f"Reading full text finished successfully for {self.title}!")
                 return text.strip()
 
         except Exception as e:
@@ -117,8 +130,13 @@ class Paper:
         self.text_as_xml = self.extract_paper_text_semantic()
         references = self.extract_references()
         if references:
-            self.logger.info("Extracted references from the paper!")
+            """Annotation 30-July-2025: - Bastian
+            Changed from evvery paper, to just the length - otherwise we have extreme log spam
+            """
+            self.logger.info(f"Extracted {len(references)} references from {self.title}")
             self.references = references
+        else:
+            self.logger.warning(f"No references found for {self.title}")
             for reference in self.references:
                 self.logger.debug(f"{self.title} referencing {reference.title}")
         sections = self.get_sections()
@@ -151,8 +169,7 @@ class Paper:
             references_xml = root.findall('.//tei:div[@type="references"]//tei:biblStruct', ns)
             for ref in references_xml:
                 titles = ref.findall('.//tei:title', ns)
-                if len(titles) > 0:
-                    # Filter None values and use empty string as fallback
+                if titles:
                     title_texts = [title.text or "" for title in titles]
                     # Only join non-empty strings
                     combined_title = ", ".join(filter(None, title_texts))
@@ -205,11 +222,12 @@ class Paper:
 
     """
     27-July-2025 - Lenio
-    Abstract: Extracts the full text of a paper using grobid and sets the text_as_xml attribute.
-    Returns: Optional[str] -> Returns text of the paper as xml if successful, otherwise None.
+    Abstract: Extracts the full text of a paper using grobid from a given URL, only for testing right now.
+    Args: url: str -> The URL of the paper to extract text from.
+    Returns: Optional[str] -> The extracted text from the paper, or None if extraction fails.
     """
     def extract_paper_text_semantic(self) -> Optional[str]:
-        local_logger = Logger("Grobid")
+        local_logger = Paper.get_grobid_logger()
         temp_file_path = None
         try:
             response = requests.get(self.url)
@@ -233,7 +251,7 @@ class Paper:
 
             if not grobid_response.ok:
                 raise Exception(f"Grobid-Processing failed: {grobid_response.status_code}")
-            local_logger.info("Grobid processing finished successfully!")
+            local_logger.info(f"Grobid processing finished successfully!")
             return grobid_response.text
 
         except Exception as e:
