@@ -39,19 +39,6 @@
       });
     });
 
-    //add edges (aka citations)
-    dummyPapers.forEach(paper => {
-      paper.citations.forEach(citedId => {
-        if (graph.hasNode(citedId)) {
-          graph.addEdge(paper.id, citedId, {
-            color: '#cccccc',
-            originalColor: '#cccccc',
-            size: 1
-          });
-        }
-      });
-    });
-
     //initialize sigma.js
     if (container) { 
       renderer = new Sigma(graph, container, {
@@ -87,9 +74,6 @@
         graph.forEachNode((n: string) => {
             graph.setNodeAttribute(n, 'color', 'rgba(0, 0, 0, 0.1)');
         });
-        graph.forEachEdge((e: string) => {
-            graph.setEdgeAttribute(e, 'color', 'rgba(0, 0, 0, 0.05)');
-        });
 
         //set color of selected node to green
         graph.setNodeAttribute(node, 'color', '#00FF00');
@@ -111,30 +95,44 @@
           }
         });
 
-        //edge handling
-        graph.forEachEdge((edge: string, attributes: any, source: string, target: string) => {
-          const sourceId = parseInt(source);
-          const targetId = parseInt(target);
-          const selectedId = parseInt(node);
-
-          //check if ths edge connects selected node to related node or is between related nodes
-          if (
-            (sourceId === selectedId && relatednodes.has(targetId)) ||
-            (targetId === selectedId && relatednodes.has(sourceId)) ||
-            (relatednodes.has(sourceId) && relatednodes.has(targetId))
-          ) {
-            //set related edge to white
-            graph.setEdgeAttribute(edge, 'color', '#FFFFFF');
-            graph.setEdgeAttribute(edge, 'size', 2); // Keep thicker edges for visibility
+        //ad edges dynamically for selected node and related nodes
+        const selectedId = parseInt(node);
+        
+        //add edges from selected node to its citations
+        paper.citations.forEach(citedId => {
+          if (graph.hasNode(citedId) && !graph.hasEdge(selectedId, citedId)) {
+            graph.addEdge(selectedId, citedId, {
+              color: '#FFFFFF',
+              size: 2
+            });
           }
-          //unrelated edges stay at low opacity
+        });
+
+        //add edges from papers that cite the selected paper
+        dummyPapers
+          .filter(p => p.citations.includes(selectedId))
+          .forEach(citingPaper => {
+            if (graph.hasNode(citingPaper.id) && !graph.hasEdge(citingPaper.id, selectedId)) {
+              graph.addEdge(citingPaper.id, selectedId, {
+                color: '#FFFFFF',
+                size: 2
+              });
+            }
+          });
+
+        //add edges between related nodes if they exist in related_papers
+        paper.related_papers.forEach(relatedId => {
+          if (graph.hasNode(relatedId) && !graph.hasEdge(selectedId, relatedId)) {
+            graph.addEdge(selectedId, relatedId, {
+              color: '#FFFFFF',
+              size: 2
+            });
+          }
         });
 
         //zoom on the selected node
         const nodePosition = graph.getNodeAttributes(node);
         const camera = renderer.getCamera();
-        
-        const { width, height } = renderer.getDimensions();
         
         camera.animate({
           x: nodePosition.x,
@@ -151,16 +149,19 @@
       //reset cam pos on canvas click
       renderer.on('clickStage', () => {
         selectedNode = null;
-        //restore og colors and sizes
+        
+        //restore original node colors
         graph.forEachNode((n: string) => {
           const originalColor = graph.getNodeAttributes(n).originalColor;
           graph.setNodeAttribute(n, 'color', originalColor);
         });
-        graph.forEachEdge((e: string) => {
-          const originalColor = graph.getEdgeAttributes(e).originalColor;
-          graph.setEdgeAttribute(e, 'color', originalColor);
-          graph.setEdgeAttribute(e, 'size', 1);
+        
+        // REMOVE ALL EDGES
+        const edgesToRemove = graph.edges();
+        edgesToRemove.forEach(edge => {
+          graph.dropEdge(edge);
         });
+        
         renderer.getCamera().animatedReset({ duration: 800 });
         renderer.refresh();
       });
@@ -214,7 +215,7 @@
 {#if selectedPaper}
   <div class="paper-details visible">
     <h3>{selectedPaper.title}</h3>
-    <p><strong>aauthors:</strong> {selectedPaper.authors}</p>
+    <p><strong>authors:</strong> {selectedPaper.authors}</p>
     <p><strong>summary:</strong> {selectedPaper.summary}</p>
     <p><strong>published:</strong> {new Date(selectedPaper.published).toLocaleDateString()}</p>
     <p><strong>citations:</strong> {selectedPaper.citations.length}</p>
