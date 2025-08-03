@@ -106,7 +106,7 @@ class PaperProcessor:
     def extract_keywords(self):
         # Placeholder for keyword extraction logic
         # This should be replaced with actual keyword extraction logic
-        keywords = self.paper.summary.split()[:5]
+        keywords = self.paper.abstract.split()[:5]
 
 
     """
