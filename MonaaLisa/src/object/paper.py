@@ -1,3 +1,4 @@
+import hashlib
 import os
 import sys
 import tempfile
@@ -258,4 +259,19 @@ class Paper:
                 except Exception as e:
                     local_logger.error(f"Failed to delete temporary file: {str(e)}")
 
-#print(Paper.extract_paper_text_semantic("https://arxiv.org/pdf/2401.00001.pdf"))
+
+    """
+    25-May-2025 - Basti, updated 26-July-2025 - Lenio, Moved to paper.py 03-August-2025 - Lenio
+    Abstract: Hashes the data of a arXiv Paper using SHA256 and returns its hash
+    Args:
+    
+    - paper: Paper -> A given paper object
+    
+    Returns: str -> Unique hash of the paper
+    """
+    def hash_paper_details(self) -> str:
+        to_hash = self.title + '|' + self.abstract
+        self.hash = hashlib.sha256(to_hash.encode()).hexdigest()
+        self.logger.debug(f"[DEBUG] Printing to hash text: {to_hash}")
+
+        return self.hash

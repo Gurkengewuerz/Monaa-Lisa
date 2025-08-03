@@ -1,14 +1,13 @@
-from object.paper import Paper
+from SemanticPaper.machine_learning.processor import PaperProcessor
 from SemanticPaper.api.semanticscholar import SemanticScholarAPI
-from SemanticPaper.api.arxiv import hash_paper_details, fetch_latest_paper, fetch_papers
+from SemanticPaper.api.arxiv import fetch_papers
 from util.logger import Logger
-from Database.db import SessionLocal, save_paper_to_db
+from Database.db import save_paper_to_db
 from dotenv import load_dotenv
-from SemanticPaper.machine_learning.model import parse_full_data, extract_tsne_coordinates
+from SemanticPaper.machine_learning.model import Model
 import concurrent.futures
 import os
 import time
-import threading
 
 logger = Logger("Main")
 
@@ -18,6 +17,8 @@ load_dotenv(".env_public")
 
 UPDATE_INTERVAL = int(os.environ.get("ARXIV_FETCH_INTERVAL", 3600))
 HASH_FILE = 'parsed_hashes.txt'
+
+model = Model()
 
 """
 25-May-2025 - Basti
@@ -43,32 +44,6 @@ def save_hash(hash_str):
         f.write(hash_str + "\n")
 
 
-
-"""
-25-May-2025 - Basti
-Abstract: Saves one hash string to the local parsed_hashes file
-Args:
-- hash_str: -> the hash of a paper
-Returns: None
-"""
-def process_paper(paper, known_hashes):
-    worker_name = threading.current_thread().name
-    logger.info(f"[{worker_name}] Processing paper: {getattr(paper, 'title', 'Unknown Title')}")
-    paper_hash = hash_paper_details(paper)
-    logger.info(f"Extracting metadata for: {paper.title}")
-    paper.extract_metadata()
-    logger.info(f"Finished extracting metadata for: {paper.title}")
-    if paper_hash not in known_hashes:
-        current_embedding = parse_full_data(paper)
-        if current_embedding is not None:
-            logger.info(f"[{worker_name}] Finished embedding for: {getattr(paper, 'title', 'Unknown Title')}")
-            return (paper, paper_hash, current_embedding["Embedding"])
-        logger.info(f"[{worker_name}] Failed to embed: {getattr(paper, 'title', 'Unknown Title')}")
-        return None
-    logger.info(f"[{worker_name}] Paper already processed: {getattr(paper, 'title', 'Unknown Title')}")
-    return None
-
-
 """
 25-May-2025 - Basti
 Abstract: Continuously fetches the latest papers from arXiv, processes new ones in parallel, embeds them,
@@ -90,23 +65,21 @@ def entry(max_workers:int = 4):
         embeddings = []
         paper_objs = []
         paper_hashes = []
-
         with concurrent.futures.ThreadPoolExecutor(max_workers=max_workers) as executor:
-            results = executor.map(lambda paper: process_paper(paper, known_hashes), latest_papers)
-            for result in results:
-                if result:
-                    paper, paper_hash, embedding = result
-                    embeddings.append(embedding)
-                    """Annotation 29-July-2025: - Lenio
-                    Since grobid does take some time to process the paper, we should later replace the extract_metadata
-                    method with a more generalized way to analyze the paper and extract metadata. Then save that to the paper
-                    object. This way each paper only gets analyzed once and we can use the metadata for further processing.
-                    """
-                    paper_objs.append(paper)
-                    paper_hashes.append(paper_hash)
-                    new_papers.append(paper)
+            processors = [PaperProcessor(paper, model) for paper in latest_papers]
+            futures = [executor.submit(processor.prepare_paper, known_hashes) for processor in processors]
+
+            for processor, future in zip(processors, futures):
+                if future.result():
+                    embedding = processor.create_structured_embedding()
+                    if embedding is not None:
+                        embeddings.append(embedding)
+                        paper_objs.append(processor.paper)
+                        paper_hashes.append(processor.paper.hash)
+                        new_papers.append(processor.paper)
+
         if embeddings:
-            tsne_coords = extract_tsne_coordinates(embeddings)
+            tsne_coords = model.extract_tsne_coordinates(embeddings)
             for i, paper in enumerate(paper_objs):
                 embedding_dict = {
                     "Embedding": embeddings[i],
@@ -116,8 +89,6 @@ def entry(max_workers:int = 4):
                 save_paper_to_db(paper, paper_hashes[i], embedding_dict)
                 save_hash(paper_hashes[i])
                 known_hashes.add(paper_hashes[i])
-                logger.info(f"Saved paper with tSNE coords: {paper.title}")
-
         if not new_papers:
             logger.info("No new papers to process.")
 
