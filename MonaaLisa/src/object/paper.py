@@ -270,7 +270,7 @@ class Paper:
     Returns: str -> Unique hash of the paper
     """
     def hash_paper_details(self) -> str:
-        to_hash = self.title+self.abstract
+        to_hash = self.title + '|' + self.abstract
         self.hash = hashlib.sha256(to_hash.encode()).hexdigest()
         self.logger.debug(f"[DEBUG] Printing to hash text: {to_hash}")
 
