@@ -59,6 +59,7 @@ def save_paper_to_db(paper: Paper, paper_hash, embedding: dict):
 
     combined_embedding = json.dumps({"tsne1": tsne1, "tsne2": tsne2})
     db_paper = paper.to_db_model()
+    logger.info("hash: " + paper.hash)
     db_paper.embedding = combined_embedding
     db_paper.tsne1 = tsne1
     db_paper.tsne2 = tsne2

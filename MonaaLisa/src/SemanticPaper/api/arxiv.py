@@ -114,26 +114,6 @@ def fetch_papers(category: str = CS_CG_CATEGORY, amount: int = 10) -> list:
         papers.append(Paper.from_arxiv(result) if result else None)
     return papers
 
-"""
-25-May-2025 - Basti, updated 26-July-2025 - Lenio
-Abstract: Hashes the data of a arXiv Paper using SHA256 and returns its hash
-Args:
-
-- paper: Paper -> A given paper object
-
-Returns: str -> Unique hash of the paper
-"""  
-def hash_paper_details(paper: Paper) -> str:
-    to_hash = paper.title+paper.abstract
-    logger.debug(f"[DEBUG] Printing to hash text: {to_hash}")
-
-    return hashlib.sha256(to_hash.encode()).hexdigest()
-
-
-
-
-
-
 
 """
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
