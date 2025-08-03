@@ -58,7 +58,7 @@ class PaperProcessor:
         # Abstract (40%)
         if self.paper.abstract:
             abstract_emb = self.create_section_embedding(self.paper.abstract)
-            self.logger.debug(f"Processing abstract: {self.paper.abstract[:50]}...")  # Log first 100 chars of abstract
+            self.logger.debug(f"Processing abstract: {self.paper.abstract[:50]}...")  # Log first 50 chars of abstract
             combined_embeddings.append(abstract_emb)
             weights.append(0.4)
 
