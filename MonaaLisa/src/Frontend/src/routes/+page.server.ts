@@ -1,3 +1,3 @@
 import type { PageServerLoad } from './$types';
 
-export const ssr = false; //disable SSR cuz of conflicts with sigma skibidi
+export const ssr = false; //disable SSR because of conflicts with sigma.js
