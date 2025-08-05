@@ -82,7 +82,7 @@ def entry(max_workers:int = 4):
             tsne_coords = model.extract_tsne_coordinates(embeddings)
             for i, paper in enumerate(paper_objs):
                 embedding_dict = {
-                    "Embedding": embeddings[i],
+                    "Embedding": embeddings[i].tolist(),
                     "tsne1": tsne_coords[i][0],
                     "tsne2": tsne_coords[i][1]
                 }

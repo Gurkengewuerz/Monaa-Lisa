@@ -5,6 +5,7 @@ import tempfile
 from datetime import datetime
 from typing import Optional
 
+import numpy as np
 import requests
 from arxiv import arxiv
 from pymupdf import pymupdf
@@ -57,12 +58,15 @@ def save_paper_to_db(paper: Paper, paper_hash, embedding: dict):
     except (ValueError, TypeError):
         tsne2 = None
 
-    combined_embedding = json.dumps({"tsne1": tsne1, "tsne2": tsne2})
+    combined_embedding = {
+        "embedding": embedding["Embedding"].tolist() if isinstance(embedding["Embedding"], np.ndarray) else embedding[
+            "Embedding"],
+        "tsne1": float(tsne1) if tsne1 is not None else None,
+        "tsne2": float(tsne2) if tsne2 is not None else None
+    }
     db_paper = paper.to_db_model()
     logger.info("hash: " + paper.hash)
     db_paper.embedding = combined_embedding
-    db_paper.tsne1 = tsne1
-    db_paper.tsne2 = tsne2
     db_paper.hash = paper_hash
     # in the future when we have more calls to grobid this should not happen but rather in a sooner step so we process each paper only once
     references = paper.references if paper.references else []

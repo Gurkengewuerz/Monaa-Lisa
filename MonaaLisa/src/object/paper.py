@@ -84,8 +84,6 @@ class Paper:
             url=self.url,
             hash=self.hash,
             citations=self.citations,
-            tsne1=self.tsne1,
-            tsne2=self.tsne2,
             embedding=json.dumps(self.embedding) if self.embedding else None,
             added=self.added or datetime.now()
         )

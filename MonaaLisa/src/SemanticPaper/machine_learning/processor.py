@@ -44,6 +44,7 @@ class PaperProcessor:
         embeddings = [self._model.get_model().encode(c) for c in chunks]
         return np.mean(embeddings, axis=0)
 
+
     """
     03-August-2025 - Lenio
     Abstract: Creates a structured embedding for the paper, including abstract, sections, and references.
@@ -58,46 +59,62 @@ class PaperProcessor:
         # Abstract (40%)
         if self.paper.abstract:
             abstract_emb = self.create_section_embedding(self.paper.abstract)
-            self.logger.debug(f"Processing abstract: {self.paper.abstract[:50]}...")  # Log first 50 chars of abstract
-            combined_embeddings.append(abstract_emb)
-            weights.append(0.4)
+            # Check if embedding valid
+            if abstract_emb is not None:
+                self.logger.debug(f"Processing abstract: {self.paper.abstract[:50]}...")
+                combined_embeddings.append(abstract_emb)
+                weights.append(0.4)
+            else:
+                self.logger.warning("No valid embedding for abstract found.")
 
         # Sections (40%)
-        # Weigh each section based on its type
         sections = self.paper.get_sections()
         if sections:
             for section in sections:
                 section_emb = self.create_section_embedding(section['content'])
-                title = section['title'].lower()
-                self.logger.info(f"Processing section: {title}")
-                # Could be more sophisticated with NLP techniques, but for now we use simple keyword matching
-                # Weigh conclusion and discussion sections higher, followed by introduction and background, then methods, and finally others
-                if any(key in title for key in ['conclusion', 'discussion']):
-                    weight = 0.15
-                elif any(key in title for key in ['introduction', 'background']):
-                    weight = 0.1
-                elif 'method' in title or 'approach' in title:
-                    weight = 0.08
-                else:
-                    weight = 0.07
+                # Check if embedding valid
+                if section_emb is not None:
+                    title = section['title'].lower()
+                    self.logger.info(f"Processing section: {title}")
 
-                combined_embeddings.append(section_emb)
-                weights.append(weight)
+                    if any(key in title for key in ['conclusion', 'discussion']):
+                        weight = 0.15
+                    elif any(key in title for key in ['introduction', 'background']):
+                        weight = 0.1
+                    elif 'method' in title or 'approach' in title:
+                        weight = 0.08
+                    else:
+                        weight = 0.07
+
+                    combined_embeddings.append(section_emb)
+                    weights.append(weight)
+                else:
+                    self.logger.warning(f"No valid embedding for section {section['title']} found.")
+                    self.logger.debug(f"Section content: {section['content']}")
 
         # References (20%)
         if self.paper.references:
             ref_texts = [ref.title for ref in self.paper.references]
             self.logger.info(f"Processing references: {' '.join(ref_texts)}")
             ref_emb = self.create_section_embedding(" ".join(ref_texts))
-            combined_embeddings.append(ref_emb)
-            weights.append(0.2)
+            # Check if embedding valid
+            if ref_emb is not None:
+                combined_embeddings.append(ref_emb)
+                weights.append(0.2)
+            else:
+                self.logger.warning("No valid embedding for references found.")
 
-        if weights:
-            weights = np.array(weights) / sum(weights)
+        if not combined_embeddings:  # Check if no embeddings were created
+            return None
 
-        if combined_embeddings:
-            return np.average(combined_embeddings, weights=weights, axis=0)
-        return None
+        weights = np.array(weights) / sum(weights)
+        combined_embeddings = [emb for emb in combined_embeddings if emb is not None]
+
+        try:
+            return np.average(np.array(combined_embeddings), weights=weights, axis=0)
+        except ValueError as e:
+            self.logger.error(f"Error while calculating average: {e}")
+            return None
 
     """
     18-July-2025 - Lenio

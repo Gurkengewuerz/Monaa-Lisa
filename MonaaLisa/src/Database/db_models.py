@@ -33,8 +33,6 @@ class DBPaper(db_base):
     url = Column(String)
     hash = Column(String, unique=True, index=True)
     citations = Column(JSON, nullable=True)
-    tsne1 = Column(Float, nullable=True)
-    tsne2 = Column(Float, nullable=True)
     embedding = Column(JSON, nullable=True)
     added = Column(DateTime, nullable=False)
 
