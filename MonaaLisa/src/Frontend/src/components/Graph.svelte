@@ -3,70 +3,86 @@
   import { onMount } from 'svelte';
   import Graph from 'graphology';
   import Sigma from 'sigma';
-  import { dummyPapers, type Paper } from '../testdata/dummyData'; 
+  import { dummyPapers, type Paper } from '../testdata/dummyData'; // Temporary import for demo data; replace with API later
 
-  export let selectedPaperId: string | null = null; //props from the parent
+  /**
+   * array of papers to display in the graph.
+   * passed from the parent component.
+   * @type {Paper[]}
+   */
+  export let papers: Paper[] = [];
 
-  let container: HTMLDivElement | null = null; 
-  let selectedPaper: Paper | null = null; 
+  /**
+   * id of the currently selected paper
+   * used for external selection control
+   * @type {string | null}
+   */
+  export let selectedPaperId: string | null = null;
+
+  //internal state variables for component management
+  let container: HTMLDivElement | null = null;
+  let selectedPaper: Paper | null = null;
   let selectedNode: string | null = null;
   let renderer: Sigma | null = null;
   let graph: Graph | null = null;
 
   const dispatch = createEventDispatcher();
 
-  //def cluster colors
-  //do we need a way to dynamically set cluster colors based on the clusters in the db or
-  // do we have a set amount of clusters? - Nick
+  //cluster color mapping for visual grouping
+  //TODO: figure out if we even need this later on or if cluster colors are static instead of dynamic
   const clusterCol: Record<string, string> = {
-    A: '#CC6666', 
-    B: '#66B2B2', 
-    C: '#9966CC', 
-    D: '#CC66B2', 
-    E: '#6699CC', 
+    A: '#CC6666',
+    B: '#66B2B2',
+    C: '#9966CC',
+    D: '#CC66B2',
+    E: '#6699CC',
     F: '#FF4500',
     G: '#00CED1',
   };
 
-  //functionto select node
+  /**
+   * selects and highlights a node in the graph, updating visuals and connections.
+   * clears edges, resets colors, highlights related nodes, adds edges, and zooms.
+   * @param {string} nodeId - The ID of the node to select.
+   */
   function selectNodeById(nodeId: string) {
     if (!graph || !renderer || !graph.hasNode(nodeId)) return;
 
-    //clear all drawn edges
+    //clear all edges to reset the view
     const edgesToRemove = graph.edges();
-    edgesToRemove.forEach(edge=> {
+    edgesToRemove.forEach(edge => {
       graph.dropEdge(edge);
     });
 
-    //reset all components to black with low opacity
+    //set all nodes to a semi-transparent black to help focus on selections
     graph.forEachNode((n: string) => {
-        graph.setNodeAttribute(n, 'color', 'rgba(0, 0, 0, 0.1)');
+      graph.setNodeAttribute(n, 'color', 'rgba(0, 0, 0, 0.1)');
     });
 
-    //set color of selected node to green
+    //highlight selected node in green
     graph.setNodeAttribute(nodeId, 'color', '#00FF00');
 
-    //look for related nodes (citations and related_papers)
+    //retrieve paper data and collect related node IDs
     const paper = graph.getNodeAttributes(nodeId).paper as Paper;
-    const relatednodes = new Set<number>([
-        ...paper.citations,
-        ...paper.related_papers,
-        ...dummyPapers
+    const relatedNodes = new Set<number>([
+      ...paper.citations,
+      ...paper.related_papers,
+      ...dummyPapers
         .filter(p => p.citations.includes(paper.id))
         .map(p => p.id)
     ]);
 
-    //set color of related nodes to yellow
-    relatednodes.forEach(relatedId => {
+    //highlight related nodes in yellow
+    relatedNodes.forEach(relatedId => {
       if (graph.hasNode(relatedId)) {
         graph.setNodeAttribute(relatedId, 'color', '#FFFF00');
       }
     });
 
-    //ad edges dynamically for selected node and related nodes
+    //add edges for citations, citing papers, and related papers
     const selectedId = parseInt(nodeId);
-    
-    //add edges from selected node to its citations
+
+    //edges to cited papers
     paper.citations.forEach(citedId => {
       if (graph.hasNode(citedId)) {
         graph.addEdge(selectedId, citedId, {
@@ -76,7 +92,7 @@
       }
     });
 
-    //add edges from papers that cite the selected paper
+    //edges from citing papers
     dummyPapers
       .filter(p => p.citations.includes(selectedId))
       .forEach(citingPaper => {
@@ -88,7 +104,7 @@
         }
       });
 
-    //add edges between related nodes if they exist in related_papers
+    //edges to related papers
     paper.related_papers.forEach(relatedId => {
       if (graph.hasNode(relatedId)) {
         graph.addEdge(selectedId, relatedId, {
@@ -98,15 +114,14 @@
       }
     });
 
-    //zoom on the selected node
+    //zoom to the selected node
     const nodePosition = graph.getNodeAttributes(nodeId);
     const camera = renderer.getCamera();
-    
     camera.animate({
       x: nodePosition.x,
       y: nodePosition.y,
       ratio: 0.15
-    }, { 
+    }, {
       duration: 800,
       easing: 'quadInOut'
     });
@@ -115,16 +130,16 @@
     renderer.refresh();
   }
 
-  //react to external selection changes
+  //react to prop changes: update selection when selectedPaperId changes
   $: if (selectedPaperId && selectedPaperId !== selectedNode && graph && renderer) {
     selectNodeById(selectedPaperId);
   }
 
   onMount(() => {
-    //initialize graphology graph
+    //unitialize Graphology graph for data storage
     graph = new Graph();
 
-    //add nodes
+    //populate graph with nodes from dummy papers
     dummyPapers.forEach(paper => {
       graph.addNode(paper.id, {
         x: paper.tsne1,
@@ -137,24 +152,19 @@
       });
     });
 
-    //initialize sigma.js
-    if (container) { 
+    //initialize Sigma renderer for visualization
+    if (container) {
       renderer = new Sigma(graph, container, {
         renderEdgeLabels: false,
         defaultNodeType: 'circle',
         defaultEdgeType: 'line',
         minCameraRatio: 0.1,
         maxCameraRatio: 10,
-        //node label control
-        /*labelFont: 'Arial',
-        labelSize: 12,
-        labelWeight: 'normal',
-        labelColor: { color: '#ffffff' },*/
-        renderLabels: false, //disables labels
-        
+        //labels disabled for clarity; use sidebar/search instead
+        renderLabels: false,
       });
 
-      //node hover handling
+      //handle node hover: show paper details
       renderer.on('enterNode', ({ node }) => {
         const paper = graph.getNodeAttributes(node).paper as Paper;
         selectedPaper = paper;
@@ -164,39 +174,37 @@
         selectedPaper = null;
       });
 
-      //node click handling
+      //handle node click: select node and emit event
       renderer.on('clickNode', ({ node }) => {
         selectNodeById(node.toString());
         dispatch('nodeSelected', node.toString());
       });
 
-      //reset cam pos on canvas click
+      //handle stage click: deselect and reset view
       renderer.on('clickStage', () => {
         selectedNode = null;
-        
+
         //restore original node colors
         graph.forEachNode((n: string) => {
           const originalColor = graph.getNodeAttributes(n).originalColor;
           graph.setNodeAttribute(n, 'color', originalColor);
         });
-        
-        //remove all da edges
+
+        //remove all edges
         const edgesToRemove = graph.edges();
         edgesToRemove.forEach(edge => {
           graph.dropEdge(edge);
         });
-        
+
         renderer.getCamera().animatedReset({ duration: 800 });
         renderer.refresh();
-        
+
         dispatch('nodeDeselected');
       });
 
-      //cleanup function
+      //cleanup: destroy renderer on unmount
       return () => {
-        if (renderer) {
-          renderer.kill();
-        }
+        if (renderer) renderer.kill();
       };
     }
   });
@@ -207,13 +215,14 @@
     width: 100%;
     height: 600px;
     border: 1px solid #ccc;
-    background-color: #1e1e27; 
+    background-color: #1e1e27;
   }
+
   .paper-details {
     position: absolute;
     top: 10px;
     right: 10px;
-    background: rgba(255, 255, 255, 0.95); 
+    background: rgba(255, 255, 255, 0.95);
     padding: 15px;
     border: 1px solid #34495e;
     border-radius: 8px;
@@ -222,14 +231,17 @@
     box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
     font-size: 14px;
   }
+
   .paper-details.visible {
     display: block;
   }
+
   .paper-details h3 {
     margin: 0 0 10px 0;
     color: #2c3e50;
     font-size: 16px;
   }
+
   .paper-details p {
     margin: 5px 0;
     color: #34495e;
