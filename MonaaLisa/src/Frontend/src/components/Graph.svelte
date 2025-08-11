@@ -3,7 +3,7 @@
   import { onMount } from 'svelte';
   import Graph from 'graphology';
   import Sigma from 'sigma';
-  import { dummyPapers, type Paper } from '../testdata/dummyData'; // Temporary import for demo data; replace with API later
+  import { dummyPapers, type Paper } from '../testdata/dummyData'; //temporary import for the dummy thick data; replace with api later
 
   /**
    * array of papers to display in the graph.
@@ -19,6 +19,14 @@
    */
   export let selectedPaperId: string | null = null;
 
+  /**
+   * flag to use dummy data for showcasing.
+   * when true, uses dummypapers instead of the papers prop.
+   * set to true for demo, false for real data.
+   * @type {boolean}
+   */
+  export let useDummyData: boolean = true;
+
   //internal state variables for component management
   let container: HTMLDivElement | null = null;
   let selectedPaper: Paper | null = null;
@@ -29,7 +37,7 @@
   const dispatch = createEventDispatcher();
 
   //cluster color mapping for visual grouping
-  //TODO: figure out if we even need this later on or if cluster colors are static instead of dynamic
+  //todo: figure out if we even need this later on or if cluster colors are static instead of dynamic
   const clusterCol: Record<string, string> = {
     A: '#CC6666',
     B: '#66B2B2',
@@ -43,7 +51,7 @@
   /**
    * selects and highlights a node in the graph, updating visuals and connections.
    * clears edges, resets colors, highlights related nodes, adds edges, and zooms.
-   * @param {string} nodeId - The ID of the node to select.
+   * @param {string} nodeId - the id of the node to select.
    */
   function selectNodeById(nodeId: string) {
     if (!graph || !renderer || !graph.hasNode(nodeId)) return;
@@ -62,12 +70,13 @@
     //highlight selected node in green
     graph.setNodeAttribute(nodeId, 'color', '#00FF00');
 
-    //retrieve paper data and collect related node IDs
+    //retrieve paper data and collect related node ids
     const paper = graph.getNodeAttributes(nodeId).paper as Paper;
+    const dataSource = useDummyData ? dummyPapers : papers;
     const relatedNodes = new Set<number>([
       ...paper.citations,
       ...paper.related_papers,
-      ...dummyPapers
+      ...dataSource
         .filter(p => p.citations.includes(paper.id))
         .map(p => p.id)
     ]);
@@ -93,7 +102,7 @@
     });
 
     //edges from citing papers
-    dummyPapers
+    dataSource
       .filter(p => p.citations.includes(selectedId))
       .forEach(citingPaper => {
         if (graph.hasNode(citingPaper.id)) {
@@ -130,17 +139,23 @@
     renderer.refresh();
   }
 
-  //react to prop changes: update selection when selectedPaperId changes
+  //react to prop changes: update selection when selectedpaperid changes
   $: if (selectedPaperId && selectedPaperId !== selectedNode && graph && renderer) {
     selectNodeById(selectedPaperId);
   }
 
   onMount(() => {
-    //unitialize Graphology graph for data storage
+    //initialize graphology graph for data storage
     graph = new Graph();
 
-    //populate graph with nodes from dummy papers
-    dummyPapers.forEach(paper => {
+    //determine data source: use dummypapers if flag is set, otherwise use papers prop
+    //to use dummy data: set usedummydata={true} in parent component
+    //to use real data: pass papers prop from api/db and set usedummydata={false}
+    //later, replace dummypapers import with api call in parent
+    const dataSource = useDummyData ? dummyPapers : papers;
+
+    //populate graph with nodes from the selected data source
+    dataSource.forEach(paper => {
       graph.addNode(paper.id, {
         x: paper.tsne1,
         y: paper.tsne2,
@@ -152,7 +167,7 @@
       });
     });
 
-    //initialize Sigma renderer for visualization
+    //initialize sigma renderer for visualization
     if (container) {
       renderer = new Sigma(graph, container, {
         renderEdgeLabels: false,
