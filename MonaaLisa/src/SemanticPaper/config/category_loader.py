@@ -47,10 +47,14 @@ class CategoryLoader:
                 old_set = set(self.semanticpaper_categories)
                 self.arxiv_categories = data.get("arxiv_categories", [])
                 new_list = data.get("semanticpaper_categories", [])
-                added = set(new_list) - old_set
+                new_set = set(new_list)
+                added = new_set - old_set
+                removed = old_set - new_set
                 self.semanticpaper_categories = new_list
             if added:
-                logger.info(f"New semanticpaper categories added: {sorted(added)}")
+                logger.info(f"New SemanticPaper categories added: {sorted(added)}")
+            if removed:
+                logger.info(f"SemanticPaper categories removed: {sorted(removed)}")
         except Exception as e:
             logger.error(f"Failed to load categories config: {e}")
 
