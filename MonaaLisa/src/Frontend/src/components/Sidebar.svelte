@@ -1,17 +1,46 @@
 <script lang="ts">
   import { createEventDispatcher } from 'svelte';
-  import type { Paper } from '../testdata/dummyData';
+  import { dummyPapers, type Paper } from '../testdata/dummyData'; //temporary import for demo data; replace with api later
 
   //prop components
-  export let papers: Paper[]; //the arrays of papers to be displayed
-  export let isOpen: boolean = false; //control for sidebar visibility
-  export let selectedPaperId: string | null = null; //currently selected paper id
+  /**
+   * array of papers to display.
+   * passed from parent.
+   * @type {Paper[]}
+   */
+  export let papers: Paper[] = [];
+
+  /**
+   * flag to use dummy data for showcasing.
+   * when true, uses dummypapers instead of the papers prop.
+   * set to true for demo, false for real data.
+   * @type {boolean}
+   */
+  export let useDummyData: boolean = true;
+
+  /**
+   * control for sidebar visibility.
+   * @type {boolean}
+   */
+  export let isOpen: boolean = false;
+
+  /**
+   * currently selected paper id.
+   * @type {string | null}
+   */
+  export let selectedPaperId: string | null = null;
 
   const dispatch = createEventDispatcher();
 
+  //determine data source: use dummypapers if flag is set, otherwise use papers prop
+  //to use dummy data: set usedummydata={true} in parent component
+  //to use real data: pass papers prop from api/db and set usedummydata={false}
+  //later, replace dummypapers import with api call in parent
+  $: dataSource = useDummyData ? dummyPapers : papers;
+
   //badges next to the papers in the sidebar
   //colors by cluster identifiers (falls back to grey when missing)
-  //REMOVE: only for testing, will be pointless when BE is implemented
+  //todo: remove when backend provides cluster colors or make dynamic
   const clusterColors: Record<string, string> = {
     A: '#FF6347',
     B: '#4682B4',
@@ -42,7 +71,7 @@
   </div>
   
   <div class="sidebar-content">
-    {#each papers as paper}
+    {#each dataSource as paper}
       <div 
         class="paper-item" 
         class:selected={selectedPaperId === paper.id.toString()}
