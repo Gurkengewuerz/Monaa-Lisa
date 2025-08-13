@@ -21,6 +21,6 @@
     "econ.EM", "econ.GN", "econ.TH"
   ],
   "semanticpaper_categories": [
-    "cs.CG", "cs.MM", "math.RA", "stat.CO"
+    "cs.CG", "cs.MM"
   ]
 }

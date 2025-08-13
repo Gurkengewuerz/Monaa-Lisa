@@ -6,7 +6,7 @@ from pathlib import Path
 from util.logger import Logger
 
 
-CONFIG_PATH = Path(__file__).parent / "categories.json"
+CONFIG_PATH = Path(__file__).resolve().parents[2] / "categories.json"
 RELOAD_INTERVAL = 60
 
 logger = Logger("CategoryLoader")
