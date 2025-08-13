@@ -154,10 +154,13 @@ Abstract: Checks if a category is already completed historically in this run.
 def is_category_historically_completed(program_run_id, category):
     session = SessionLocal()
     try:
-        exists = session.query(HistoricalCompletion).filter_by(
-            program_run_id=program_run_id, category=category
-        ).first() is not None
-        return exists
+        record = (
+            session.query(HistoricalCompletion)
+            .filter_by(program_run_id=program_run_id, category=category)
+            .filter(HistoricalCompletion.end_date.isnot(None))
+            .first()
+        )
+        return record is not None
     except Exception as e:
         logger.error(f"Error checking completion: {e}")
         return False
@@ -169,17 +172,22 @@ def is_category_historically_completed(program_run_id, category):
 Abstract: Marks a category as completed historically for this run.
 """
 def mark_category_historically_completed(program_run_id, category, oldest_paper_date=None):
+
     session = SessionLocal()
     try:
-        record = HistoricalCompletion(
-            program_run_id=program_run_id,
-            category=category,
-            completed_date=datetime.now(),
-            oldest_paper_date=oldest_paper_date
+        record = (
+            session.query(HistoricalCompletion)
+            .filter_by(program_run_id=program_run_id, category=category)
+            .order_by(HistoricalCompletion.start_date.desc())
+            .first()
         )
-        session.add(record)
+        if not record:
+            logger.error(f"No start entry to complete for {category} in run {program_run_id}")
+            return False
+        record.end_date = datetime.now()
+        record.oldest_paper_date = oldest_paper_date
         session.commit()
-        logger.info(f"Marked {category} completed for run {program_run_id}")
+        logger.info(f"Completed historical fetch for {category} in run {program_run_id}")
         return True
     except Exception as e:
         logger.error(f"Error marking completion: {e}")

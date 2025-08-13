@@ -94,5 +94,7 @@ class HistoricalCompletion(db_base):
     id = Column(Integer, primary_key=True, autoincrement=True)
     program_run_id = Column(Integer, ForeignKey("program_runs.id"), nullable=False)
     category = Column(String, nullable=False)
-    completed_date = Column(DateTime, nullable=False)
+    start_date = Column(DateTime, nullable=False)
+    end_date = Column(DateTime, nullable=True)
+    oldest_paper_date = Column(DateTime, nullable=True)
     oldest_paper_date = Column(DateTime, nullable=True)
