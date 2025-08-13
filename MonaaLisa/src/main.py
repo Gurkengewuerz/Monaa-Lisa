@@ -94,7 +94,7 @@ def main(num_workers: int = 5):
 
 
     """Graceful shutdown helper - Basti - 13. August 2025"""
-    def shutdown():
+    def shutdown(signum, frame):
         logger.info("Shutdown signal received, stopping workers...")
         for _ in threads:
             paper_queue.put(None)

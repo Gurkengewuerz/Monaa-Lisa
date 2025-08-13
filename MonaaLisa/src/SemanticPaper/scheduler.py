@@ -106,4 +106,3 @@ def start_scheduler():
     logger.info(f"Scheduler started (run ID {current_program_run_id})")
     return scheduler
     
-    return scheduler

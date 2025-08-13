@@ -111,8 +111,9 @@ class PaperProcessor:
         combined_embeddings = [emb for emb in combined_embeddings if emb is not None]
 
         try:
-            return np.average(np.array(combined_embeddings), weights=weights, axis=0)
-        except ValueError as e:
+            emb_matrix = np.stack(combined_embeddings, axis=0)
+            return np.average(emb_matrix, axis=0, weights=weights)
+        except Exception as e:
             self.logger.error(f"Error while calculating average: {e}")
             return None
 
