@@ -6,6 +6,7 @@ from Database.db import save_paper_to_db
 from dotenv import load_dotenv
 from SemanticPaper.machine_learning.model import Model
 import concurrent.futures
+from SemanticPaper.config.category_loader import get_semanticpaper_categories
 import os
 import time
 
@@ -59,8 +60,11 @@ def entry(max_workers:int = 4):
     logger.info(f"ThreadPoolExecutor will use {max_workers} workers.")
 
     while True:
-        logger.info("Fetching latest 10 papers from arXiv...")
-        latest_papers = fetch_papers(amount=10)
+        categories = get_semanticpaper_categories()
+        logger.info(f"Fetching latest paper for categories: {categories}")
+        latest_papers = []
+        for cat in categories:
+            latest_papers.extend(fetch_papers(category=cat, amount=1))
         new_papers = []
         embeddings = []
         paper_objs = []
@@ -79,7 +83,11 @@ def entry(max_workers:int = 4):
                         new_papers.append(processor.paper)
 
         if embeddings:
-            tsne_coords = model.extract_tsne_coordinates(embeddings)
+            if len(embeddings) >= 2:
+                tsne_coords = model.extract_tsne_coordinates(embeddings)
+            else:
+                logger.warning("Only one embedding received =( skipping t-SNE and using default coords.")
+                tsne_coords = [(0.0, 0.0)] * len(embeddings)
             for i, paper in enumerate(paper_objs):
                 embedding_dict = {
                     "Embedding": embeddings[i].tolist(),
