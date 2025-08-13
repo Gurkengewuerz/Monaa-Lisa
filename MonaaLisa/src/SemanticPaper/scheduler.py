@@ -72,7 +72,6 @@ def historical_fetch():
             if not has_more:
                 mark_category_historically_completed(current_program_run_id, cat)
                 logger.info(f"Category {cat} historical fetch completed")
-            break
     except Exception as e:
         logger.error(f"Error in historical_fetch: {e}")
     finally:
