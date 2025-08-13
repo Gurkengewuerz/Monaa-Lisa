@@ -112,7 +112,12 @@ def fetch_papers(category: str = CS_CG_CATEGORY, amount: int = 10) -> list:
     )
     papers = []
     for result in search.results():
-        papers.append(Paper.from_arxiv(result) if result else None)
+        if result:
+            paper = Paper.from_arxiv(result)
+            paper.category = category
+            papers.append(paper)
+        else:
+            papers.append(None)
     return papers
 
 
@@ -132,6 +137,7 @@ def fetch_historical_batch(category: str, batch_size: int = 50, start_offset: in
         for result in target_results:
             if result:
                 paper = Paper.from_arxiv(result)
+                paper.category = category
                 papers.append(paper)
         
         has_more = len(all_results) >= total_needed and len(all_results) > start_offset + batch_size        

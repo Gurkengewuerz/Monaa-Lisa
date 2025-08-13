@@ -4,6 +4,7 @@ from util.logger import Logger
 from Database.db import save_paper_to_db
 from dotenv import load_dotenv
 from SemanticPaper.machine_learning.model import Model
+from SemanticPaper.config.category_loader import get_semanticpaper_categories
 import threading
 import time
 import os
@@ -54,6 +55,10 @@ def paper_worker(worker_id, known_hashes):
         paper = paper_queue.get()
         if paper is None:
             break
+        active_categories = get_semanticpaper_categories()
+        if getattr(paper, 'category', None) and paper.category not in active_categories:
+            logger.warning(f"Worker {worker_id}: Category '{paper.category}' removed; skipping paper '{paper.title}'")
+            continue
         processor = PaperProcessor(paper, model)
         if processor.prepare_paper(known_hashes):
             embedding = processor.create_structured_embedding()

@@ -27,6 +27,7 @@ class Paper:
     abstract: str
     published: datetime
     url: str
+    category: Optional[str] = None
     hash: Optional[str] = None
     references: Optional[List[Reference]] = None
     citations: Optional[Dict] = None # TODO # Should not show up here but rather in a separate table (maybe)
