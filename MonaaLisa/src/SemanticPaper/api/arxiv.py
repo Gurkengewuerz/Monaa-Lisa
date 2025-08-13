@@ -3,6 +3,7 @@ import feedparser
 import requests
 import random
 import hashlib
+from datetime import datetime
 
 from object.paper import Paper
 from util.logger import Logger
@@ -113,6 +114,33 @@ def fetch_papers(category: str = CS_CG_CATEGORY, amount: int = 10) -> list:
     for result in search.results():
         papers.append(Paper.from_arxiv(result) if result else None)
     return papers
+
+
+def fetch_historical_batch(category: str, batch_size: int = 50, start_offset: int = 0) -> tuple[list[Paper], bool]:
+    try:
+        total_needed = start_offset + batch_size        
+        search = arx.Search(
+            query=f"cat:{category}",
+            max_results=total_needed,
+            sort_by=arx.SortCriterion.SubmittedDate,
+            sort_order=arx.SortOrder.Ascending
+        )
+        
+        all_results = list(client.results(search))
+        target_results = all_results[start_offset:start_offset + batch_size]
+        papers = []
+        for result in target_results:
+            if result:
+                paper = Paper.from_arxiv(result)
+                papers.append(paper)
+        
+        has_more = len(all_results) >= total_needed and len(all_results) > start_offset + batch_size        
+        logger.info(f"Fetched {len(papers)} historical papers for {category} (offset: {start_offset})")
+        return papers, has_more
+        
+    except Exception as e:
+        logger.error(f"Error fetching historical batch for {category}: {e}")
+        return [], False
 
 
 """

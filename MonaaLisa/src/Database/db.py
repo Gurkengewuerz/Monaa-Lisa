@@ -17,7 +17,7 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(__file__))))
 from sqlalchemy import create_engine, Column, String, Float, DateTime, Integer, JSON, ForeignKey
 from sqlalchemy.orm import declarative_base, sessionmaker
 from dotenv import load_dotenv
-from Database.db_models import db_base, DBPaper
+from Database.db_models import db_base, DBPaper, ProgramRun, HistoricalCompletion
 from object.paper import Paper
 from util.logger import Logger
 # os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), ".env")
@@ -128,3 +128,65 @@ if __name__ == "__main__":
     logger.info("Creating database tables...")
     db_base.metadata.create_all(bind=engine)
     logger.info("Tables created successfully!")
+
+"""
+13-August-2025 - Basti
+Abstract: Creates a new program run record and returns its ID.
+"""
+def create_program_run():
+    session = SessionLocal()
+    try:
+        # Deactivate any prior runs
+        session.query(ProgramRun).filter_by(is_active="true").update({"is_active": "false"})
+        run = ProgramRun(start_date=datetime.now(), is_active="true")
+        session.add(run)
+        session.commit()
+        logger.info(f"Created ProgramRun ID: {run.id}")
+        return run.id
+    except Exception as e:
+        logger.error(f"Error creating program run: {e}")
+        session.rollback()
+        return None
+    finally:
+        session.close()
+
+"""
+13-August-2025 - Basti
+Abstract: Checks if a category is already completed historically in this run.
+"""
+def is_category_historically_completed(program_run_id, category):
+    session = SessionLocal()
+    try:
+        exists = session.query(HistoricalCompletion).filter_by(
+            program_run_id=program_run_id, category=category
+        ).first() is not None
+        return exists
+    except Exception as e:
+        logger.error(f"Error checking completion: {e}")
+        return False
+    finally:
+        session.close()
+
+"""
+13-August-2025 - Basti
+Abstract: Marks a category as completed historically for this run.
+"""
+def mark_category_historically_completed(program_run_id, category, oldest_paper_date=None):
+    session = SessionLocal()
+    try:
+        record = HistoricalCompletion(
+            program_run_id=program_run_id,
+            category=category,
+            completed_date=datetime.now(),
+            oldest_paper_date=oldest_paper_date
+        )
+        session.add(record)
+        session.commit()
+        logger.info(f"Marked {category} completed for run {program_run_id}")
+        return True
+    except Exception as e:
+        logger.error(f"Error marking completion: {e}")
+        session.rollback()
+        return False
+    finally:
+        session.close()

@@ -1,13 +1,26 @@
 import multiprocessing
+import threading
+from datetime import datetime
 from apscheduler.schedulers.background import BackgroundScheduler
+from Database.db import db_base, engine
 from util.logger import Logger
-from SemanticPaper.api.arxiv import fetch_papers
+from SemanticPaper.api.arxiv import fetch_papers, fetch_historical_batch
 from SemanticPaper.config.category_loader import get_semanticpaper_categories
+from Database.db import (
+    create_program_run,
+    is_category_historically_completed,
+    mark_category_historically_completed
+)
 
 logger = Logger("Scheduler")
 
 # Queue to buffer fetched Paper objects for embedding workers
 paper_queue = multiprocessing.Queue()
+
+current_program_run_id = None
+scheduler_lock = threading.Lock()
+historical_fetch_state = {"running": False}
+
 
 """
 13-August-2025 - Basti
@@ -34,13 +47,37 @@ Args:
 Returns: None
 """
 def historical_fetch():
-    categories = get_semanticpaper_categories()
-    logger.info(f"Starting historical fetch for categories: {categories}")
-    # Placeholder: implement batching logic down to first paper
-    for cat in categories:
-        # TODO: fetch all historical papers in batches
-        pass
-    logger.info("Completed historical fetch.")
+    global current_program_run_id
+    with scheduler_lock:
+        if historical_fetch_state["running"]:
+            logger.info("Historical fetch already in progress")
+            return
+        historical_fetch_state["running"] = True
+    try:
+        if not current_program_run_id:
+            logger.error("No active program run ID")
+            return
+        categories = get_semanticpaper_categories()
+        for cat in categories:
+            if is_category_historically_completed(current_program_run_id, cat):
+                continue
+            offset = historical_fetch_state.get(cat, 0)
+            papers, has_more = fetch_historical_batch(cat, batch_size=50, start_offset=offset)
+            if papers:
+                for paper in papers:
+                    if paper:
+                        paper_queue.put(paper)
+                logger.info(f"Enqueued {len(papers)} historical papers for {cat}")
+            historical_fetch_state[cat] = offset + 50
+            if not has_more:
+                mark_category_historically_completed(current_program_run_id, cat)
+                logger.info(f"Category {cat} historical fetch completed")
+            break
+    except Exception as e:
+        logger.error(f"Error in historical_fetch: {e}")
+    finally:
+        with scheduler_lock:
+            historical_fetch_state["running"] = False
 
 """
 13-August-2025 - Basti
@@ -50,11 +87,23 @@ Args:
 Returns: BackgroundScheduler
 """
 def start_scheduler():
+    global current_program_run_id
+    if BackgroundScheduler is None:
+        logger.error("Cannot start scheduler: APScheduler missing")
+        return None
+    db_base.metadata.create_all(bind=engine)
+    current_program_run_id = create_program_run()
+    if not current_program_run_id:
+        logger.error("Failed to create program run")
+        return None
     scheduler = BackgroundScheduler()
-    # Schedule daily_fetch every day at 00:00 - TODO: Make this configurable (do we even have a proper .env for SemanticPaper?)
-    scheduler.add_job(daily_fetch, 'cron', hour=0, minute=0, id='daily_fetch')
-    # schedule historical_fetch once at startup (interval=0) or daily at 01:00
-    scheduler.add_job(historical_fetch, 'cron', hour=1, minute=0, id='historical_fetch')
+    # Schedule daily_fetch at 0,6,12,18
+    for hr in [0, 6, 12, 18]:
+        scheduler.add_job(daily_fetch, 'cron', hour=hr, minute=0, id=f"daily_fetch_{hr}")
+    # Schedule historical_fetch hourly, start now
+    scheduler.add_job(historical_fetch, 'interval', hours=1, next_run_time=datetime.now(), id='historical_fetch')
     scheduler.start()
-    logger.info("Scheduler started with daily and historical fetch jobs.")
+    logger.info(f"Scheduler started (run ID {current_program_run_id})")
+    return scheduler
+    
     return scheduler
