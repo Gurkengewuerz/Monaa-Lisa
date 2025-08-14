@@ -5,6 +5,7 @@ from apscheduler.schedulers.background import BackgroundScheduler
 from Database.db import db_base, engine
 from util.logger import Logger
 from SemanticPaper.api.arxiv import fetch_papers, fetch_historical_batch
+from SemanticPaper.api.arxiv import rate_limiter 
 from SemanticPaper.config.category_loader import get_semanticpaper_categories
 from Database.db import (
     create_program_run,
@@ -33,6 +34,7 @@ def daily_fetch():
     categories = get_semanticpaper_categories()
     logger.info(f"Fetching newest paper for categories: {categories}")
     for cat in categories:
+        rate_limiter.wait()
         papers = fetch_papers(category=cat, amount=1)
         for paper in papers:
             if paper:
@@ -62,6 +64,7 @@ def historical_fetch():
             if is_category_historically_completed(current_program_run_id, cat):
                 continue
             offset = historical_fetch_state.get(cat, 0)
+            rate_limiter.wait()
             papers, has_more = fetch_historical_batch(cat, batch_size=50, start_offset=offset)
             if papers:
                 for paper in papers:
@@ -104,4 +107,3 @@ def start_scheduler():
     scheduler.start()
     logger.info(f"Scheduler started (run ID {current_program_run_id})")
     return scheduler
-    

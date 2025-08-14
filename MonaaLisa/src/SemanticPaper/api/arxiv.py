@@ -7,8 +7,11 @@ from datetime import datetime
 
 from object.paper import Paper
 from util.logger import Logger
+from SemanticPaper.api.rate_limiter import RateLimiter
 
 logger = Logger("arxiv")
+
+rate_limiter = RateLimiter(min_interval=3.0)
 
 # Funny test comment ! :D
 
@@ -84,6 +87,7 @@ Args: None
 Returns: One arXiv paper -> Result
 """
 def fetch_latest_paper() -> Paper:
+    rate_limiter.wait()
     search = arx.Search(
         query=f"cat:{CS_CG_CATEGORY}", 
         max_results=1, 
@@ -104,6 +108,7 @@ Args:
 Returns: List -> of fetches papers
 """
 def fetch_papers(category: str = CS_CG_CATEGORY, amount: int = 10) -> list:
+    rate_limiter.wait()
     search = arx.Search(
         query=f"cat:{category}",
         max_results=amount,
@@ -122,6 +127,7 @@ def fetch_papers(category: str = CS_CG_CATEGORY, amount: int = 10) -> list:
 
 
 def fetch_historical_batch(category: str, batch_size: int = 50, start_offset: int = 0) -> tuple[list[Paper], bool]:
+    rate_limiter.wait()
     try:
         total_needed = start_offset + batch_size        
         search = arx.Search(
