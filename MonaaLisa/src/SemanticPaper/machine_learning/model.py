@@ -5,7 +5,7 @@ from sklearn.manifold import TSNE
 import numpy as np
 import arxiv as arx
 import torch
-
+import os
 from object.paper import Paper
 from util.logger import Logger
 
@@ -24,7 +24,8 @@ class Model:
         replace this later with SciBERT or allenai/specter
         """
         self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-        self._transformer = SentenceTransformer("all-MiniLM-L6-v2")
+        model_name = os.getenv("TRANSFORMER_MODEL", "all-MiniLM-L6-v2")
+        self._transformer = SentenceTransformer(model_name)
         self._model = self._transformer.to(self.device)
         self.logger = Logger("Model")
         self.logger.info(f"Using device: {self.device}")

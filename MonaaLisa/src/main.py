@@ -78,7 +78,9 @@ Args:
 Returns: None
 """
 def main(num_workers: int = 5):
-    logger.info("Initializing scheduler system...")
+    log_level = os.getenv("LOG_LEVEL", "DEBUG")
+    logger.set_level(log_level)
+    logger.info(f"Initializing scheduler system (log level={log_level})...")
 
     known_hashes = load_hashes()
     logger.info(f"Loaded {len(known_hashes)} known hashes")
@@ -115,4 +117,5 @@ def main(num_workers: int = 5):
     signal.pause()
 
 if __name__ == "__main__":
-    main()
+    workers = int(os.getenv("NUM_WORKERS", str(5)))
+    main(workers)

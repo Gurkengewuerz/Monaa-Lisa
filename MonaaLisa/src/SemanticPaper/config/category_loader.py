@@ -1,13 +1,14 @@
 import json
 import threading
 import time
+import os
 from pathlib import Path
 
 from util.logger import Logger
 
 
-CONFIG_PATH = Path(__file__).resolve().parents[2] / "categories.json"
-RELOAD_INTERVAL = 60
+CONFIG_PATH = Path(os.getenv("CATEGORY_CONFIG_PATH", Path(__file__).resolve().parents[2] / "categories.json"))
+RELOAD_INTERVAL = int(os.getenv("RELOAD_INTERVAL", "60"))
 
 logger = Logger("CategoryLoader")
 

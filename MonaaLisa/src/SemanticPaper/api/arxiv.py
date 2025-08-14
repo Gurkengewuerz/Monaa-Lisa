@@ -7,11 +7,13 @@ from datetime import datetime
 
 from object.paper import Paper
 from util.logger import Logger
+import os
 from SemanticPaper.api.rate_limiter import RateLimiter
 
 logger = Logger("arxiv")
 
-rate_limiter = RateLimiter(min_interval=3.0)
+_interval = float(os.getenv("ARXIV_MIN_INTERVAL", "3.0"))
+rate_limiter = RateLimiter(min_interval=_interval)
 
 # Funny test comment ! :D
 
