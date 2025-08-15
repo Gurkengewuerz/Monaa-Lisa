@@ -1,13 +1,33 @@
 <script lang="ts">
   import { createEventDispatcher } from 'svelte';
-  import type { Paper } from '../testdata/dummyData';
+  import { dummyPapers, type Paper } from '../testdata/dummyData'; //temporary import for demo data; replace with api later
 
-  export let papers: Paper[];
+  /**
+   * array of papers to search.
+   * passed from parent.
+   * @type {Paper[]}
+   */
+  export let papers: Paper[] = [];
+
+  /**
+   * flag to use dummy data for showcasing.
+   * when true, uses dummypapers instead of the papers prop.
+   * set to true for demo, false for real data.
+   * @type {boolean}
+   */
+  export let useDummyData: boolean = false;
+
   export let searchQuery: string = '';
   
   const dispatch = createEventDispatcher();
 
-  $: filteredPapers = papers.filter(paper => 
+  //determine data source: use dummypapers if flag is set, otherwise use papers prop
+  //to use dummy data: set usedummydata={true} in parent component
+  //to use real data: pass papers prop from api/db and set usedummydata={false}
+  //later, replace dummypapers import with api call in parent
+  $: dataSource = useDummyData ? dummyPapers : papers;
+
+  $: filteredPapers = dataSource.filter(paper => 
     paper.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
     paper.authors.toLowerCase().includes(searchQuery.toLowerCase()) ||
     paper.summary.toLowerCase().includes(searchQuery.toLowerCase())
