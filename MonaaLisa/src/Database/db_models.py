@@ -97,4 +97,3 @@ class HistoricalCompletion(db_base):
     start_date = Column(DateTime, nullable=False)
     end_date = Column(DateTime, nullable=True)
     oldest_paper_date = Column(DateTime, nullable=True)
-    oldest_paper_date = Column(DateTime, nullable=True)
