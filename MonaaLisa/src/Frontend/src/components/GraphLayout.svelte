@@ -1,19 +1,45 @@
 <script lang="ts">
-  import { dummyPapers, type Paper } from '../testdata/dummyData';
+  import { onMount } from 'svelte';
+  import { dummyPapers, type Paper } from '../testdata/dummyData'; //temporary import for demo data; replace with api later
   import Graph from './Graph.svelte';
   import Searchbar from './Searchbar.svelte';
   import Sidebar from './Sidebar.svelte';
 
-  let filteredPapers: Paper[] = dummyPapers; // Papers after search/filter applied
-  let sidebarOpen = false; // Controls sidebar visibility
-  let selectedPaperId: string | null = null; // Currently selected paper ID
+  //flag to use dummy data for showcasing
+  //set to true for demo, false for real data
+  let useDummyData: boolean = true; //change to false when backend is ready
 
-  //handling search results from Searchbar component
+  let papers: Paper[] = []; //real papers from api
+  let filteredPapers: Paper[] = []; //papers after search/filter applied
+  let sidebarOpen = false; //controls sidebar visibility
+  let selectedPaperId: string | null = null; //currently selected paper id
+
+  // Fetch real data from api when not using dummy
+  onMount(async () => {
+    if (!useDummyData) {
+      try {
+        const response = await fetch('http://localhost:8000/papers'); //your api url
+        papers = await response.json();
+        filteredPapers = papers;
+      } catch (error) {
+        console.error('failed to fetch papers:', error);
+        // Fallback to dummy if api fails
+        papers = dummyPapers;
+        filteredPapers = dummyPapers;
+      }
+    } else {
+      // Use dummy data
+      papers = dummyPapers;
+      filteredPapers = dummyPapers;
+    }
+  });
+
+  //handling search results from searchbar component
   function handleFiltered(event: CustomEvent<Paper[]>) {
     filteredPapers = event.detail;
   }
 
-  //toggle sidebar open/closed 
+  //toggle sidebar open/closed
   function handleToggleSidebar() {
     sidebarOpen = !sidebarOpen;
   }
@@ -22,14 +48,14 @@
   function handleSelectPaper(event: CustomEvent<Paper>) {
     const paper = event.detail;
     selectedPaperId = paper.id.toString();
-    console.log('Selected paper from sidebar:', paper);
+    console.log('selected paper from sidebar:', paper);
   }
 
   //handling for node selection from graph - update sidebar
   function handleNodeSelected(event: CustomEvent<string>) {
     selectedPaperId = event.detail;
-    sidebarOpen = true; // Auto-open sidebar when node is selected
-    console.log('Selected node from graph:', event.detail);
+    sidebarOpen = true; //auto-open sidebar when node is selected
+    console.log('selected node from graph:', event.detail);
   }
 
   //handling node deselection from graph - clear sidebar selection
@@ -42,7 +68,8 @@
 <div class="app-container">
   <!-- search component at top -->
   <Searchbar 
-    papers={dummyPapers} 
+    {papers}
+    {useDummyData}
     on:filtered={handleFiltered}
   />
 
@@ -50,14 +77,17 @@
   <div class="main-content">
     <!-- graph visualization component with selection binding -->
     <Graph 
+      {papers}
+      {useDummyData}
       {selectedPaperId}
       on:nodeSelected={handleNodeSelected}
       on:nodeDeselected={handleNodeDeselected}
     />
     
-    <!-- sidebar component for the paper listt -->
+    <!-- sidebar component for the paper list -->
     <Sidebar 
       papers={filteredPapers}
+      {useDummyData}
       isOpen={sidebarOpen}
       {selectedPaperId}
       on:toggle={handleToggleSidebar}
