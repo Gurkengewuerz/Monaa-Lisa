@@ -1,3 +1,6 @@
+/**
+ * Nico August 2025
+ */
 import { NestFactory } from '@nestjs/core';
 import { AppModule } from './app.module';
 
