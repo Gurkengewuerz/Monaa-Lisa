@@ -1,0 +1,67 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+// Looking for ways to speed up your queries, or scale easily with your serverless or edge functions?
+// Try Prisma Accelerate: https://pris.ly/cli/accelerate-init
+
+generator client {
+  provider = "prisma-client-js"
+  output   = "../generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model Paper {
+  id        Int      @id @default(autoincrement())
+  entry_id  String   @unique
+  title     String
+  authors   String
+  summary   String
+  published DateTime?
+  category  String?
+  url       String?
+  hash      String   @unique
+  citations Json?
+  tsne      Json?
+  added     DateTime
+}
+
+model PaperRelation {
+  source_id  String @map("source_id")
+  target_id  String @map("target_id")
+  confidence Float
+  @@id([source_id, target_id])
+}
+
+model Reference {
+  id                      Int    @id @default(autoincrement())
+  belonging_paper_entry_id String
+  title                   String
+}
+
+model Embedding {
+  id                      Int    @id @default(autoincrement())
+  belonging_paper_entry_id String @unique
+  content                 Json
+}
+
+model ProgramRun {
+  id        Int      @id @default(autoincrement())
+  start_date DateTime
+  is_active Boolean  @default(true)
+}
+
+model HistoricalCompletion {
+  id                    Int      @id @default(autoincrement())
+  program_run_id        Int
+  category              String
+  start_date            DateTime
+  end_date              DateTime?
+  oldest_paper_date     DateTime?
+  goal_oldest_paper_date DateTime?
+  goal_reached          Boolean  @default(false)
+  reached_date          DateTime?
+}
