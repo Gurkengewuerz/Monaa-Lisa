@@ -1,7 +1,11 @@
+import concurrent
 import threading
+from collections import defaultdict
+from concurrent.futures import ThreadPoolExecutor
 
 import numpy as np
 from object.paper import Paper
+from sklearn.metrics.pairwise import cosine_similarity
 from util.logger import Logger
 from SemanticPaper.machine_learning.model import Model
 
@@ -40,9 +44,18 @@ class PaperProcessor:
     Returns: A numpy array representing the embedding of the text.
     """
     def create_section_embedding(self, text: str) -> np.ndarray:
+        if not text or not text.strip():
+            return None
         chunks = [text[i:i + 512] for i in range(0, len(text), 512)]
         embeddings = [self._model.get_model().encode(c) for c in chunks]
-        return np.mean(embeddings, axis=0)
+
+        # Filter out potential None or empty results from encode
+        valid_embeddings = [emb for emb in embeddings if emb is not None and emb.size > 0]
+
+        if not valid_embeddings:
+            return None
+
+        return np.mean(valid_embeddings, axis=0)
 
 
     """
@@ -60,7 +73,7 @@ class PaperProcessor:
         if self.paper.abstract:
             abstract_emb = self.create_section_embedding(self.paper.abstract)
             # Check if embedding valid
-            if abstract_emb is not None:
+            if abstract_emb is not None and abstract_emb.size > 0:
                 self.logger.debug(f"Processing abstract: {self.paper.abstract[:50]}...")
                 combined_embeddings.append(abstract_emb)
                 weights.append(0.4)
@@ -73,7 +86,7 @@ class PaperProcessor:
             for section in sections:
                 section_emb = self.create_section_embedding(section['content'])
                 # Check if embedding valid
-                if section_emb is not None:
+                if section_emb is not None and section_emb.size > 0:
                     title = section['title'].lower()
                     self.logger.info(f"Processing section: {title}")
 
@@ -94,11 +107,11 @@ class PaperProcessor:
 
         # References (20%)
         if self.paper.references:
-            ref_texts = [ref.title for ref in self.paper.references]
+            ref_texts = [ref.title for ref in self.paper.references if ref.title]
             self.logger.info(f"Processing references: {' '.join(ref_texts)}")
             ref_emb = self.create_section_embedding(" ".join(ref_texts))
             # Check if embedding valid
-            if ref_emb is not None:
+            if ref_emb is not None and ref_emb.size > 0:
                 combined_embeddings.append(ref_emb)
                 weights.append(0.2)
             else:
@@ -107,13 +120,26 @@ class PaperProcessor:
         if not combined_embeddings:  # Check if no embeddings were created
             return None
 
-        weights = np.array(weights) / sum(weights)
-        combined_embeddings = [emb for emb in combined_embeddings if emb is not None]
+        # Filter embeddings one last time to be safe
+        valid_embeddings_with_weights = [
+            (emb, weight) for emb, weight in zip(combined_embeddings, weights)
+            if emb is not None and emb.size > 0
+        ]
+
+        if not valid_embeddings_with_weights:
+            return None
+
+        final_embeddings, final_weights = zip(*valid_embeddings_with_weights)
+
+        # Normalize weights for the valid embeddings
+        final_weights = np.array(final_weights)
+        final_weights /= final_weights.sum()
 
         try:
-            return np.average(np.array(combined_embeddings), weights=weights, axis=0)
+            return np.average(np.array(final_embeddings), weights=final_weights, axis=0)
         except ValueError as e:
             self.logger.error(f"Error while calculating average: {e}")
+            self.logger.error(f"Shape of final_embeddings: {[e.shape for e in final_embeddings]}")
             return None
 
     """
@@ -135,3 +161,4 @@ class PaperProcessor:
 
     def get_keywords(self):
         return self._keywords
+

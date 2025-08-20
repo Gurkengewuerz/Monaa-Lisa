@@ -106,6 +106,9 @@ class Paper:
     """
     def extract_metadata(self):
         self._grobid_xml = self.extract_paper_text_semantic()
+        if not self._grobid_xml:
+            self.logger.error(f"Failed to extract metadata for {self.title}. Grobid returned None.")
+            return
         references = self.extract_references()
         if references:
             """Annotation 30-July-2025: - Bastian
@@ -164,6 +167,8 @@ class Paper:
     - ns: dict -> A dictionary containing XML namespaces.
     """
     def get_sections(self) -> list[dict]:
+        if not self._grobid_xml:
+            return []
         data = self._grobid_xml.encode("utf-8")
         root = etree.fromstring(data)
         ns = {'tei': 'http://www.tei-c.org/ns/1.0'}

@@ -10,15 +10,14 @@ import requests
 from arxiv import arxiv
 from pymupdf import pymupdf
 
-
-
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(__file__))))
 
 from sqlalchemy import create_engine, Column, String, Float, DateTime, Integer, JSON, ForeignKey
 from sqlalchemy.orm import declarative_base, sessionmaker
 from dotenv import load_dotenv
-from Database.db_models import db_base, DBPaper
+from Database.db_models import db_base, DBPaper, DBPaperRelation
 from object.paper import Paper
+from object.relation import Relation
 from util.logger import Logger
 # os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), ".env")
 load_dotenv()
@@ -29,6 +28,23 @@ DATABASE_URL = os.environ.get("DATABASE_URL")
 engine = create_engine(DATABASE_URL)
 SessionLocal = sessionmaker(bind=engine)
 
+
+"""
+05-August-2025 - Lenio
+Abstract: Fetches all embeddings from the database and returns them as a dictionary.
+Returns: A dictionary where keys are paper entry IDs and values are numpy arrays of embeddings.
+"""
+def get_all_embeddings():
+    session = SessionLocal()
+    try:
+        papers = session.query(DBPaper.entry_id, DBPaper.embedding).all()
+        embedding_dict = {
+            paper.entry_id: np.array(paper.embedding['embedding'])
+            for paper in papers if paper.embedding and 'embedding' in paper.embedding
+        }
+        return embedding_dict
+    finally:
+        session.close()
 
 """
 25-May-2025 - Basti
@@ -85,6 +101,34 @@ def save_paper_to_db(paper: Paper, paper_hash, embedding: dict):
         return False
     finally:
         session.close()
+
+
+"""
+20-August-2025 - Lenio
+Abstract: Saves a relation between two papers in the database.
+Args:
+PaperRelation: The relation object containing source_id, target_id, and confidence.
+"""
+def save_paper_relation(paper_relation: Relation):
+    session = SessionLocal()
+    if not relation_exists(session, paper_relation.source_id, paper_relation.target_id):
+        try:
+            db_paper_relation = paper_relation.to_db_model()
+            session.add(db_paper_relation)
+            session.commit()
+            logger.info(f"Saved paper relation: {paper_relation.source_id} -> {paper_relation.target_id} with confidence {paper_relation.confidence}")
+            return True
+        except Exception as e:
+            logger.error(f"DB error saving paper relation: {e}")
+            session.rollback()
+            return False
+        finally:
+            session.close()
+    else:
+        logger.info(f"Relation already exists: {paper_relation.source_id} -> {paper_relation.target_id}")
+        session.close()
+        return True
+
 """
 25-May-2025 - Basti
 Abstract: Checks if a paper hash already exists in the database
@@ -95,6 +139,22 @@ Returns: bool -> True if: query of the paper is not Null/None | False if: query 
 """
 def paper_exists(session, paper_hash):
     return session.query(DBPaper).filter_by(hash=paper_hash).first() is not None
+
+
+"""
+20-August-2025 - Lenio
+Abstract: Checks if a relation between two papers already exists in the database.
+Args:
+- session: The current database session.
+- source_id: The ID of the first paper.
+- target_id: The ID of the second paper.
+Returns: bool -> True if the relation exists, False otherwise.
+"""
+def relation_exists(session, source_id: str, target_id: str):
+    # Check if the relation exists in either direction
+    relation1 = session.query(DBPaperRelation).filter_by(source_id=source_id, target_id=target_id).first()
+    relation2 = session.query(DBPaperRelation).filter_by(source_id=target_id, target_id=source_id).first()
+    return relation1 is not None or relation2 is not None
 
 """
 25-May-2025 - Basti

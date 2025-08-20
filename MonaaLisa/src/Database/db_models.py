@@ -44,10 +44,10 @@ Parameters:
 - target_id: The ID of the second paper that relates to the first.
 - confidence: A float representing the confidence level of the relation.
 """
-class PaperRelation(db_base):
-    __tablename__ = "paper_relations"
-    source_id = Column(Integer, ForeignKey("paper.id"), primary_key=True)
-    target_id = Column(Integer, ForeignKey("paper.id"), primary_key=True)
+class DBPaperRelation(db_base):
+    __tablename__ = "paper_relation"
+    source_id = Column(String, ForeignKey("paper.entry_id"), primary_key=True)
+    target_id = Column(String, ForeignKey("paper.entry_id"), primary_key=True)
     confidence = Column(Float)
 
 

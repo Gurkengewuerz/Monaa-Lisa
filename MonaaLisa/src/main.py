@@ -1,8 +1,9 @@
+from SemanticPaper.machine_learning.mapper import Mapper
 from SemanticPaper.machine_learning.processor import PaperProcessor
 from SemanticPaper.api.semanticscholar import SemanticScholarAPI
 from SemanticPaper.api.arxiv import fetch_papers
 from util.logger import Logger
-from Database.db import save_paper_to_db
+from Database.db import save_paper_to_db, save_paper_relation, get_all_embeddings
 from dotenv import load_dotenv
 from SemanticPaper.machine_learning.model import Model
 import concurrent.futures
@@ -55,7 +56,7 @@ Returns: None
 def entry(max_workers:int = 4):
     logger.info(f"Starting SemanticPaper! Updating arXiv every {UPDATE_INTERVAL}s")
     known_hashes = load_hashes()
-
+    existing_embeddings = get_all_embeddings()
     logger.info(f"ThreadPoolExecutor will use {max_workers} workers.")
 
     while True:
@@ -74,18 +75,27 @@ def entry(max_workers:int = 4):
                     embedding = processor.create_structured_embedding()
                     if embedding is not None:
                         embeddings.append(embedding)
+                        processor.paper.embedding = embedding
                         paper_objs.append(processor.paper)
                         paper_hashes.append(processor.paper.hash)
                         new_papers.append(processor.paper)
 
         if embeddings:
             tsne_coords = model.extract_tsne_coordinates(embeddings)
+            logger.info(f"Extracted embeddings for {len(embeddings)} papers.")
             for i, paper in enumerate(paper_objs):
+                mapper = Mapper(paper)
                 embedding_dict = {
                     "Embedding": embeddings[i].tolist(),
                     "tsne1": tsne_coords[i][0],
                     "tsne2": tsne_coords[i][1]
                 }
+
+                relations = mapper.map_paper(existing_embeddings)
+                logger.info(f"Found {len(relations)} relations for {paper.title}")
+                for relation in relations:
+                    logger.info(f"Similar paper: {relation.source_id} with similarity score: {relation.confidence}")
+                    save_paper_relation(relation)
                 save_paper_to_db(paper, paper_hashes[i], embedding_dict)
                 save_hash(paper_hashes[i])
                 known_hashes.add(paper_hashes[i])
