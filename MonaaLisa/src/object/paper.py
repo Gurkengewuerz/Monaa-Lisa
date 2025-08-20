@@ -27,6 +27,7 @@ class Paper:
     abstract: str
     published: datetime
     url: str
+    category: Optional[str] = None
     hash: Optional[str] = None
     references: Optional[List[Reference]] = None
     citations: Optional[Dict] = None # TODO # Should not show up here but rather in a separate table (maybe)
@@ -106,6 +107,15 @@ class Paper:
     """
     def extract_metadata(self):
         self._grobid_xml = self.extract_paper_text_semantic()
+        """ - Basti - 13. August 2025
+        Handling if Grobid returns no XML => skip section and reference extraction
+        This used to cause an Exception
+        """
+
+        if not self._grobid_xml:
+            self.logger.warning(f"No GROBID XML returned for {self.title}, skipping metadata extraction")
+            self.references = []
+            return
         references = self.extract_references()
         if references:
             """Annotation 30-July-2025: - Bastian
@@ -136,6 +146,9 @@ class Paper:
     """
     def extract_references(self) -> List['Reference']:
         references = []
+        # Skip if no Grobid XML available
+        if not self._grobid_xml:
+            return references
         if self._grobid_xml is not None:
             data = self._grobid_xml.encode("utf-8")
             root = etree.fromstring(data)
@@ -164,6 +177,10 @@ class Paper:
     - ns: dict -> A dictionary containing XML namespaces.
     """
     def get_sections(self) -> list[dict]:
+        # Skip if no Grobid XML available
+        if not self._grobid_xml:
+            self.logger.warning(f"No GROBID XML available for {self.title}, skipping sections")
+            return []
         data = self._grobid_xml.encode("utf-8")
         root = etree.fromstring(data)
         ns = {'tei': 'http://www.tei-c.org/ns/1.0'}

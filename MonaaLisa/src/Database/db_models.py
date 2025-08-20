@@ -64,3 +64,36 @@ class DBReference(db_base):
     id = Column(Integer, primary_key=True, autoincrement=True)
     belonging_paper_entry_id = Column(String, ForeignKey("paper.entry_id"), primary_key=True)
     title = Column(String, nullable=False)
+
+"""
+13-August-2025 - Basti
+Abstract: Tracks program run sessions for historical fetching.
+Parameters:
+- id: Primary key of the run session.
+- start_date: Timestamp when the program run started.
+- is_active: String flag indicating if the run is active.
+"""
+class ProgramRun(db_base):
+    __tablename__ = "program_runs"
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    start_date = Column(DateTime, nullable=False)
+    is_active = Column(String, default="true")
+
+"""
+13-August-2025 - Basti
+Abstract: Records which categories have completed historical fetch for each program run.
+Parameters:
+- id: Primary key.
+- program_run_id: Foreign key to ProgramRun.
+- category: The completed arXiv category.
+- completed_date: Timestamp when category was completed.
+- oldest_paper_date: The date of the oldest fetched paper.
+"""
+class HistoricalCompletion(db_base):
+    __tablename__ = "historical_completions"
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    program_run_id = Column(Integer, ForeignKey("program_runs.id"), nullable=False)
+    category = Column(String, nullable=False)
+    start_date = Column(DateTime, nullable=False)
+    end_date = Column(DateTime, nullable=True)
+    oldest_paper_date = Column(DateTime, nullable=True)
