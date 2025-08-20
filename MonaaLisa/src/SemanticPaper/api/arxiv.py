@@ -148,7 +148,7 @@ def fetch_historical_batch(category: str, batch_size: int = 50, start_offset: in
                 paper.category = category
                 papers.append(paper)
         
-        has_more = len(all_results) >= total_needed and len(all_results) > start_offset + batch_size        
+        has_more = len(all_results) > total_needed
         logger.info(f"Fetched {len(papers)} historical papers for {category} (offset: {start_offset})")
         return papers, has_more
         
