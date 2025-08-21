@@ -106,30 +106,36 @@ def save_paper_to_db(paper: Paper):
         session.close()
 
 """
-20-August-2025 - Lenio
+20-August-2025 - Lenio & Nico
 Abstract: Saves a relation between two papers in the database.
 Args:
 PaperRelation: The relation object containing source_id, target_id, and confidence.
 """
 def save_paper_relation(paper_relation: Relation):
     session = SessionLocal()
-    if not relation_exists(session, paper_relation.source_id, paper_relation.target_id):
-        try:
+    try:
+        # Kein doppeltes session.close()
+        # Funktion gibt immer True zurück wenn Relation existiert ODER gespeichert wurde; False bei einem Fehler
+        if not relation_exists(session, paper_relation.source_id, paper_relation.target_id):
             db_paper_relation = paper_relation.to_db_model()
             session.add(db_paper_relation)
             session.commit()
-            logger.info(f"Saved paper relation: {paper_relation.source_id} -> {paper_relation.target_id} with confidence {paper_relation.confidence}")
+            logger.info(
+                f"Saved paper relation: {paper_relation.source_id} -> "
+                f"{paper_relation.target_id} with confidence {paper_relation.confidence}"
+            )
             return True
-        except Exception as e:
-            logger.error(f"DB error saving paper relation: {e}")
-            session.rollback()
-            return False
-        finally:
-            session.close()
-    else:
-        logger.info(f"Relation already exists: {paper_relation.source_id} -> {paper_relation.target_id}")
+        else:
+            logger.info(
+                f"Relation already exists: {paper_relation.source_id} -> {paper_relation.target_id}"
+            )
+            return True
+    except Exception as e:
+        logger.error(f"DB error saving paper relation: {e}")
+        session.rollback()
+        return False
+    finally:
         session.close()
-        return True
 
 """
 25-May-2025 - Basti
