@@ -36,7 +36,8 @@ class Embedding:
     21-August-2025 - Lenio
     Abstract: Converts the Paper object to a SQLAlchemy model.
     Args: DBPaper: SQLAlchemy model class for the paper.
-    Returns: DBPaper -> An instance of the SQLAlchemy model with the paper's data.
+    Abstract: Converts the Embedding object to a SQLAlchemy model (DBEmbedding).
+    Returns: DBEmbedding -> An instance of the SQLAlchemy model with the embedding's data.
     """
     def to_db_model(self):
         return DBEmbedding(
