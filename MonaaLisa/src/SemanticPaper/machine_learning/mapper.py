@@ -19,7 +19,7 @@ class Mapper:
 
 
     """
-        20-August-2025 - Lenio
+        20-August-2025 - Lenio & Nico
         Abstract: Compares a new embedding with existing embeddings to find similar papers.
         Args:
         - new_embedding: The embedding of the new paper.
@@ -39,8 +39,8 @@ class Mapper:
                     sim = float(cosine_similarity(new_emb, existing_emb.content.reshape(1, -1))[0][0])
                     if sim >= threshold:
                         chunk_results[entry_id] = sim
-                else:
-                    continue
+                #else: # Else Block hat keine Instruktionen, wird entfernt
+                    #continue
             return chunk_results
 
         def chunks(data, size=100):
