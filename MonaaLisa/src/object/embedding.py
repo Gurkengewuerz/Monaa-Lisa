@@ -33,7 +33,7 @@ class Embedding:
         )
 
     """
-    26-July-2025 - Lenio
+    21-August-2025 - Lenio
     Abstract: Converts the Paper object to a SQLAlchemy model.
     Args: DBPaper: SQLAlchemy model class for the paper.
     Returns: DBPaper -> An instance of the SQLAlchemy model with the paper's data.
