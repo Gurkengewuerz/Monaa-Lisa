@@ -34,7 +34,7 @@ class DBPaper(db_base):
     url = Column(String)
     hash = Column(String, unique=True, index=True)
     citations = Column(JSON, nullable=True)
-    tsne= Column(JSON, nullable=True)
+    tsne = Column(JSON, nullable=True)
     added = Column(DateTime, nullable=False)
 
 """
