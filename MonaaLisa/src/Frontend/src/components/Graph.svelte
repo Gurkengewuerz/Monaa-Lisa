@@ -156,10 +156,15 @@
 
     //populate graph with nodes from the selected data source
     dataSource.forEach(paper => {
+      
+      const scaleFactor = 0.5; //adjust as needed for better spacing
+      const scaledX = paper.tsne1 * scaleFactor;
+      const scaledY = paper.tsne2 * scaleFactor;
+
       graph.addNode(paper.id, {
-        x: paper.tsne1,
-        y: paper.tsne2,
-        size: 5,
+        x: scaledX,
+        y: scaledY,
+        size: 2,
         label: paper.title,
         color: clusterCol[paper.cluster] || '#999999',
         originalColor: clusterCol[paper.cluster] || '#999999',
