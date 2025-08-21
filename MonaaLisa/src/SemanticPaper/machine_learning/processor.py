@@ -45,17 +45,25 @@ class PaperProcessor:
     """
     def create_section_embedding(self, text: str) -> np.ndarray:
         if not text or not text.strip():
+            self.logger.warning("Empty text provided for embedding")
             return None
+
         chunks = [text[i:i + 512] for i in range(0, len(text), 512)]
-        embeddings = [self._model.get_model().encode(c) for c in chunks]
+        embeddings = []
 
-        # Filter out potential None or empty results from encode
-        valid_embeddings = [emb for emb in embeddings if emb is not None and emb.size > 0]
+        for chunk in chunks:
+            if chunk.strip():
+                emb = self._model.get_model().encode(chunk)
+                embeddings.append(emb)
 
-        if not valid_embeddings:
+        if not embeddings:
+            self.logger.warning("No valid chunks found for embedding")
             return None
 
-        return np.mean(valid_embeddings, axis=0)
+        embeddings = np.array(embeddings)
+        result = np.mean(embeddings, axis=0)
+        self.logger.debug(f"Created embedding with shape: {result.shape}")
+        return result
 
 
     """
@@ -138,8 +146,38 @@ class PaperProcessor:
         try:
             return np.average(np.array(final_embeddings), weights=final_weights, axis=0)
         except ValueError as e:
+            # Debug: Log embedding shapes
+            if combined_embeddings:
+                shapes = [emb.shape for emb in combined_embeddings]
+                self.logger.debug(f"Embedding shapes: {shapes}")
+
+                # Ensure all embeddings have the same shape
+                expected_shape = combined_embeddings[0].shape
+                valid_embeddings = []
+                valid_weights = []
+
+                for i, emb in enumerate(combined_embeddings):
+                    if emb.shape == expected_shape:
+                        valid_embeddings.append(emb)
+                        valid_weights.append(weights[i])
+                    else:
+                        self.logger.warning(f"Skipping embedding with shape {emb.shape}, expected {expected_shape}")
+
+                if not valid_embeddings:
+                    self.logger.error("No valid embeddings with consistent shape")
+                    return None
+
+                # Renormalize weights
+                valid_weights = np.array(valid_weights)
+                valid_weights = valid_weights / np.sum(valid_weights)
+
+                emb_matrix = np.stack(valid_embeddings, axis=0)
+                return np.average(emb_matrix, axis=0, weights=valid_weights)
+            else:
+                self.logger.error("No embeddings to process")
+                return None
+        except Exception as e:
             self.logger.error(f"Error while calculating average: {e}")
-            self.logger.error(f"Shape of final_embeddings: {[e.shape for e in final_embeddings]}")
             return None
 
     """
@@ -161,4 +199,3 @@ class PaperProcessor:
 
     def get_keywords(self):
         return self._keywords
-

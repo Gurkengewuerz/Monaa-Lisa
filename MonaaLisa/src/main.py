@@ -1,14 +1,16 @@
 from SemanticPaper.machine_learning.mapper import Mapper
 from SemanticPaper.machine_learning.processor import PaperProcessor
-from SemanticPaper.api.semanticscholar import SemanticScholarAPI
-from SemanticPaper.api.arxiv import fetch_papers
+from SemanticPaper.scheduler import start_scheduler, paper_queue
 from util.logger import Logger
 from Database.db import save_paper_to_db, save_paper_relation, get_all_embeddings
 from dotenv import load_dotenv
 from SemanticPaper.machine_learning.model import Model
-import concurrent.futures
-import os
+from SemanticPaper.config.category_loader import get_semanticpaper_categories
+import threading
 import time
+import os
+import signal
+import sys
 
 logger = Logger("Main")
 
@@ -44,70 +46,89 @@ def save_hash(hash_str):
     with open(HASH_FILE, "a") as f:
         f.write(hash_str + "\n")
 
-
 """
-25-May-2025 - Basti
-Abstract: Continuously fetches the latest papers from arXiv, processes new ones in parallel, embeds them,
-     saves results to the database and updates known hashes. Runs in an infinite loop with periodic updates (Default: Every Hours/3600s).
+13-August-2025 - Basti
+Abstract: Helper Function for the Entry() Method
 Args:
-- max_workers: int -> Number of threads to use for parallel paper processing.
+- worker_id -> ID of one of x workers that have been assigned
 Returns: None
 """
-def entry(max_workers:int = 4):
-    logger.info(f"Starting SemanticPaper! Updating arXiv every {UPDATE_INTERVAL}s")
-    known_hashes = load_hashes()
+def paper_worker(worker_id, known_hashes):
+    logger.info(f"Worker {worker_id} started")
     existing_embeddings = get_all_embeddings()
-    logger.info(f"ThreadPoolExecutor will use {max_workers} workers.")
-
     while True:
-        logger.info("Fetching latest 10 papers from arXiv...")
-        latest_papers = fetch_papers(amount=10)
-        new_papers = []
-        embeddings = []
-        paper_objs = []
-        paper_hashes = []
-        with concurrent.futures.ThreadPoolExecutor(max_workers=max_workers) as executor:
-            processors = [PaperProcessor(paper, model) for paper in latest_papers]
-            futures = [executor.submit(processor.prepare_paper, known_hashes) for processor in processors]
-
-            for processor, future in zip(processors, futures):
-                if future.result():
-                    embedding = processor.create_structured_embedding()
-                    if embedding is not None:
-                        embeddings.append(embedding)
-                        processor.paper.embedding = embedding
-                        paper_objs.append(processor.paper)
-                        paper_hashes.append(processor.paper.hash)
-                        new_papers.append(processor.paper)
-
-        if embeddings:
-            tsne_coords = model.extract_tsne_coordinates(embeddings)
-            logger.info(f"Extracted embeddings for {len(embeddings)} papers.")
-            for i, paper in enumerate(paper_objs):
-                mapper = Mapper(paper)
-                embedding_dict = {
-                    "Embedding": embeddings[i].tolist(),
-                    "tsne1": tsne_coords[i][0],
-                    "tsne2": tsne_coords[i][1]
-                }
-
+        paper = paper_queue.get()
+        if paper is None:
+            break
+        active_categories = get_semanticpaper_categories()
+        if getattr(paper, 'category', None) and paper.category not in active_categories:
+            logger.warning(f"Worker {worker_id}: Category '{paper.category}' removed; skipping paper '{paper.title}'")
+            continue
+        processor = PaperProcessor(paper, model)
+        if processor.prepare_paper(known_hashes):
+            embedding = processor.create_structured_embedding()
+            if embedding is not None:
+                tsne = (0.0, 0.0)
+                data = {"Embedding": embedding.tolist(), "tsne1": tsne[0], "tsne2": tsne[1]}
+                processor.paper = embedding
+                mapper = Mapper(processor.paper)
                 relations = mapper.map_paper(existing_embeddings)
                 logger.info(f"Found {len(relations)} relations for {paper.title}")
                 for relation in relations:
                     logger.info(f"Similar paper: {relation.source_id} with similarity score: {relation.confidence}")
                     save_paper_relation(relation)
-                save_paper_to_db(paper, paper_hashes[i], embedding_dict)
-                save_hash(paper_hashes[i])
-                known_hashes.add(paper_hashes[i])
-        if not new_papers:
-            logger.info("No new papers to process.")
 
-        logger.info(f"Sleeping for {UPDATE_INTERVAL} seconds...")
-        time.sleep(UPDATE_INTERVAL)
+                if save_paper_to_db(processor.paper, processor.paper.hash, data):
+                    save_hash(processor.paper.hash)
+                    known_hashes.add(processor.paper.hash)
+    logger.info(f"Worker {worker_id} exiting")
+
+"""
+13-August-2025 - Basti
+Abstract: Entry Point of SemanticPaper
+Args:
+- num_workers: Amount of workers to be used to fetch papers (they do not calculate their embeddings!)
+Returns: None
+"""
+def main(num_workers: int = 5):
+    log_level = os.getenv("LOG_LEVEL", "DEBUG")
+    logger.set_level(log_level)
+    logger.info(f"Initializing scheduler system (log level={log_level})...")
+
+    known_hashes = load_hashes()
+    logger.info(f"Loaded {len(known_hashes)} known hashes")
+
+    logger.info("Starting scheduler...")
+    scheduler = start_scheduler()
+    if not scheduler:
+        logger.error("Scheduler failed to start, exiting.")
+        return
+
+    logger.info(f"Starting {num_workers} worker threads...")
+    threads = []
+    for i in range(num_workers):
+        t = threading.Thread(target=paper_worker, args=(i+1, known_hashes), name=f"Worker-{i+1}")
+        t.start()
+        threads.append(t)
 
 
-def main():
-    entry(max_workers=5)
+
+    """Graceful shutdown helper - Basti - 13. August 2025"""
+    def shutdown(signum, frame):
+        logger.info("Shutdown signal received, stopping workers...")
+        for _ in threads:
+            paper_queue.put(None)
+        for t in threads:
+            t.join()
+        logger.info("All workers stopped, exiting.")
+        sys.exit(0)
+
+    signal.signal(signal.SIGINT, shutdown)
+    signal.signal(signal.SIGTERM, shutdown)
+
+    logger.info("System running. Press Ctrl+C to stop.")
+    signal.pause()
 
 if __name__ == "__main__":
-    main()
+    workers = int(os.getenv("NUM_WORKERS", str(5)))
+    main(workers)
