@@ -6,14 +6,17 @@ import numpy as np
 from sklearn.metrics.pairwise import cosine_similarity
 
 from object.paper import Paper
-
 from object.relation import Relation
+from util.logger import Logger
 
 
 class Mapper:
 
     def __init__(self, paper: Paper):
         self.paper = paper
+        self.logger = Logger("Mapper")
+        self.logger.info(f"Initialized Mapper for paper: {self.paper.title}")
+
 
     """
         20-August-2025 - Lenio
@@ -30,10 +33,10 @@ class Mapper:
 
         def process_chunk(chunk_items):
             chunk_results = {}
-            new_emb = np.array(self.paper.embedding).reshape(1, -1)
+            new_emb = np.array(self.paper.embedding.content).reshape(1, -1)
             for entry_id, existing_emb in chunk_items:
                 if entry_id != self.paper.entry_id and existing_emb is not None:
-                    sim = float(cosine_similarity(new_emb, existing_emb.reshape(1, -1))[0][0])
+                    sim = float(cosine_similarity(new_emb, existing_emb.content.reshape(1, -1))[0][0])
                     if sim >= threshold:
                         chunk_results[entry_id] = sim
                 else:

@@ -3,7 +3,7 @@ import os
 import sys
 import tempfile
 from datetime import datetime
-from typing import Optional
+from typing import Optional, cast, List
 import numpy as np
 import requests
 from arxiv import arxiv
@@ -13,11 +13,12 @@ from pymupdf import pymupdf
 from sqlalchemy import create_engine, Column, String, Float, DateTime, Integer, JSON, ForeignKey
 from sqlalchemy.orm import declarative_base, sessionmaker
 from dotenv import load_dotenv
-from Database.db_models import db_base, DBPaper, DBPaperRelation
-from Database.db_models import db_base, DBPaper, ProgramRun, HistoricalCompletion
+from Database.db_models import db_base, DBPaper, DBPaperRelation, DBEmbedding, ProgramRun, HistoricalCompletion
 from object.paper import Paper
 from object.relation import Relation
 from util.logger import Logger
+
+from object.embedding import Embedding
 
 # os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), ".env")
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(__file__))))
@@ -34,15 +35,17 @@ SessionLocal = sessionmaker(bind=engine)
 """
 05-August-2025 - Lenio
 Abstract: Fetches all embeddings from the database and returns them as a dictionary.
-Returns: A dictionary where keys are paper entry IDs and values are numpy arrays of embeddings.
+Returns: A dictionary where keys are paper entry IDs and values are Embedding objects.
 """
 def get_all_embeddings():
     session = SessionLocal()
     try:
-        papers = session.query(DBPaper.entry_id, DBPaper.embedding).all()
+        db_embeddings_rows = session.query(DBEmbedding).all()
+        # Get rid of the warning in pycharm
+        db_embeddings = cast(List[DBEmbedding], db_embeddings_rows)
         embedding_dict = {
-            paper.entry_id: np.array(paper.embedding['embedding'])
-            for paper in papers if paper.embedding and 'embedding' in paper.embedding
+            db_embedding.belonging_paper_entry_id: Embedding.from_db(db_embedding)
+            for db_embedding in db_embeddings if db_embedding.content is not None
         }
         return embedding_dict
     finally:
@@ -53,46 +56,44 @@ def get_all_embeddings():
 Abstract: Saves one given arXiv paper into the Postgres database
 Args:
 - paper: The given arXiv paper
-- paper_hash: The corresponding hash
-- embedding: dict -> numpy dictionary containing coordinates, datatype and parsed 
 Returns: bool -> True if: paper was successfully committed to the database | False if: commit failed/Exception occured
-"""  
-def save_paper_to_db(paper: Paper, paper_hash, embedding: dict):
+21-August-2025 - Lenio
+Annotation: Removed redundant parameters hash and date, these should come from the paper object.
+"""
+
+def save_paper_to_db(paper: Paper):
     session = SessionLocal()
 
-    if paper_exists(session, paper_hash):
-        logger.info(f"Paper already exists in DB: {paper.title} (hash: {paper_hash})")
+    if paper_exists(session, paper.hash):
+        logger.info(f"Paper already exists in DB: {paper.title} (hash: {paper.hash})")
         session.close()
         return True
 
-    tsne1 = embedding.get("tsne1") or embedding.get("tSNE1")
-    tsne2 = embedding.get("tsne2") or embedding.get("tSNE2")
-    try:
-        tsne1 = float(tsne1) if tsne1 is not None else None
-    except (ValueError, TypeError):
-        tsne1 = None
-    try:
-        tsne2 = float(tsne2) if tsne2 is not None else None
-    except (ValueError, TypeError):
-        tsne2 = None
-
-    combined_embedding = {
-        "embedding": embedding["Embedding"].tolist() if isinstance(embedding["Embedding"], np.ndarray) else embedding[
-            "Embedding"],
-        "tsne1": float(tsne1) if tsne1 is not None else None,
-        "tsne2": float(tsne2) if tsne2 is not None else None
-    }
     db_paper = paper.to_db_model()
     logger.info("hash: " + paper.hash)
-    db_paper.embedding = combined_embedding
-    db_paper.hash = paper_hash
+    db_paper.hash = paper.hash
+    session.add(db_paper)
+
+    # Flush the session to save the paper and make its ID available for foreign keys
+    try:
+        session.flush()
+    except Exception as e:
+        logger.error(f"DB error on flush: {e}")
+        session.rollback()
+        session.close()
+        return False
+
     # in the future when we have more calls to grobid this should not happen but rather in a sooner step so we process each paper only once
     references = paper.references if paper.references else []
     for ref in references:
         db_reference = ref.to_db_model()
         logger.info(f"Adding reference to DB: {db_reference.title}")
         session.add(db_reference)
-    session.add(db_paper)
+    if paper.embedding is not None:
+        db_embedding = paper.embedding.to_db_model()
+        logger.info(f"Adding embedding to DB for paper: {paper.title}")
+        session.add(db_embedding)
+
     try:
         session.commit()
         logger.info(f"Saved paper to DB: {paper.title}")
@@ -103,7 +104,6 @@ def save_paper_to_db(paper: Paper, paper_hash, embedding: dict):
         return False
     finally:
         session.close()
-
 
 """
 20-August-2025 - Lenio
