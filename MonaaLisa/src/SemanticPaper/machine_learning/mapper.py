@@ -19,7 +19,7 @@ class Mapper:
 
 
     """
-        20-August-2025 - Lenio & Nico
+        20-August-2025 - Lenio & Reviewed by Nico
         Abstract: Compares a new embedding with existing embeddings to find similar papers.
         Args:
         - new_embedding: The embedding of the new paper.
@@ -30,22 +30,23 @@ class Mapper:
     """
     def compare_embeddings(self, existing_embeddings, threshold=0.7):
         similarities = defaultdict(float)
+        # No longer creating this array on every call to process_chunk (Nico suggestion)
+        new_emb = np.array(self.paper.embedding.content).reshape(1, -1)
 
         def process_chunk(chunk_items):
             chunk_results = {}
-            new_emb = np.array(self.paper.embedding.content).reshape(1, -1)
             for entry_id, existing_emb in chunk_items:
                 if entry_id != self.paper.entry_id and existing_emb is not None:
                     sim = float(cosine_similarity(new_emb, existing_emb.content.reshape(1, -1))[0][0])
                     if sim >= threshold:
                         chunk_results[entry_id] = sim
-                #else: # Else Block hat keine Instruktionen, wird entfernt
-                    #continue
             return chunk_results
 
         def chunks(data, size=100):
+            # Implemented Nico's suggestion for better chunking
+            items = list(data.items())
             for i in range(0, len(data), size):
-                yield list(data.items())[i:i + size]
+                yield items[i:i + size]
 
         with ThreadPoolExecutor(max_workers=4) as executor:
             chunk_futures = [

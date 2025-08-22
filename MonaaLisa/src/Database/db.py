@@ -106,7 +106,7 @@ def save_paper_to_db(paper: Paper):
         session.close()
 
 """
-20-August-2025 - Lenio & Nico
+20-August-2025 - Lenio & Reviewed by Nico
 Abstract: Saves a relation between two papers in the database.
 Args:
 PaperRelation: The relation object containing source_id, target_id, and confidence.
@@ -114,8 +114,6 @@ PaperRelation: The relation object containing source_id, target_id, and confiden
 def save_paper_relation(paper_relation: Relation):
     session = SessionLocal()
     try:
-        # Kein doppeltes session.close()
-        # Funktion gibt immer True zurück wenn Relation existiert ODER gespeichert wurde; False bei einem Fehler
         if not relation_exists(session, paper_relation.source_id, paper_relation.target_id):
             db_paper_relation = paper_relation.to_db_model()
             session.add(db_paper_relation)
