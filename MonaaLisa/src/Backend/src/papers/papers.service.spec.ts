@@ -1,8 +1,8 @@
 /**
  * Nico August 2025
- */ 
+ */
 import { Test, TestingModule } from '@nestjs/testing';
-import { PaperService } from './paper.service';
+import { PaperService } from './papers.service';
 
 describe('PaperService', () => {
   let service: PaperService;
