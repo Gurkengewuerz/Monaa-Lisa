@@ -1,7 +1,12 @@
+import concurrent
 import threading
+from collections import defaultdict
+from concurrent.futures import ThreadPoolExecutor
 
 import numpy as np
 from object.paper import Paper
+from object.embedding import Embedding
+from sklearn.metrics.pairwise import cosine_similarity
 from util.logger import Logger
 from SemanticPaper.machine_learning.model import Model
 
@@ -37,47 +42,45 @@ class PaperProcessor:
     Abstract: Creates an embedding for a section of the paper's text.
     Args:
     - text: The text to be embedded.
-    Returns: A numpy array representing the embedding of the text.
+    Returns: An Embedding object or None.
     """
-    def create_section_embedding(self, text: str) -> np.ndarray:
+    def create_section_embedding(self, text: str) -> Embedding | None:
         if not text or not text.strip():
             self.logger.warning("Empty text provided for embedding")
             return None
-            
+
         chunks = [text[i:i + 512] for i in range(0, len(text), 512)]
         embeddings = []
-        
+
         for chunk in chunks:
-            if chunk.strip(): 
+            if chunk.strip():
                 emb = self._model.get_model().encode(chunk)
                 embeddings.append(emb)
-        
+
         if not embeddings:
             self.logger.warning("No valid chunks found for embedding")
             return None
-            
+
         embeddings = np.array(embeddings)
-        result = np.mean(embeddings, axis=0)
-        self.logger.debug(f"Created embedding with shape: {result.shape}")
-        return result
+        result_array = np.mean(embeddings, axis=0)
+        self.logger.debug(f"Created embedding with shape: {result_array.shape}")
+        return Embedding(content=result_array, belonging_paper_entry_id=self.paper.entry_id)
 
 
     """
     03-August-2025 - Lenio
     Abstract: Creates a structured embedding for the paper, including abstract, sections, and references.
     Args: None
-    Returns: A numpy array representing the structured embedding of the paper.
+    Returns: An Embedding object or None.
     """
-    def create_structured_embedding(self):
-        embeddings = {}
+    def create_structured_embedding(self) -> Embedding | None:
         combined_embeddings = []
         weights = []
 
         # Abstract (40%)
         if self.paper.abstract:
             abstract_emb = self.create_section_embedding(self.paper.abstract)
-            # Check if embedding valid
-            if abstract_emb is not None:
+            if abstract_emb:
                 self.logger.debug(f"Processing abstract: {self.paper.abstract[:50]}...")
                 combined_embeddings.append(abstract_emb)
                 weights.append(0.4)
@@ -89,8 +92,7 @@ class PaperProcessor:
         if sections:
             for section in sections:
                 section_emb = self.create_section_embedding(section['content'])
-                # Check if embedding valid
-                if section_emb is not None:
+                if section_emb:
                     title = section['title'].lower()
                     self.logger.info(f"Processing section: {title}")
 
@@ -111,55 +113,39 @@ class PaperProcessor:
 
         # References (20%)
         if self.paper.references:
-            ref_texts = [ref.title for ref in self.paper.references]
-            self.logger.info(f"Processing references: {' '.join(ref_texts)}")
-            ref_emb = self.create_section_embedding(" ".join(ref_texts))
-            # Check if embedding valid
-            if ref_emb is not None:
-                combined_embeddings.append(ref_emb)
-                weights.append(0.2)
-            else:
-                self.logger.warning("No valid embedding for references found.")
+            ref_texts = [ref.title for ref in self.paper.references if ref.title]
+            if ref_texts:
+                self.logger.info(f"Processing references: {' '.join(ref_texts)}")
+                ref_emb = self.create_section_embedding(" ".join(ref_texts))
+                if ref_emb:
+                    combined_embeddings.append(ref_emb)
+                    weights.append(0.2)
+                else:
+                    self.logger.warning("No valid embedding for references found.")
 
-        if not combined_embeddings:  # Check if no embeddings were created
+        if not combined_embeddings:
+            self.logger.error("No embeddings were created to combine.")
             return None
 
-        weights = np.array(weights) / sum(weights)
-        combined_embeddings = [emb for emb in combined_embeddings if emb is not None]
+        # Extract numpy arrays from Embedding objects for calculation
+        embedding_arrays = [emb.content for emb in combined_embeddings]
+
+        # Normalize weights
+        final_weights = np.array(weights)
+        final_weights /= final_weights.sum()
 
         try:
-            # Debug: Log embedding shapes
-            if combined_embeddings:
-                shapes = [emb.shape for emb in combined_embeddings]
-                self.logger.debug(f"Embedding shapes: {shapes}")
-                
-                # Ensure all embeddings have the same shape
-                expected_shape = combined_embeddings[0].shape
-                valid_embeddings = []
-                valid_weights = []
-                
-                for i, emb in enumerate(combined_embeddings):
-                    if emb.shape == expected_shape:
-                        valid_embeddings.append(emb)
-                        valid_weights.append(weights[i])
-                    else:
-                        self.logger.warning(f"Skipping embedding with shape {emb.shape}, expected {expected_shape}")
-                
-                if not valid_embeddings:
-                    self.logger.error("No valid embeddings with consistent shape")
-                    return None
-                
-                # Renormalize weights
-                valid_weights = np.array(valid_weights)
-                valid_weights = valid_weights / np.sum(valid_weights)
-                
-                emb_matrix = np.stack(valid_embeddings, axis=0)
-                return np.average(emb_matrix, axis=0, weights=valid_weights)
-            else:
-                self.logger.error("No embeddings to process")
+            # Ensure all arrays have the same shape before averaging
+            first_shape = embedding_arrays[0].shape
+            if not all(arr.shape == first_shape for arr in embedding_arrays):
+                self.logger.error("Inconsistent embedding shapes cannot be averaged.")
+                # Optional: Filter for consistent shapes if that's desired
                 return None
+
+            weighted_average = np.average(embedding_arrays, weights=final_weights, axis=0)
+            return Embedding(belonging_paper_entry_id=self.paper.entry_id, content=weighted_average)
         except Exception as e:
-            self.logger.error(f"Error while calculating average: {e}")
+            self.logger.error(f"Error while calculating weighted average of embeddings: {e}")
             return None
 
     """
@@ -170,14 +156,6 @@ class PaperProcessor:
         # Placeholder for keyword extraction logic
         # This should be replaced with actual keyword extraction logic
         keywords = self.paper.abstract.split()[:5]
-
-
-    """
-    18-July-2025 - Lenio
-    Abstract: Calculates a value based on the paper, takes in account the structure of the paper.
-    """
-    def evaluate_paper_text_as_score(self):
-        pass
 
     def get_keywords(self):
         return self._keywords

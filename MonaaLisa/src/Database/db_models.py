@@ -30,10 +30,11 @@ class DBPaper(db_base):
     authors = Column(String)
     summary = Column(String)
     published = Column(DateTime)
+    category = Column(String)
     url = Column(String)
     hash = Column(String, unique=True, index=True)
     citations = Column(JSON, nullable=True)
-    embedding = Column(JSON, nullable=True)
+    tsne = Column(JSON, nullable=True)
     added = Column(DateTime, nullable=False)
 
 """
@@ -44,10 +45,10 @@ Parameters:
 - target_id: The ID of the second paper that relates to the first.
 - confidence: A float representing the confidence level of the relation.
 """
-class PaperRelation(db_base):
-    __tablename__ = "paper_relations"
-    source_id = Column(Integer, ForeignKey("paper.id"), primary_key=True)
-    target_id = Column(Integer, ForeignKey("paper.id"), primary_key=True)
+class DBPaperRelation(db_base):
+    __tablename__ = "paper_relation"
+    source_id = Column(String, ForeignKey("paper.entry_id"), primary_key=True)
+    target_id = Column(String, ForeignKey("paper.entry_id"), primary_key=True)
     confidence = Column(Float)
 
 
@@ -64,6 +65,20 @@ class DBReference(db_base):
     id = Column(Integer, primary_key=True, autoincrement=True)
     belonging_paper_entry_id = Column(String, ForeignKey("paper.entry_id"), primary_key=True)
     title = Column(String, nullable=False)
+
+
+"""
+21-August-2025 - Lenio
+Abstract: Represents an embedding in the database.
+Parameters:
+- content: The content of the embedding, stored as a JSON object.
+"""
+class DBEmbedding(db_base):
+    __tablename__ = "embedding"
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    belonging_paper_entry_id = Column(String, ForeignKey("paper.entry_id"), primary_key=True)
+    content = Column(JSON, nullable=False)
+
 
 """
 13-August-2025 - Basti

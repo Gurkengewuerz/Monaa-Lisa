@@ -1,7 +1,9 @@
+from SemanticPaper.api.semanticscholar import SemanticScholarAPI
+from SemanticPaper.machine_learning.mapper import Mapper
 from SemanticPaper.machine_learning.processor import PaperProcessor
 from SemanticPaper.scheduler import start_scheduler, paper_queue
 from util.logger import Logger
-from Database.db import save_paper_to_db
+from Database.db import save_paper_to_db, save_paper_relation, get_all_embeddings
 from dotenv import load_dotenv
 from SemanticPaper.machine_learning.model import Model
 from SemanticPaper.config.category_loader import get_semanticpaper_categories
@@ -13,11 +15,17 @@ import sys
 
 logger = Logger("Main")
 
+semantic = SemanticScholarAPI()
+
 load_dotenv(".env_public")
 
+UPDATE_INTERVAL = int(os.environ.get("ARXIV_FETCH_INTERVAL", 3600))
 HASH_FILE = 'parsed_hashes.txt'
 
 model = Model()
+# Initialize the embedding cache, which will store embeddings of papers to avoid fetching them from the db everytime
+embedding_cache = {}
+embedding_cache_lock = threading.Lock()
 
 """
 25-May-2025 - Basti
@@ -64,8 +72,26 @@ def paper_worker(worker_id, known_hashes):
             embedding = processor.create_structured_embedding()
             if embedding is not None:
                 tsne = (0.0, 0.0)
-                data = {"Embedding": embedding.tolist(), "tsne1": tsne[0], "tsne2": tsne[1]}
-                if save_paper_to_db(processor.paper, processor.paper.hash, data):
+                """
+                21-August-2025 - Lenio
+                Abstract: Save TSNE into the appropriate field of the paper object, compare the papers embedding to the existing embeddings
+                """
+                data = {"tsne1": tsne[0], "tsne2": tsne[1]}
+                processor.paper.tsne = data
+                processor.paper.embedding = embedding
+                mapper = Mapper(processor.paper)
+                # Get all embeddings from the cache
+                with embedding_cache_lock:
+                    current_embeddings = embedding_cache.copy()
+                relations = mapper.map_paper(current_embeddings)
+                logger.info(f"Found {len(relations)} relations for {paper.title}")
+                if save_paper_to_db(processor.paper):
+                    for relation in relations:
+                        logger.info(f"Similar paper: {relation.source_id} with similarity score: {relation.confidence}")
+                        save_paper_relation(relation)
+                    # Save the embedding to the cache
+                    with embedding_cache_lock:
+                        embedding_cache[processor.paper.entry_id] = processor.paper.embedding
                     save_hash(processor.paper.hash)
                     known_hashes.add(processor.paper.hash)
     logger.info(f"Worker {worker_id} exiting")
@@ -84,7 +110,10 @@ def main(num_workers: int = 5):
 
     known_hashes = load_hashes()
     logger.info(f"Loaded {len(known_hashes)} known hashes")
-
+    logger.info("Loading existing embeddings into cache...")
+    with embedding_cache_lock:
+        embedding_cache.update(get_all_embeddings())
+    logger.info(f"Loaded {len(embedding_cache)} embeddings into cache.")
     logger.info("Starting scheduler...")
     scheduler = start_scheduler()
     if not scheduler:

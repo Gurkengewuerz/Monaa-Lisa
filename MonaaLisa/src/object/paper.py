@@ -16,6 +16,7 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(__file__))))
 from Database.db_models import DBPaper
 from util.logger import Logger
 from object.reference import Reference
+from object.embedding import Embedding
 from lxml import etree
 
 
@@ -31,9 +32,8 @@ class Paper:
     hash: Optional[str] = None
     references: Optional[List[Reference]] = None
     citations: Optional[Dict] = None # TODO # Should not show up here but rather in a separate table (maybe)
-    tsne1: Optional[float] = None
-    tsne2: Optional[float] = None
-    embedding: Optional[Dict] = None
+    tsne: Optional[Dict] = None
+    embedding: Optional[Embedding] = None
     added: Optional[datetime] = None
     _grobid_xml: Optional[str] = None
     _paper_txt: Optional[str] = None
@@ -82,10 +82,11 @@ class Paper:
             authors=", ".join(self.authors),
             summary=self.abstract,
             published=self.published,
+            category=self.category,
+            tsne=json.dumps(self.tsne) if self.tsne else None,
             url=self.url,
             hash=self.hash,
             citations=self.citations,
-            embedding=json.dumps(self.embedding) if self.embedding else None,
             added=self.added or datetime.now()
         )
 
