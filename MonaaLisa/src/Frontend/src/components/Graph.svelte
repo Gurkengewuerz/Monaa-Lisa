@@ -34,6 +34,12 @@
   let renderer: Sigma | null = null;
   let graph: Graph | null = null;
 
+  //add cache for quick paper lookup
+  let paperCache: Map<string, Paper> = new Map();
+
+  //add debounce for hover
+  let hoverTimeout: number | null = null;
+
   const dispatch = createEventDispatcher();
 
   //cluster color mapping for visual grouping
@@ -48,67 +54,67 @@
     G: '#00CED1',
   };
 
-/**
- * selects and highlights a node in the graph, updating visuals and connections.
- * clears edges, resets colors, highlights related nodes, adds edges, and zooms.
- * @param {string} nodeId - the id of the node to select.
- */
-function selectNodeById(nodeId: string) {
-  if (!graph || !renderer || !graph.hasNode(nodeId)) return;
+  /**
+   * selects and highlights a node in the graph, updating visuals and connections.
+   * clears edges, resets colors, highlights related nodes, adds edges, and zooms.
+   * @param {string} nodeId - the id of the node to select.
+   */
+  function selectNodeById(nodeId: string) {
+    if (!graph || !renderer || !graph.hasNode(nodeId)) return;
 
-  //clear all edges to reset the view
-  const edgesToRemove = graph.edges();
-  edgesToRemove.forEach(edge => {
-    graph.dropEdge(edge);
-  });
+    //clear all edges to reset the view
+    const edgesToRemove = graph.edges();
+    edgesToRemove.forEach(edge => {
+      graph.dropEdge(edge);
+    });
 
-  //set all nodes to a semi-transparent black to help focus on selections
-  graph.forEachNode((n: string) => {
-    graph.setNodeAttribute(n, 'color', 'rgba(0, 0, 0, 0.1)');
-  });
+    //set all nodes to a semi-transparent black to help focus on selections
+    graph.forEachNode((n: string) => {
+      graph.setNodeAttribute(n, 'color', 'rgba(0, 0, 0, 0.1)');
+    });
 
-  //highlight selected node in green
-  graph.setNodeAttribute(nodeId, 'color', '#00FF00');
+    //highlight selected node in green
+    graph.setNodeAttribute(nodeId, 'color', '#00FF00');
 
-  //retrieve paper data and collect only direct citations (no related or citing papers)
-  const paper = graph.getNodeAttributes(nodeId).paper as Paper;
-  const relatedNodes = new Set<number>(paper.citations); //only citations
+    //retrieve paper data and collect only direct citations (no related or citing papers)
+    const paper = graph.getNodeAttributes(nodeId).paper as Paper;
+    const relatedNodes = new Set<number>(paper.citations); //only citations
 
-  //highlight related nodes in yellow
-  relatedNodes.forEach(relatedId => {
-    if (graph.hasNode(relatedId)) {
-      graph.setNodeAttribute(relatedId, 'color', '#FFFF00');
-    }
-  });
+    //highlight related nodes in yellow
+    relatedNodes.forEach(relatedId => {
+      if (graph.hasNode(relatedId)) {
+        graph.setNodeAttribute(relatedId, 'color', '#FFFF00');
+      }
+    });
 
-  //add edges only for citations
-  const selectedId = parseInt(nodeId);
+    //add edges only for citations
+    const selectedId = parseInt(nodeId);
 
-  //edges to cited papers
-  paper.citations.forEach(citedId => {
-    if (graph.hasNode(citedId)) {
-      graph.addEdge(selectedId, citedId, {
-        color: '#FFFFFF',
-        size: 2
-      });
-    }
-  });
+    //edges to cited papers
+    paper.citations.forEach(citedId => {
+      if (graph.hasNode(citedId)) {
+        graph.addEdge(selectedId, citedId, {
+          color: '#FFFFFF',
+          size: 2
+        });
+      }
+    });
 
-  //zoom to the selected node
-  const nodePosition = graph.getNodeAttributes(nodeId);
-  const camera = renderer.getCamera();
-  camera.animate({
-    x: nodePosition.x,
-    y: nodePosition.y,
-    ratio: 0.15
-  }, {
-    duration: 800,
-    easing: 'quadInOut'
-  });
+    //zoom to the selected node
+    const nodePosition = graph.getNodeAttributes(nodeId);
+    const camera = renderer.getCamera();
+    camera.animate({
+      x: nodePosition.x,
+      y: nodePosition.y,
+      ratio: 0.15
+    }, {
+      duration: 800,
+      easing: 'quadInOut'
+    });
 
-  selectedNode = nodeId;
-  renderer.refresh();
-}
+    selectedNode = nodeId;
+    renderer.refresh();
+  }
 
   //react to prop changes: update selection when selectedpaperid changes
   $: if (selectedPaperId && selectedPaperId !== selectedNode && graph && renderer) {
@@ -141,6 +147,9 @@ function selectNodeById(nodeId: string) {
         originalColor: clusterCol[paper.cluster] || '#999999',
         paper: paper
       });
+
+      //cache paper for fast lookup
+      paperCache.set(paper.id.toString(), paper);
     });
 
     //initialize sigma renderer for visualization
@@ -155,13 +164,20 @@ function selectNodeById(nodeId: string) {
         renderLabels: false,
       });
 
-      //handle node hover: show paper details
+      //handle node hover: show paper details with debounce
       renderer.on('enterNode', ({ node }) => {
-        const paper = graph.getNodeAttributes(node).paper as Paper;
-        selectedPaper = paper;
+        //clear previous timeout
+        if (hoverTimeout) clearTimeout(hoverTimeout);
+        
+        //debounce: delay setting selectedPaper by 100ms
+        hoverTimeout = setTimeout(() => {
+          selectedPaper = paperCache.get(node) || null;
+        }, 100);
       });
 
       renderer.on('leaveNode', () => {
+        //clear timeout and hide details
+        if (hoverTimeout) clearTimeout(hoverTimeout);
         selectedPaper = null;
       });
 
@@ -193,9 +209,10 @@ function selectNodeById(nodeId: string) {
         dispatch('nodeDeselected');
       });
 
-      //cleanup: destroy renderer on unmount
+      //cleanup: destroy renderer and clear cache on unmount
       return () => {
         if (renderer) renderer.kill();
+        paperCache.clear();
       };
     }
   });
