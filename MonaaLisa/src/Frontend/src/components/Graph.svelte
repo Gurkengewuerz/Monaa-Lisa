@@ -82,35 +82,31 @@
 
     //highlight related nodes in yellow
     relatedNodes.forEach(relatedId => {
-      if (graph.hasNode(relatedId)) {
-        graph.setNodeAttribute(relatedId, 'color', '#FFFF00');
+      if (graph.hasNode(relatedId.toString())) {
+        graph.setNodeAttribute(relatedId.toString(), 'color', '#FFFF00');
       }
     });
 
     //add edges only for citations
-    const selectedId = parseInt(nodeId);
-
     //edges to cited papers
     paper.citations.forEach(citedId => {
-      if (graph.hasNode(citedId)) {
-        graph.addEdge(selectedId, citedId, {
+      if (graph.hasNode(citedId.toString())) {
+        graph.addEdge(nodeId, citedId.toString(), {
           color: '#FFFFFF',
-          size: 2
+          size: 0.5
         });
       }
     });
 
     //zoom to the selected node
     const nodePosition = graph.getNodeAttributes(nodeId);
+    console.log('Zooming to node:', nodeId, 'Position:', nodePosition.x, nodePosition.y);
     const camera = renderer.getCamera();
-    camera.animate({
+    camera.animatedSetState({
       x: nodePosition.x,
       y: nodePosition.y,
-      ratio: 0.15
-    }, {
-      duration: 800,
-      easing: 'quadraticInOut'
-    });
+      ratio: 1  // Zoom in closer to the selected node for better focus
+    }, { duration: 800 });  // Smooth animation like stage reset
 
     selectedNode = nodeId;
     renderer.refresh();
@@ -138,10 +134,10 @@
       const scaledX = paper.tsne1 * scaleFactor;
       const scaledY = paper.tsne2 * scaleFactor;
 
-      graph.addNode(paper.id, {
+      graph.addNode(paper.id.toString(), {
         x: scaledX,
         y: scaledY,
-        size: 2,
+        size: 1.5,
         label: paper.title,
         color: clusterCol[paper.cluster] || '#999999',
         originalColor: clusterCol[paper.cluster] || '#999999',
@@ -183,8 +179,8 @@
 
       //handle node click: select node and emit event
       renderer.on('clickNode', ({ node }) => {
-        selectNodeById(node.toString());
-        dispatch('nodeSelected', node.toString());
+        selectNodeById(node);
+        dispatch('nodeSelected', node);
       });
 
       //handle stage click: deselect and reset view
