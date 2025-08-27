@@ -109,7 +109,7 @@
       ratio: 0.15
     }, {
       duration: 800,
-      easing: 'quadInOut'
+      easing: 'quadraticInOut'
     });
 
     selectedNode = nodeId;
