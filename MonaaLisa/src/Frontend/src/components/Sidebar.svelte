@@ -42,9 +42,13 @@
   //colors by cluster identifiers (falls back to grey when missing)
   //todo: remove when backend provides cluster colors or make dynamic
   const clusterColors: Record<string, string> = {
-    A: '#FF6347',
-    B: '#4682B4',
-    C: '#32CD32',
+    A: '#CC6666',
+    B: '#66B2B2',
+    C: '#9966CC',
+    D: '#CC66B2',
+    E: '#6699CC',
+    F: '#FF4500',
+    G: '#00CED1',
   };
 
   //toggle so parent can open/close sidebar
