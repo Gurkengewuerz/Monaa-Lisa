@@ -1,3 +1,6 @@
+/**
+ * Nico - August 2025
+ */
 import {
   Body,
   Controller,
@@ -7,15 +10,12 @@ import {
   Patch,
   Post,
   Query,
-  UseFilters,
 } from '@nestjs/common';
 import { PapersService } from './papers.service';
 import { CreatePaperDto } from './dto/create-paper.dto';
 import { UpdatePaperDto } from './dto/update-paper.dto';
 import { QueryPaperDto } from './dto/query-paper.dto';
-import { PrismaExceptionFilter } from '../common/prisma-exception.filter';
 
-@UseFilters(new PrismaExceptionFilter())
 @Controller('papers')
 export class PapersController {
   constructor(private readonly papers: PapersService) {}

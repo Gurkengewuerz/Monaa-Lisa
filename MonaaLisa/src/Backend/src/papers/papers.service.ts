@@ -105,4 +105,3 @@ export class PapersService {
     return this.prisma.paper.delete({ where: { entry_id } });
   }
 }
-
