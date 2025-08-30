@@ -1,6 +1,6 @@
 /**
  * Nico August 2025
- */ 
+ */
 import { Injectable, OnModuleInit, OnModuleDestroy } from '@nestjs/common';
 import { PrismaClient } from '@prisma/client';
 
