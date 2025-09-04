@@ -1,8 +1,7 @@
 <script lang="ts">
-  import { createEventDispatcher } from 'svelte';
+  import { createEventDispatcher, tick } from 'svelte';
   import { dummyPapers, type Paper } from '../testdata/dummyData'; //temporary import for demo data; replace with api later
 
-  //prop components
   /**
    * array of papers to display.
    * passed from parent.
@@ -38,6 +37,112 @@
   //later, replace dummypapers import with api call in parent
   $: dataSource = useDummyData ? dummyPapers : papers;
 
+  // UI state
+  let query = '';
+  let focusSelected = false; // if true, only the selected paper is shown
+  let expandedCitations = new Set<number>(); // paper.id values with expanded citations
+  let localSelected: Paper | null = null; // local selected for immediate display
+
+  // Derive the selected paper from id
+  $: selectedPaper =
+    selectedPaperId ? dataSource.find((p) => p.id.toString() === selectedPaperId) ?? null : null;
+
+  // When selection is driven by the graph (prop changes), focus on it and scroll into view
+  $: if (selectedPaperId) {
+    localSelected = selectedPaper;
+    focusSelected = true;
+    tick().then(() => {
+      const el = document.querySelector(
+        `[data-paper-id="${selectedPaperId}"]`
+      ) as HTMLElement | null;
+      if (el) el.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+    });
+  }
+
+  // Search/filter
+  function normalize(s: string | undefined | null) {
+    return (s ?? '').toLowerCase();
+  }
+
+  $: filteredList = (() => {
+    const q = normalize(query).trim();
+    if (!q) return dataSource;
+    return dataSource.filter((p) => {
+      const inTitle = normalize(p.title).includes(q);
+      const inAuthors = normalize(p.authors).includes(q);
+      const inSummary = normalize(p.summary).includes(q);
+      return inTitle || inAuthors || inSummary;
+    });
+  })();
+
+  function sortSelectedFirst(list: Paper[]) {
+    if (!localSelected) return list;
+    const selId = localSelected.id;
+    return list.slice().sort((a, b) => {
+      if (a.id === selId && b.id !== selId) return -1;
+      if (b.id === selId && a.id !== selId) return 1;
+      return 0;
+    });
+  }
+
+  // Displayed list:
+  // - If focusing selected, show only that one (on any selection)
+  // - Else show filtered list, with selected (if any) at top
+  $: displayedPapers =
+    focusSelected && localSelected ? [localSelected] : sortSelectedFirst(filteredList);
+
+  // Handlers
+  function onSearchInput(e: Event) {
+    const val = (e.currentTarget as HTMLInputElement).value;
+    query = val;
+    if (val.trim()) {
+      // Searching shows relevant papers; do not force single-selected view
+      focusSelected = false;
+    }
+  }
+
+  function clearSearch() {
+    query = '';
+  }
+
+  function showAll() {
+    focusSelected = false;
+    localSelected = null;
+  }
+
+  function toggleSidebar() {
+    dispatch('toggle');
+  }
+
+  function toggleCitations(paperId: number) {
+    if (expandedCitations.has(paperId)) {
+      expandedCitations.delete(paperId);
+    } else {
+      expandedCitations.add(paperId);
+    }
+    expandedCitations = new Set(expandedCitations); // trigger reactivity
+  }
+
+  function selectPaper(paper: Paper) {
+    // Selecting a paper focuses it and collapses view to that paper
+    localSelected = paper;
+    focusSelected = true;
+    query = '';
+    dispatch('selectPaper', paper);
+    // Scroll to the selected paper
+    tick().then(() => {
+      const el = document.querySelector(
+        `[data-paper-id="${paper.id}"]`
+      ) as HTMLElement | null;
+      if (el) el.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+    });
+  }
+
+  function selectCitedPaper(citedId: number) {
+    const target = dataSource.find((p) => p.id === citedId);
+    if (target) selectPaper(target);
+  }
+
   //badges next to the papers in the sidebar
   //colors by cluster identifiers (falls back to grey when missing)
   //todo: remove when backend provides cluster colors or make dynamic
@@ -50,16 +155,6 @@
     F: '#FF4500',
     G: '#00CED1',
   };
-
-  //toggle so parent can open/close sidebar
-  function toggleSidebar() {
-    dispatch('toggle');
-  }
-
-  //notify parent of selected paper so it can sync the selection state
-  function selectPaper(paper: Paper) {
-    dispatch('selectPaper', paper);
-  }
 </script>
 
 <!-- sidebar toggle button -->
@@ -73,28 +168,73 @@
     <h3>Academic Papers</h3>
     <button class="close-btn" on:click={toggleSidebar}>×</button>
   </div>
+
+  <div class="sidebar-tools">
+    <div class="search">
+      <input
+        type="text"
+        placeholder="Search title or authors..."
+        value={query}
+        on:input={onSearchInput}
+      />
+      {#if query}
+        <button class="clear" on:click={clearSearch}>✕</button>
+      {/if}
+    </div>
+
+    {#if focusSelected || query}
+      <button class="show-all" on:click={showAll}>Show all</button>
+    {/if}
+  </div>
   
   <div class="sidebar-content">
-    {#each dataSource as paper}
-      <div 
-        class="paper-item" 
-        class:selected={selectedPaperId === paper.id.toString()}
-        on:click={() => selectPaper(paper)}
-      >
-        <div class="paper-cluster" style="background-color: {clusterColors[paper.cluster] || '#999999'}">
-          {paper.cluster}
-        </div>
-        <div class="paper-info">
-          <h4>{paper.title}</h4>
-          <p class="paper-authors">{paper.authors}</p>
-          <p class="paper-summary">{paper.summary.substring(0, 100)}...</p>
-          <div class="paper-meta">
-            <span class="citations">{paper.citations.length} citations</span>
-            <span class="date">{new Date(paper.published).getFullYear()}</span>
+    {#if displayedPapers.length === 0}
+      <div class="empty">No papers found.</div>
+    {:else}
+      {#each displayedPapers as paper (paper.id)}
+        <div 
+          class="paper-item" 
+          class:selected={selectedPaperId === paper.id.toString()}
+          data-paper-id={paper.id}
+          on:click={() => selectPaper(paper)}
+        >
+          <div class="paper-cluster" style="background-color: {clusterColors[paper.cluster] || '#999999'}">
+            {paper.cluster}
+          </div>
+          <div class="paper-info">
+            <h4>{paper.title}</h4>
+            <p class="paper-authors">{paper.authors}</p>
+            <p class="paper-summary">{paper.summary.substring(0, 100)}...</p>
+            <div class="paper-meta">
+              <button
+                class="citations"
+                on:click|stopPropagation={() => toggleCitations(paper.id)}
+              >
+                Citations ({paper.citations?.length ?? 0}) {expandedCitations.has(paper.id) ? '▾' : '▸'}
+              </button>
+              <span class="date">{new Date(paper.published).getFullYear()}</span>
+            </div>
+
+            {#if expandedCitations.has(paper.id) && (paper.citations?.length ?? 0) > 0}
+              <div class="cited-papers">
+                {#each paper.citations as citedId}
+                  {@const citedPaper = dataSource.find((p) => p.id === citedId)}
+                  {#if citedPaper}
+                    <div 
+                      class="cited-paper-item" 
+                      on:click|stopPropagation={() => selectCitedPaper(citedId)}
+                    >
+                      <h5>{citedPaper.title}</h5>
+                      <p>{citedPaper.authors}</p>
+                    </div>
+                  {/if}
+                {/each}
+              </div>
+            {/if}
           </div>
         </div>
-      </div>
-    {/each}
+      {/each}
+    {/if}
   </div>
 </div>
 
@@ -182,10 +322,66 @@
     color: white;
   }
 
+  .sidebar-tools {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0.5rem 0.75rem;
+    border-bottom: 1px solid #3a3a45;
+  }
+
+  .search {
+    flex: 1;
+    position: relative;
+  }
+
+  .search input {
+    width: 100%;
+    padding: 0.5rem 2rem 0.5rem 0.5rem;
+    border: 1px solid #3a3a45;
+    border-radius: 4px;
+    background: #1f1f29;
+    color: #e6e6e6;
+    outline: none;
+  }
+
+  .search .clear {
+    position: absolute;
+    right: 4px;
+    top: 50%;
+    transform: translateY(-50%);
+    background: none;
+    border: none;
+    color: #bbb;
+    cursor: pointer;
+    padding: 0 6px;
+    height: 100%;
+  }
+
+  .show-all {
+    background: #44495d;
+    color: #e6e6e6;
+    border: 1px solid #3a3a45;
+    border-radius: 4px;
+    padding: 0.45rem 0.6rem;
+    cursor: pointer;
+    white-space: nowrap;
+  }
+
+  .show-all:hover {
+    background: #50566e;
+  }
+
   .sidebar-content {
     flex: 1;
     overflow-y: auto;
     padding: 0;
+  }
+
+  .empty {
+    color: #bbb;
+    padding: 1rem;
+    font-size: 14px;
   }
 
   .paper-item {
@@ -251,5 +447,44 @@
     justify-content: space-between;
     font-size: 11px;
     color: #999;
+  }
+
+  .citations {
+    cursor: pointer;
+    color: #4a9eff;
+    background: none;
+    border: none;
+    padding: 0;
+    text-decoration: underline;
+  }
+
+  .cited-papers {
+    margin-top: 0.5rem;
+    padding-left: 0.75rem;
+    border-left: 2px solid #4a9eff;
+  }
+
+  .cited-paper-item {
+    padding: 0.5rem;
+    background-color: #3a3a45;
+    margin-bottom: 0.25rem;
+    border-radius: 4px;
+    cursor: pointer;
+  }
+
+  .cited-paper-item:hover {
+    background-color: #4a4a55;
+  }
+
+  .cited-paper-item h5 {
+    margin: 0 0 0.15rem 0;
+    font-size: 12px;
+    color: white;
+  }
+
+  .cited-paper-item p {
+    margin: 0;
+    font-size: 10px;
+    color: #ccc;
   }
 </style>
