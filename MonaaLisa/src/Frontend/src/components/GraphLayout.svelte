@@ -18,7 +18,7 @@
   onMount(async () => {
     if (!useDummyData) {
       try {
-        const response = await fetch('http://localhost:8000/papers'); //your api url
+        const response = await fetch('http://localhost:8000/papers'); //api
         papers = await response.json();
         filteredPapers = papers;
       } catch (error) {

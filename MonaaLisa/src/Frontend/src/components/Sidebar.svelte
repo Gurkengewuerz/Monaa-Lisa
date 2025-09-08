@@ -187,7 +187,7 @@
     {/if}
   </div>
   
-  <div class="sidebar-content">
+  <div class="sidebar-content" on:click={() => dispatch('deselect')}>
     {#if displayedPapers.length === 0}
       <div class="empty">No papers found.</div>
     {:else}
@@ -196,7 +196,7 @@
           class="paper-item" 
           class:selected={selectedPaperId === paper.id.toString()}
           data-paper-id={paper.id}
-          on:click={() => selectPaper(paper)}
+          on:click|stopPropagation={() => selectPaper(paper)}
         >
           <div class="paper-cluster" style="background-color: {clusterColors[paper.cluster] || '#999999'}">
             {paper.cluster}
