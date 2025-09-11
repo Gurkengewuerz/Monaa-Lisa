@@ -59,6 +59,12 @@
     });
   }
 
+  // Reset focus when deselected (e.g., clicking graph canvas)
+  $: if (!selectedPaperId) {
+    focusSelected = false;
+    localSelected = null;
+  }
+
   // Search/filter
   function normalize(s: string | undefined | null) {
     return (s ?? '').toLowerCase();
@@ -328,6 +334,7 @@
     gap: 0.5rem;
     padding: 0.5rem 0.75rem;
     border-bottom: 1px solid #3a3a45;
+    flex-wrap: nowrap; /* Prevents the button from wrapping underneath the search bar */
   }
 
   .search {
@@ -337,6 +344,7 @@
 
   .search input {
     width: 100%;
+    max-width: 200px; /* Limits the search bar width to prevent it from getting too big */
     padding: 0.5rem 2rem 0.5rem 0.5rem;
     border: 1px solid #3a3a45;
     border-radius: 4px;
@@ -359,6 +367,7 @@
   }
 
   .show-all {
+    flex-shrink: 0; /* Prevents the button from shrinking and getting cut off */
     background: #44495d;
     color: #e6e6e6;
     border: 1px solid #3a3a45;
