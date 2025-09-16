@@ -98,22 +98,29 @@
       }
     });
 
-    //zoom to the selected node
+    // *** FIXED ZOOM - CORRECT SIGMA.JS API ***
     const nodePosition = graph.getNodeAttributes(nodeId);
     console.log('Zooming to node:', nodeId, 'Position:', nodePosition.x, nodePosition.y);
+    
     const camera = renderer.getCamera();
-    camera.animatedSetState({
+    camera.animatedReset({
       x: nodePosition.x,
       y: nodePosition.y,
-      ratio: 1  // Zoom in closer to the selected node for better focus
-    }, { duration: 800 });  // Smooth animation like stage reset
+      ratio: 0.5,  // Zoom in closer (smaller ratio = more zoomed)
+      duration: 800
+    });
 
     selectedNode = nodeId;
     renderer.refresh();
+
+    // *** CRITICAL: EMIT EVENT TO SIDEBAR ***
+    dispatch('nodeSelected', nodeId);
+    console.log('✅ EMITTED nodeSelected:', nodeId);
   }
 
   //react to prop changes: update selection when selectedpaperid changes
   $: if (selectedPaperId && selectedPaperId !== selectedNode && graph && renderer) {
+    console.log('🔄 Graph reacting to sidebar selection:', selectedPaperId);
     selectNodeById(selectedPaperId);
   }
 
@@ -177,10 +184,10 @@
         selectedPaper = null;
       });
 
-      //handle node click: select node and emit event
+      // *** FIXED CLICK HANDLER - NO DUPLICATE DISPATCH ***
       renderer.on('clickNode', ({ node }) => {
-        selectNodeById(node);
-        dispatch('nodeSelected', node);
+        console.log('🖱️ CLICKED NODE:', node);
+        selectNodeById(node); // This emits the event internally
       });
 
       //handle stage click: deselect and reset view
@@ -203,6 +210,7 @@
         renderer.refresh();
 
         dispatch('nodeDeselected');
+        console.log('❌ EMITTED nodeDeselected');
       });
 
       //cleanup: destroy renderer and clear cache on unmount

@@ -4,7 +4,7 @@
 
   /**
    * array of papers to display.
-   * passed from parent.
+   * passed from the parent.
    * @type {Paper[]}
    */
   export let papers: Paper[] = [];
@@ -43,26 +43,33 @@
   let expandedCitations = new Set<number>(); // paper.id values with expanded citations
   let localSelected: Paper | null = null; // local selected for immediate display
 
-  // Derive the selected paper from id
-  $: selectedPaper =
-    selectedPaperId ? dataSource.find((p) => p.id.toString() === selectedPaperId) ?? null : null;
-
-  // When selection is driven by the graph (prop changes), focus on it and scroll into view
-  $: if (selectedPaperId) {
-    localSelected = selectedPaper;
-    focusSelected = true;
-    tick().then(() => {
-      const el = document.querySelector(
-        `[data-paper-id="${selectedPaperId}"]`
-      ) as HTMLElement | null;
-      if (el) el.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
-    });
-  }
-
-  // Reset focus when deselected (e.g., clicking graph canvas)
-  $: if (!selectedPaperId) {
-    focusSelected = false;
-    localSelected = null;
+  // *** BULLETPROOF REACTIVE - WAITS FOR DATA + DEBUG LOGS ***
+  $: {
+    console.log('SIDEBAR REACTIVE TRIGGERED:', { selectedPaperId, dataSourceLength: dataSource?.length });
+    
+    if (selectedPaperId && dataSource && dataSource.length > 0) {
+      console.log('SEARCHING FOR PAPER:', selectedPaperId);
+      const foundPaper = dataSource.find((p) => p.id.toString() === selectedPaperId);
+      console.log('FOUND PAPER:', foundPaper?.title || 'NOT FOUND');
+      
+      localSelected = foundPaper || null;
+      focusSelected = true;
+      isOpen = true; // FORCE OPEN SIDEBAR
+      
+      tick().then(() => {
+        console.log('SCROLLING TO PAPER:', selectedPaperId);
+        const el = document.querySelector(`[data-paper-id="${selectedPaperId}"]`) as HTMLElement | null;
+        console.log('SCROLL ELEMENT:', el);
+        if (el) {
+          el.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+          el.classList.add('force-selected'); // TEMP VISUAL DEBUG
+        }
+      });
+    } else {
+      console.log('NO SELECTION');
+      localSelected = null;
+      focusSelected = false;
+    }
   }
 
   // Search/filter
@@ -201,6 +208,7 @@
         <div 
           class="paper-item" 
           class:selected={selectedPaperId === paper.id.toString()}
+          class:force-selected={localSelected?.id === paper.id}
           data-paper-id={paper.id}
           on:click|stopPropagation={() => selectPaper(paper)}
         >
@@ -409,6 +417,19 @@
   .paper-item.selected {
     background-color: #4a9eff20;
     border-left: 3px solid #4a9eff;
+  }
+
+  /* *** TEMP DEBUG STYLE *** */
+  .paper-item.force-selected {
+    background-color: #ff000020 !important;
+    border-left: 5px solid #ff0000 !important;
+    animation: pulse 1s infinite;
+  }
+
+  @keyframes pulse {
+    0% { border-left-color: #ff0000; }
+    50% { border-left-color: #ffff00; }
+    100% { border-left-color: #ff0000; }
   }
 
   .paper-cluster {
