@@ -93,6 +93,7 @@ export class PapersService {
         title: dto.title,
         authors: dto.authors,
         summary: dto.summary,
+        // eslint-disable-next-line @typescript-eslint/no-unsafe-argument
         published: dto.published ? new Date(dto.published) : undefined,
         category: dto.category,
         url: dto.url,
