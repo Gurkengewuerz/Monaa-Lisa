@@ -158,6 +158,9 @@ def fetch_historical_batch(category: str, batch_size: int = 50, start_offset: in
 
 
 """
+Edit: 19 September 2025 - Lenio
+Do these methods need to be here still? would remove them in a later commit
+
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 FROM HERE ON ONLY SOME TESTING FUNCTIONS WILL BE DECLARED - THESE WILL LATER MOVE TO UNIT TESTS - IGNORE FOR NOW!
 
@@ -198,26 +201,3 @@ def testing_feedparser():
         logger.debug(f"Updated: {entry.updated}")
         logger.debug(f"Link: {entry.link}")
         logger.debug('-' * 80)
-
-
-
-"""
-04-May-2025 - Basti
-Abstract: Tests if every category is accessible and is reachable through the arXiv API
-Args:
-Returns: 
-
-@DeprecationWarning
-def test_categories():
-    print("Deprecated now! Categories have all passed the check as of 4th May 2025")
-    client = arx.Client()
-    for cat in categories:
-        current_search = arx.Search(query=f"{cat}", max_results=1, sort_by=arx.SortCriterion.SubmittedDate, sort_order=arx.SortOrder.Descending)
-        results = list(client.results(current_search))
-        if len(results) == 0:
-            print(f"Failed for category: {cat}")
-            break
-
-        print(f"Category {cat} passed!")
-"""
-
