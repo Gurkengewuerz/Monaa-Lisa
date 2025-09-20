@@ -277,3 +277,32 @@ def mark_category_historically_completed(program_run_id, category, oldest_paper_
         return False
     finally:
         session.close()
+
+"""
+13-August-2025 - Basti
+Abstract: Ensures a HistoricalCompletion start record exists for a category in this run -> is there more?"""
+def ensure_historical_start(program_run_id, category):
+    session = SessionLocal()
+    try:
+        record = (
+            session.query(HistoricalCompletion)
+            .filter_by(program_run_id=program_run_id, category=category)
+            .order_by(HistoricalCompletion.start_date.desc())
+            .first()
+        )
+        if record is None or record.end_date is not None:
+            new_rec = HistoricalCompletion(
+                program_run_id=program_run_id,
+                category=category,
+                start_date=datetime.now(),
+            )
+            session.add(new_rec)
+            session.commit()
+            logger.info(f"Started historical fetch for {category} in run {program_run_id}")
+        return True
+    except Exception as e:
+        logger.error(f"Error ensuring historical start: {e}")
+        session.rollback()
+        return False
+    finally:
+        session.close()

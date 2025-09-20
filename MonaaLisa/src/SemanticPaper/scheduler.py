@@ -11,7 +11,8 @@ from SemanticPaper.config.category_loader import get_semanticpaper_categories
 from Database.db import (
     create_program_run,
     is_category_historically_completed,
-    mark_category_historically_completed
+    mark_category_historically_completed,
+    ensure_historical_start,
 )
 import threading
 import queue
@@ -80,6 +81,8 @@ def historical_fetch():
         for cat in categories:
             if is_category_historically_completed(current_program_run_id, cat):
                 continue
+            # Ensure we have a start record for this category/run
+            ensure_historical_start(current_program_run_id, cat)
             offset = historical_fetch_state.get(cat, 0)
             rate_limiter.wait()
             papers, has_more = fetch_historical_batch(cat, batch_size=50, start_offset=offset)
