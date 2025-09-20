@@ -3,7 +3,8 @@ from SemanticPaper.machine_learning.mapper import Mapper
 from SemanticPaper.machine_learning.processor import PaperProcessor
 from SemanticPaper.scheduler import start_scheduler, paper_queue
 from util.logger import Logger
-from Database.db import save_paper_to_db, save_paper_relation, get_all_embeddings
+from Database.db import save_paper_to_db, save_paper_relation, get_all_embeddings, engine
+from Database.db_models import db_base
 from dotenv import load_dotenv
 from SemanticPaper.machine_learning.model import Model
 from SemanticPaper.config.category_loader import get_semanticpaper_categories
@@ -116,6 +117,10 @@ def main(num_workers: int = 5):
 
     known_hashes = load_hashes()
     logger.info(f"Loaded {len(known_hashes)} known hashes")
+    try:
+        db_base.metadata.create_all(bind=engine)
+    except Exception as e:
+        logger.warning(f"Failed to pre-create tables: {e}")
     logger.info("Loading existing embeddings into cache...")
     with embedding_cache_lock:
         embedding_cache.update(get_all_embeddings())

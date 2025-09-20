@@ -13,6 +13,7 @@ from Database.db import (
     is_category_historically_completed,
     mark_category_historically_completed,
     ensure_historical_start,
+    update_historical_progress,
 )
 import threading
 import queue
@@ -25,6 +26,7 @@ paper_queue = None
 current_program_run_id = None
 scheduler_lock = threading.Lock()
 historical_fetch_state = {"running": False}
+goal_dates_cache = {}
 
 # Tuning knobs via env vars
 HISTORICAL_FETCH_INTERVAL_SECONDS = int(os.getenv("HISTORICAL_FETCH_INTERVAL_SECONDS", "60"))
@@ -81,8 +83,19 @@ def historical_fetch():
         for cat in categories:
             if is_category_historically_completed(current_program_run_id, cat):
                 continue
-            # Ensure we have a start record for this category/run
-            ensure_historical_start(current_program_run_id, cat)
+            goal_date = goal_dates_cache.get(cat)
+            if goal_date is None:
+                try:
+                    papers_goal, _ = fetch_historical_batch(cat, batch_size=1, start_offset=0)
+                    goal_date = papers_goal[0].published if papers_goal else None
+                    goal_dates_cache[cat] = goal_date
+                except Exception as e:
+                    logger.error(f"Failed to determine goal date for {cat}: {e}")
+                    goal_date = None
+            # Ensure we have a start record for this category/runwith optional goal
+            if not ensure_historical_start(current_program_run_id, cat, goal_date):
+                logger.info(f"Skipping {cat} this cycle: could not create start record")
+                continue
             offset = historical_fetch_state.get(cat, 0)
             rate_limiter.wait()
             papers, has_more = fetch_historical_batch(cat, batch_size=50, start_offset=offset)
@@ -91,9 +104,20 @@ def historical_fetch():
                     if paper:
                         paper_queue.put(paper)
                 logger.info(f"Enqueued {len(papers)} historical papers for {cat}")
-            historical_fetch_state[cat] = offset + 50
+                try:
+                    min_date = min(p.published for p in papers if p is not None)
+                    update_historical_progress(current_program_run_id, cat, min_date)
+                except Exception as e:
+                    logger.error(f"Failed updating progress for {cat}: {e}")
+            historical_fetch_state[cat] = offset + (len(papers) if papers else 0)
             if not has_more:
-                mark_category_historically_completed(current_program_run_id, cat)
+                final_oldest = None
+                if papers and len(papers) > 0:
+                    try:
+                        final_oldest = min(p.published for p in papers if p is not None)
+                    except Exception:
+                        final_oldest = None
+                mark_category_historically_completed(current_program_run_id, cat, final_oldest)
                 logger.info(f"Category {cat} historical fetch completed")
     except Exception as e:
         logger.error(f"Error in historical_fetch: {e}")
