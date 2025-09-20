@@ -7,6 +7,9 @@ from Database.db import save_paper_to_db, save_paper_relation, get_all_embedding
 from dotenv import load_dotenv
 from SemanticPaper.machine_learning.model import Model
 from SemanticPaper.config.category_loader import get_semanticpaper_categories
+import os
+import threading
+import faulthandler
 import threading
 import time
 import os
@@ -26,7 +29,10 @@ model = Model()
 # Initialize the embedding cache, which will store embeddings of papers to avoid fetching them from the db everytime
 embedding_cache = {}
 embedding_cache_lock = threading.Lock()
-
+try:
+    faulthandler.enable()
+except Exception:
+    pass
 """
 25-May-2025 - Basti
 Abstract: Loads the local parsed_hashes file

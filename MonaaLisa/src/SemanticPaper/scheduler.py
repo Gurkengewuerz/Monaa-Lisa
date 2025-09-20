@@ -1,5 +1,6 @@
 import multiprocessing
 import threading
+import os
 from datetime import datetime
 from apscheduler.schedulers.background import BackgroundScheduler
 from Database.db import db_base, engine
@@ -12,15 +13,21 @@ from Database.db import (
     is_category_historically_completed,
     mark_category_historically_completed
 )
+import threading
+import queue
 
 logger = Logger("Scheduler")
 
-# Queue to buffer fetched Paper objects for embedding workers
-paper_queue = multiprocessing.Queue()
+# Queue to buffer fetched Paper objects for embedding workers (thread-safe)
+paper_queue = queue.Queue()
 
 current_program_run_id = None
 scheduler_lock = threading.Lock()
 historical_fetch_state = {"running": False}
+
+# Tuning knobs via env vars
+HISTORICAL_FETCH_INTERVAL_SECONDS = int(os.getenv("HISTORICAL_FETCH_INTERVAL_SECONDS", "60"))
+QUEUE_MAX_SIZE = int(os.getenv("QUEUE_MAX_SIZE", "200"))
 
 
 """
@@ -56,6 +63,13 @@ def historical_fetch():
             return
         historical_fetch_state["running"] = True
     try:
+        try:
+            qsize = paper_queue.qsize()
+        except NotImplementedError:
+            qsize = 0
+        if qsize >= QUEUE_MAX_SIZE:
+            logger.info(f"Queue size {qsize} >= max {QUEUE_MAX_SIZE}; skipping fetch this cycle")
+            return
         if not current_program_run_id:
             logger.error("No active program run ID")
             return
@@ -102,8 +116,14 @@ def start_scheduler():
     # Schedule daily_fetch at 0,6,12,18
     for hr in [0, 6, 12, 18]:
         scheduler.add_job(daily_fetch, 'cron', hour=hr, minute=0, id=f"daily_fetch_{hr}")
-    # Schedule historical_fetch hourly, start now
-    scheduler.add_job(historical_fetch, 'interval', hours=1, next_run_time=datetime.now(), id='historical_fetch')
+    # Schedule historical_fetch  start now
+    scheduler.add_job(
+        historical_fetch,
+        'interval',
+        seconds=HISTORICAL_FETCH_INTERVAL_SECONDS,
+        next_run_time=datetime.now(),
+        id='historical_fetch'
+    )
     scheduler.start()
     logger.info(f"Scheduler started (run ID {current_program_run_id})")
     return scheduler

@@ -151,8 +151,17 @@ class Paper:
         if not self._grobid_xml:
             return references
         if self._grobid_xml is not None:
-            data = self._grobid_xml.encode("utf-8")
-            root = etree.fromstring(data)
+            try:
+                data = self._grobid_xml.encode("utf-8")
+                parser = etree.XMLParser(recover=True, huge_tree=True)
+                root = etree.fromstring(data, parser=parser)
+            except etree.XMLSyntaxError as e:
+                self.logger.error(f"XML parse error while extracting references for '{self.title}': {e}")
+                return []
+            except Exception as e:
+                self.logger.error(f"Unexpected error parsing references XML for '{self.title}': {e}")
+                return []
+
             ns = {'tei': 'http://www.tei-c.org/ns/1.0'}
             # Search for <div type="references"> in the <back> section
             references_xml = root.findall('.//tei:div[@type="references"]//tei:biblStruct', ns)
@@ -164,9 +173,10 @@ class Paper:
                     combined_title = ", ".join(filter(None, title_texts))
                     if combined_title:  # Only create reference if there is a title
                         references.append(Reference(self.entry_id, combined_title))
-            else:
-                    self.logger.warning("Could not extract references from paper or none were found!")
-                    # Sometimes the xpath seems to fail, gotta look into this later
+
+            if not references:
+                self.logger.warning("Could not extract references from paper or none were found!")
+                # Sometimes the xpath seems to fail, gotta look into this later
             return references
         return []
 
@@ -182,8 +192,16 @@ class Paper:
         if not self._grobid_xml:
             self.logger.warning(f"No GROBID XML available for {self.title}, skipping sections")
             return []
-        data = self._grobid_xml.encode("utf-8")
-        root = etree.fromstring(data)
+        try:
+            data = self._grobid_xml.encode("utf-8")
+            parser = etree.XMLParser(recover=True, huge_tree=True)
+            root = etree.fromstring(data, parser=parser)
+        except etree.XMLSyntaxError as e:
+            self.logger.error(f"XML parse error while extracting sections for '{self.title}': {e}")
+            return []
+        except Exception as e:
+            self.logger.error(f"Unexpected error parsing sections XML for '{self.title}': {e}")
+            return []
         ns = {'tei': 'http://www.tei-c.org/ns/1.0'}
         sections = []
         for section in root.findall('.//tei:body//tei:div', ns):
@@ -198,7 +216,9 @@ class Paper:
                 content = ""
                 # Get all paragraphs in a section
                 for paragraph in content_elements:
-                    content += paragraph.text.strip() + "\n"
+                    text = (paragraph.text or "").strip()
+                    if text:
+                        content += text + "\n"
                 if section_header_index != "":
                     # If section has a number in its attribute 'n'
                     section_data['title'] = section_header_index + " " + (
@@ -239,13 +259,16 @@ class Paper:
         local_logger = Paper.get_grobid_logger()
         temp_file_path = None
         try:
-            response = requests.get(self.url)
+            # Download PDF with timeout and streaming to avoid blocking and large memory usage
+            response = requests.get(self.url, stream=True, timeout=(5, 60))
             if not response.ok:
                 raise Exception(f"Failed to download PDF: HTTP Error Code is - {response.status_code}")
 
             # Create a temporary file to store the PDF
             with tempfile.NamedTemporaryFile(suffix='.pdf', delete=False) as tmp_file:
-                tmp_file.write(response.content)
+                for chunk in response.iter_content(chunk_size=1024 * 256):
+                    if chunk:
+                        tmp_file.write(chunk)
                 temp_file_path = tmp_file.name
 
             # Send to Grobid for processing
@@ -255,7 +278,8 @@ class Paper:
                 grobid_response = requests.post(
                     grobid_url,
                     files=files,
-                    headers={'Accept': 'application/xml'}
+                    headers={'Accept': 'application/xml'},
+                    timeout=(5, 120)
                 )
 
             if not grobid_response.ok:

@@ -12,7 +12,9 @@ from pymupdf import pymupdf
 
 from sqlalchemy import create_engine, Column, String, Float, DateTime, Integer, JSON, ForeignKey
 from sqlalchemy.orm import declarative_base, sessionmaker
+import os
 from dotenv import load_dotenv
+from sqlalchemy.exc import ProgrammingError
 from Database.db_models import db_base, DBPaper, DBPaperRelation, DBEmbedding, ProgramRun, HistoricalCompletion
 from object.paper import Paper
 from object.relation import Relation
@@ -28,8 +30,16 @@ load_dotenv()
 logger = Logger("Database")
 
 DATABASE_URL = os.environ.get("DATABASE_URL")
-engine = create_engine(DATABASE_URL)
-SessionLocal = sessionmaker(bind=engine)
+engine = create_engine(
+    DATABASE_URL,
+    pool_size=int(os.getenv("DB_POOL_SIZE", "10")),
+    max_overflow=int(os.getenv("DB_MAX_OVERFLOW", "20")),
+    pool_pre_ping=True,
+    pool_recycle=int(os.getenv("DB_POOL_RECYCLE", "1800")),
+    pool_timeout=int(os.getenv("DB_POOL_TIMEOUT", "30")),
+    future=True,
+)
+SessionLocal = sessionmaker(bind=engine, autocommit=False, autoflush=False, future=True)
 
 
 """
@@ -40,7 +50,15 @@ Returns: A dictionary where keys are paper entry IDs and values are Embedding ob
 def get_all_embeddings():
     session = SessionLocal()
     try:
-        db_embeddings_rows = session.query(DBEmbedding).all()
+        limit = int(os.getenv("EMBEDDINGS_PRELOAD_LIMIT", "5000"))
+        q = session.query(DBEmbedding)
+        if limit > 0:
+            q = q.limit(limit)
+        try:
+            db_embeddings_rows = q.all()
+        except ProgrammingError as e:
+            logger.warning(f"Embeddings table missing or not initialized yet: {e}")
+            return {}
         # Get rid of the warning in pycharm
         db_embeddings = cast(List[DBEmbedding], db_embeddings_rows)
         embedding_dict = {

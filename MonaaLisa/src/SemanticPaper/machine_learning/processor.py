@@ -31,8 +31,12 @@ class PaperProcessor:
         paper_hash = self.paper.hash_paper_details()
         if paper_hash not in known_hashes:
             self.logger.info(f"Extracting metadata for: {self.paper.title}")
-            self.paper.extract_metadata()
-            self.logger.info(f"Finished extracting metadata for: {self.paper.title}")
+            try:
+                self.paper.extract_metadata()
+                self.logger.info(f"Finished extracting metadata for: {self.paper.title}")
+            except Exception as e:
+                self.logger.error(f"Unexpected error during metadata extraction for '{self.paper.title}': {e}")
+                return False
             return True
         self.logger.info(f"[{worker_name}] Paper already processed: {getattr(self.paper, 'title', 'Unknown Title')}")
         return False

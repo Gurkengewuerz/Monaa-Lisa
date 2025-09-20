@@ -1,6 +1,10 @@
 import requests
 import time
 
+import time
+import requests
+
+
 class SemanticScholarAPI:
     """
     25-May-2025 - Basti
@@ -27,7 +31,17 @@ class SemanticScholarAPI:
         params = {
             "fields": "references.paperId,citations.paperId"
         }
-        response = requests.get(url, params=params)
+        tries = 3
+        last_exc = None
+        response = None
+        for _ in range(tries):
+            try:
+                response = requests.get(url, params=params, timeout=(3.05, 15))
+                break
+            except Exception as e:
+                last_exc = e
+        if response is None:
+            raise last_exc
         if response.status_code == 404:
             print(f"Semantic Scholar: Paper {arxiv_id_no_version} not found (may be too new)! - (save it into the database as todo)")
             return None
@@ -56,12 +70,25 @@ class SemanticScholarAPI:
         params = {"fields": fields}
         all_data = []
         for i in range(0, len(paper_ids), 100):
-            batch = paper_ids[i:i+100]
-            response = requests.post(url, params=params, json={"ids": batch})
-            if response.status_code != 200:
-                print(f"Semantic Scholar batch error: {response.status_code} - {response.text}")
+            chunk = paper_ids[i:i+100]
+            tries = 3
+            last_exc = None
+            for _ in range(tries):
+                try:
+                    resp = requests.post(url, params=params, json={"ids": chunk}, timeout=(3.05, 30))
+                    if resp.status_code == 200:
+                        data = resp.json()
+                        if isinstance(data, dict) and "data" in data:
+                            all_data.extend(data.get("data", []))
+                        else:
+                            all_data.extend(data)
+                        break
+                    else:
+                        last_exc = Exception(f"SemanticScholar batch error {resp.status_code}")
+                except Exception as e:
+                    last_exc = e
+            if last_exc:
+                # skip this chunk after retries
                 continue
-            data = response.json()
-            all_data.extend(data.get("data", []))
             time.sleep(sleep)
         return all_data
