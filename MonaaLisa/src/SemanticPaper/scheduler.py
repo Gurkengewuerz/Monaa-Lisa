@@ -19,8 +19,8 @@ import queue
 logger = Logger("Scheduler")
 
 # Queue to buffer fetched Paper objects for embedding workers (thread-safe)
-paper_queue = queue.Queue()
-
+# will now be initialized after constants are defined
+paper_queue = None
 current_program_run_id = None
 scheduler_lock = threading.Lock()
 historical_fetch_state = {"running": False}
@@ -28,6 +28,9 @@ historical_fetch_state = {"running": False}
 # Tuning knobs via env vars
 HISTORICAL_FETCH_INTERVAL_SECONDS = int(os.getenv("HISTORICAL_FETCH_INTERVAL_SECONDS", "60"))
 QUEUE_MAX_SIZE = int(os.getenv("QUEUE_MAX_SIZE", "200"))
+
+# Initialize bounded queue now that QUEUE_MAX_SIZE is defined
+paper_queue = queue.Queue(maxsize=QUEUE_MAX_SIZE)
 
 
 """

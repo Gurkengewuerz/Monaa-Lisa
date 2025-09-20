@@ -147,7 +147,10 @@ class PaperProcessor:
                 return None
 
             weighted_average = np.average(embedding_arrays, weights=final_weights, axis=0)
-            return Embedding(belonging_paper_entry_id=self.paper.entry_id, content=weighted_average)
+            emb = Embedding(belonging_paper_entry_id=self.paper.entry_id, content=weighted_average)
+            self.paper._paper_txt = None
+            self.paper._grobid_xml = None
+            return emb
         except Exception as e:
             self.logger.error(f"Error while calculating weighted average of embeddings: {e}")
             return None

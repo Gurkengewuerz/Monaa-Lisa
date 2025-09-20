@@ -1,13 +1,8 @@
-import json
 import os
 import sys
-import tempfile
 from datetime import datetime
 from typing import Optional, cast, List
 import numpy as np
-import requests
-from arxiv import arxiv
-from pymupdf import pymupdf
 
 
 from sqlalchemy import create_engine, Column, String, Float, DateTime, Integer, JSON, ForeignKey
