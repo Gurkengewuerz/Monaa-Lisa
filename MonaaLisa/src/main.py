@@ -11,7 +11,6 @@ from SemanticPaper.config.category_loader import get_semanticpaper_categories
 import os
 import threading
 import faulthandler
-import threading
 import time
 import os
 import signal
