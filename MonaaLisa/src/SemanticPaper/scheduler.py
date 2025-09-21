@@ -4,6 +4,7 @@ import os
 from datetime import datetime
 from apscheduler.schedulers.background import BackgroundScheduler
 from Database.db import db_base, engine
+from config import cfg
 from util.logger import Logger
 from SemanticPaper.api.arxiv import fetch_papers, fetch_historical_batch
 from SemanticPaper.api.arxiv import rate_limiter 
@@ -29,8 +30,16 @@ historical_fetch_state = {"running": False}
 goal_dates_cache = {}
 
 # Tuning knobs via env vars
-HISTORICAL_FETCH_INTERVAL_SECONDS = int(os.getenv("HISTORICAL_FETCH_INTERVAL_SECONDS", "60"))
-QUEUE_MAX_SIZE = int(os.getenv("QUEUE_MAX_SIZE", "200"))
+HISTORICAL_FETCH_INTERVAL_SECONDS = cfg.get_int(
+    "semanticpaper",
+    "historical_fetch_interval_seconds",
+    int(os.getenv("HISTORICAL_FETCH_INTERVAL_SECONDS", "60"))
+)
+QUEUE_MAX_SIZE = cfg.get_int(
+    "semanticpaper",
+    "queue_max_size",
+    int(os.getenv("QUEUE_MAX_SIZE", "200"))
+)
 
 # Initialize bounded queue now that QUEUE_MAX_SIZE is defined
 paper_queue = queue.Queue(maxsize=QUEUE_MAX_SIZE)

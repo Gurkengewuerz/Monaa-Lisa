@@ -6,6 +6,7 @@ from util.logger import Logger
 from Database.db import save_paper_to_db, save_paper_relation, get_all_embeddings, engine
 from Database.db_models import db_base
 from dotenv import load_dotenv
+from config import cfg
 from SemanticPaper.machine_learning.model import Model
 from SemanticPaper.config.category_loader import get_semanticpaper_categories
 import os
@@ -22,8 +23,6 @@ logger = Logger("Main")
 semantic = SemanticScholarAPI()
 
 load_dotenv(".env_public")
-
-UPDATE_INTERVAL = int(os.environ.get("ARXIV_FETCH_INTERVAL", 3600))
 HASH_FILE = 'parsed_hashes.txt'
 
 model = Model()
@@ -111,7 +110,7 @@ Args:
 Returns: None
 """
 def main(num_workers: int = 5):
-    log_level = os.getenv("LOG_LEVEL", "DEBUG")
+    log_level = cfg.get("semanticpaper", "log_level", os.getenv("LOG_LEVEL", "DEBUG"))
     logger.set_level(log_level)
     logger.info(f"Initializing scheduler system (log level={log_level})...")
 
@@ -157,5 +156,5 @@ def main(num_workers: int = 5):
     signal.pause()
 
 if __name__ == "__main__":
-    workers = int(os.getenv("NUM_WORKERS", str(5)))
+    workers = cfg.get_int("semanticpaper", "num_workers", int(os.getenv("NUM_WORKERS", str(5))))
     main(workers)

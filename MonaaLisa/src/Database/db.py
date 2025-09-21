@@ -9,6 +9,7 @@ from sqlalchemy import create_engine, Column, String, Float, DateTime, Integer, 
 from sqlalchemy.orm import declarative_base, sessionmaker
 import os
 from dotenv import load_dotenv
+from config import cfg
 from sqlalchemy.exc import ProgrammingError
 from Database.db_models import db_base, DBPaper, DBPaperRelation, DBEmbedding, ProgramRun, HistoricalCompletion
 from object.paper import Paper
@@ -24,6 +25,7 @@ load_dotenv()
 
 logger = Logger("Database")
 
+# DATABASE_URL remains env-driven for Docker; do not move into config.ini
 DATABASE_URL = os.environ.get("DATABASE_URL")
 engine = create_engine(
     DATABASE_URL,
@@ -37,15 +39,7 @@ engine = create_engine(
 SessionLocal = sessionmaker(bind=engine, autocommit=False, autoflush=False, future=True)
 
 
-def _to_naive_utc(dt: datetime | None) -> datetime | None:
-    if dt is None:
-        return None
-    try:
-        if dt.tzinfo is not None and dt.utcoffset() is not None:
-            return dt.astimezone(timezone.utc).replace(tzinfo=None)
-        return dt
-    except Exception:
-        return dt
+
 
 
 """
@@ -56,7 +50,11 @@ Returns: A dictionary where keys are paper entry IDs and values are Embedding ob
 def get_all_embeddings():
     session = SessionLocal()
     try:
-        limit = int(os.getenv("EMBEDDINGS_PRELOAD_LIMIT", "5000"))
+        limit = cfg.get_int(
+            "semanticpaper",
+            "embeddings_preload_limit",
+            int(os.getenv("EMBEDDINGS_PRELOAD_LIMIT", "5000"))
+        )
         q = session.query(DBEmbedding)
         if limit > 0:
             q = q.limit(limit)
@@ -225,6 +223,22 @@ def is_category_historically_completed(program_run_id, category):
         return False
     finally:
         session.close()
+
+"""
+21-September-2025 - Basti
+Abstract: Converts a datetime to naive UTC (if no timezone info)
+Args: dt: datetime 
+Returns: datetime in UTC without tzinfo or None if input was None
+"""
+def _to_naive_utc(dt: datetime | None) -> datetime | None:
+    if dt is None:
+        return None
+    try:
+        if dt.tzinfo is not None and dt.utcoffset() is not None:
+            return dt.astimezone(timezone.utc).replace(tzinfo=None)
+        return dt
+    except Exception:
+        return dt
 
 """
 13-August-2025 - Basti

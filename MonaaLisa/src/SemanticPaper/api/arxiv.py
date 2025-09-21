@@ -9,10 +9,11 @@ from object.paper import Paper
 from util.logger import Logger
 import os
 from SemanticPaper.api.rate_limiter import RateLimiter
+from config import cfg
 
 logger = Logger("arxiv")
 
-_interval = float(os.getenv("ARXIV_MIN_INTERVAL", "3.0"))
+_interval = cfg.get_float("semanticpaper", "arxiv_min_interval", float(os.getenv("ARXIV_MIN_INTERVAL", "3.0")))
 rate_limiter = RateLimiter(min_interval=_interval)
 
 # Funny test comment ! :D
