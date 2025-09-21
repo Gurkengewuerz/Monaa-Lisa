@@ -1,4 +1,3 @@
-from SemanticPaper.api.semanticscholar import SemanticScholarAPI
 from SemanticPaper.machine_learning.mapper import Mapper
 from SemanticPaper.machine_learning.processor import PaperProcessor
 from SemanticPaper.scheduler import start_scheduler, paper_queue
@@ -19,9 +18,6 @@ import signal
 import sys
 
 logger = Logger("Main")
-
-semantic = SemanticScholarAPI()
-
 load_dotenv(".env_public")
 HASH_FILE = 'parsed_hashes.txt'
 
