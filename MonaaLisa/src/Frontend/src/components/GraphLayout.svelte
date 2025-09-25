@@ -2,7 +2,7 @@
   import { onMount } from 'svelte';
   import { dummyPapers, type Paper } from '../testdata/dummyData'; //temporary import for demo data; replace with api later
   import Graph from './Graph.svelte';
-  import Searchbar from './Searchbar.svelte';
+  import Header from './Header.svelte';
   import Sidebar from './Sidebar.svelte';
 
   //flag to use dummy data for showcasing
@@ -67,7 +67,7 @@
 <!-- main app container -->
 <div class="app-container">
   <!-- search component at top -->
-  <Searchbar 
+  <Header 
     {papers}
     {useDummyData}
     on:filtered={handleFiltered}
