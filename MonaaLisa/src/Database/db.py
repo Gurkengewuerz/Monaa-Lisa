@@ -2,7 +2,7 @@ import os
 import sys
 from datetime import datetime, timezone
 from typing import cast, List
-from sqlalchemy import create_engine
+from sqlalchemy import create_engine, or_, and_, exists, select
 from sqlalchemy.orm import sessionmaker
 from dotenv import load_dotenv
 from config import cfg
@@ -175,10 +175,24 @@ Args:
 Returns: bool -> True if the relation exists, False otherwise.
 """
 def relation_exists(session, source_id: str, target_id: str):
+    # 29.09.25 Nico - Verbesserte Version der Abfrage. Aktuell werden 2 SQL Befehle ausgeführt (nicht effizient) dabei kann man das in einem Befehl mit OR kombinieren. 
+    # Die Variante mit beiden Befehlen liefert auch die kompletten Zeilen obwohl man am Ende nur ein Boolean generieren möchte
+    """ Der Befehl mit einer Abfrage sieht dann so aus: SELECT EXISTS (
+    SELECT EXISTS (
+        SELECT 1
+        FROM paper_relation
+        WHERE (source_id = :source_id AND target_id = :target_id)
+           OR (source_id = :target_id AND target_id = :source_id)
+    )
+    """
     # Check if the relation exists in either direction
-    relation1 = session.query(DBPaperRelation).filter_by(source_id=source_id, target_id=target_id).first()
-    relation2 = session.query(DBPaperRelation).filter_by(source_id=target_id, target_id=source_id).first()
-    return relation1 is not None or relation2 is not None
+    sql_statement = select(exists().where(
+        or_(
+            and_(DBPaperRelation.source_id == source_id, DBPaperRelation.target_id == target_id),
+            and_(DBPaperRelation.source_id == target_id, DBPaperRelation.target_id == source_id),
+        )
+    ))
+    return bool(session.execute(stmt).scalar())
 
 """
 13-August-2025 - Basti
