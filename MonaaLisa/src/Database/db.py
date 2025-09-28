@@ -1,13 +1,9 @@
 import os
 import sys
 from datetime import datetime, timezone
-from typing import Optional, cast, List
-import numpy as np
-
-
-from sqlalchemy import create_engine, Column, String, Float, DateTime, Integer, JSON, ForeignKey
-from sqlalchemy.orm import declarative_base, sessionmaker
-import os
+from typing import cast, List
+from sqlalchemy import create_engine
+from sqlalchemy.orm import sessionmaker
 from dotenv import load_dotenv
 from config import cfg
 from sqlalchemy.exc import ProgrammingError
