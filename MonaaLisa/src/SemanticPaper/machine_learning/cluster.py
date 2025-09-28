@@ -5,8 +5,12 @@ from sklearn.manifold import TSNE
 import matplotlib.pyplot as plt
 import matplotlib.cm as cm
 from util.logger import Logger
-from ..api.arxiv import fetch_papers, fetch_latest_paper, CS_CG_CATEGORY
 from ..machine_learning.model import parse_description_data, parse_full_data
+
+"""
+28-Sept-2025 - Lenio
+This whole file is never used, redundant?
+"""
 
 logger = Logger("Cluster")
 

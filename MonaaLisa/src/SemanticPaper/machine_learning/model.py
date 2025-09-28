@@ -1,9 +1,7 @@
-import numpy as np
 from sentence_transformers import SentenceTransformer
-from ..api.arxiv import fetch_latest_paper, read_meta, CS_CG_CATEGORY
+from ..api.arxiv import ArxivAPI
 from sklearn.manifold import TSNE
 import numpy as np
-import arxiv as arx
 import torch
 import os
 from object.paper import Paper
@@ -25,6 +23,7 @@ class Model:
         """
         self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
         model_name = os.getenv("TRANSFORMER_MODEL", "all-MiniLM-L6-v2")
+        self._arxiv = ArxivAPI()
         self._transformer = SentenceTransformer(model_name)
         self._model = self._transformer.to(self.device)
         self.logger = Logger("Model")
@@ -52,7 +51,7 @@ class Model:
     """
     def parse_full_data(self, paper: Paper, chunk_size: int = 512):
         self.logger.info("Reading current paper...\n")
-        read_meta(paper)
+        self._arxiv.read_meta(paper)
 
         full_text = paper.get_formatted_text()
         if not full_text:

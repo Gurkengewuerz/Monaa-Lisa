@@ -8,7 +8,6 @@ from dotenv import load_dotenv
 from SemanticPaper.machine_learning.model import Model
 from SemanticPaper.config.category_loader import get_semanticpaper_categories
 import threading
-import time
 import os
 import signal
 import sys

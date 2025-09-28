@@ -14,5 +14,6 @@ class PaperPlayground(Playground):
         sample_paper = Paper.from_arxiv({"title": "Sample Paper", "authors": "Author Fleck", "summary": "This is a sample summary.", "published": "2024-01-01", "id": "http://arxiv.org/abs/1234.5678"})
         list_of_papers = [sample_paper, sample_paper]
 
+
 if __name__ == "__main__":
     playground = PaperPlayground()
