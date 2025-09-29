@@ -1,7 +1,7 @@
-from SemanticPaper.api.semanticscholar import SemanticScholarAPI
+from SemanticPaper.api.arxiv import ArxivAPI
 from SemanticPaper.machine_learning.mapper import Mapper
 from SemanticPaper.machine_learning.processor import PaperProcessor
-from SemanticPaper.scheduler import start_scheduler, paper_queue
+from SemanticPaper.scheduler import Scheduler
 from util.logger import Logger
 from Database.db import save_paper_to_db, save_paper_relation, get_all_embeddings
 from dotenv import load_dotenv
@@ -14,14 +14,14 @@ import sys
 
 logger = Logger("Main")
 
-semantic = SemanticScholarAPI()
-
 load_dotenv(".env_public")
 
 UPDATE_INTERVAL = int(os.environ.get("ARXIV_FETCH_INTERVAL", 3600))
 HASH_FILE = 'parsed_hashes.txt'
 
-model = Model()
+arxiv_client = ArxivAPI()
+model = Model(arxiv_client)
+scheduler = Scheduler(arxiv_client)
 # Initialize the embedding cache, which will store embeddings of papers to avoid fetching them from the db everytime
 embedding_cache = {}
 embedding_cache_lock = threading.Lock()
@@ -59,7 +59,7 @@ Returns: None
 def paper_worker(worker_id, known_hashes):
     logger.info(f"Worker {worker_id} started")
     while True:
-        paper = paper_queue.get()
+        paper =  scheduler.paper_queue.get()
         if paper is None:
             break
         active_categories = get_semanticpaper_categories()
@@ -114,8 +114,8 @@ def main(num_workers: int = 5):
         embedding_cache.update(get_all_embeddings())
     logger.info(f"Loaded {len(embedding_cache)} embeddings into cache.")
     logger.info("Starting scheduler...")
-    scheduler = start_scheduler()
-    if not scheduler:
+    scheduler.start_scheduler()
+    if not scheduler.is_running():
         logger.error("Scheduler failed to start, exiting.")
         return
 
@@ -132,7 +132,7 @@ def main(num_workers: int = 5):
     def shutdown(signum, frame):
         logger.info("Shutdown signal received, stopping workers...")
         for _ in threads:
-            paper_queue.put(None)
+            scheduler.paper_queue.put(None)
         for t in threads:
             t.join()
         logger.info("All workers stopped, exiting.")

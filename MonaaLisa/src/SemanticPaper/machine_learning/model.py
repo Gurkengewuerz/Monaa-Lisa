@@ -16,14 +16,14 @@ Annotation: largely refactored Bastians code here to fit the new structure
 """
 class Model:
 
-    def __init__(self):
+    def __init__(self, arxiv_client: ArxivAPI):
         """
         Testing it as of 4th May 2025 with this Pretrained Sentence Transformer
         replace this later with SciBERT or allenai/specter
         """
         self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
         model_name = os.getenv("TRANSFORMER_MODEL", "all-MiniLM-L6-v2")
-        self._arxiv = ArxivAPI()
+        self._arxiv = arxiv_client
         self._transformer = SentenceTransformer(model_name)
         self._model = self._transformer.to(self.device)
         self.logger = Logger("Model")

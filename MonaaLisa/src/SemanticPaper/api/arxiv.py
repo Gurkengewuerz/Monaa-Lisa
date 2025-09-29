@@ -19,6 +19,14 @@ class ArxivAPI:
 
 
     """
+    29-September-2025 - Lenio
+    Abstract: Returns the rate limiter instance.
+    Returns: RateLimiter instance
+    """
+    def get_rate_limiter(self) -> RateLimiter:
+        return self.rate_limiter
+
+    """
     04-May-2025 - Basti
     Abstract: Retrieves a paper and prints out its metadata
     Args:
@@ -112,51 +120,3 @@ class ArxivAPI:
         except Exception as e:
             self.logger.error(f"Error fetching historical batch for {category}: {e}")
             return [], False
-
-
-"""
-Edit: 19 September 2025 - Lenio
-Do these methods need to be here still? would remove them in a later commit
-
-///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-FROM HERE ON ONLY SOME TESTING FUNCTIONS WILL BE DECLARED - THESE WILL LATER MOVE TO UNIT TESTS - IGNORE FOR NOW!
-
-
-
-
-04-May-2025 - Basti
-Abstract: Simple method to test (as of now the API of testing_arxiv - should not have much use for production)
-Args:
-Returns: 
-
-def testing_arxiv():
-    search = arx.Search(
-        query="submittedDate:[NOW-7DAYS TO NOW]",
-        max_results = 10,
-        sort_by = arx.SortCriterion.SubmittedDate,
-        sort_order = arx.SortOrder.Descending
-    )
-
-    results = client.results(search)
-
-    for r in results:
-        logger.debug(f"Title: {r.title}\nDate: {r.published}")
-
-
-
-04-May-2025 - Basti
-Abstract: Simple method to fetch the newest arXiv Results using feedparser instead of the arXiv Python API
-Args:
-Returns:
-
-def testing_feedparser():
-    url = "http://export.arxiv.org/api/query?search_query=all:*&sortBy=lastUpdatedDate&sortOrder=descending&max_results=5&version=2"
-    feed = feedparser.parse(url)
-    logger.debug(len(feed.entries))
-    for entry in feed.entries:
-        logger.debug(f"Title: {entry.title}")
-        logger.debug(f"Updated: {entry.updated}")
-        logger.debug(f"Link: {entry.link}")
-        logger.debug('-' * 80)
-        
-"""

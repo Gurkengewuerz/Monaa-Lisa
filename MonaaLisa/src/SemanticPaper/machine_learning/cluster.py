@@ -3,7 +3,6 @@ import re
 from sklearn.cluster import KMeans
 from sklearn.manifold import TSNE
 import matplotlib.pyplot as plt
-import matplotlib.cm as cm
 from util.logger import Logger
 from ..machine_learning.model import parse_description_data, parse_full_data
 

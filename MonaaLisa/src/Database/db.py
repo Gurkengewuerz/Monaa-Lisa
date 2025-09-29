@@ -1,17 +1,11 @@
-import json
 import os
 import sys
-import tempfile
 from datetime import datetime
-from typing import Optional, cast, List
-import numpy as np
-import requests
-from arxiv import arxiv
-from pymupdf import pymupdf
+from typing import cast, List
 
 
-from sqlalchemy import create_engine, Column, String, Float, DateTime, Integer, JSON, ForeignKey
-from sqlalchemy.orm import declarative_base, sessionmaker
+from sqlalchemy import create_engine
+from sqlalchemy.orm import sessionmaker
 from dotenv import load_dotenv
 from Database.db_models import db_base, DBPaper, DBPaperRelation, DBEmbedding, ProgramRun, HistoricalCompletion
 from object.paper import Paper
@@ -20,7 +14,6 @@ from util.logger import Logger
 
 from object.embedding import Embedding
 
-# os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), ".env")
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(__file__))))
 
 load_dotenv()
