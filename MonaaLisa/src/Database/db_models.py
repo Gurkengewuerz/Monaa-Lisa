@@ -96,13 +96,17 @@ class ProgramRun(db_base):
 
 """
 13-August-2025 - Basti
-Abstract: Records which categories have completed historical fetch for each program run.
+Abstract: Records historical fetch progress per category and run, including goal.
 Parameters:
 - id: Primary key.
 - program_run_id: Foreign key to ProgramRun.
-- category: The completed arXiv category.
-- completed_date: Timestamp when category was completed.
-- oldest_paper_date: The date of the oldest fetched paper.
+- category: The arXiv category being fetched.
+- start_date: When the historical fetch began for this run/category.
+- end_date: When historical fetching completed (no more results).
+- oldest_paper_date: The date of the oldest paper fetched (progress marker).
+- goal_oldest_paper_date: The date of the oldest paper in the category (target).
+- goal_reached: String flag ("true"/"false") whether goal has been reached.
+- reached_date: Timestamp when the goal was reached.
 """
 class HistoricalCompletion(db_base):
     __tablename__ = "historical_completions"
@@ -111,4 +115,6 @@ class HistoricalCompletion(db_base):
     category = Column(String, nullable=False)
     start_date = Column(DateTime, nullable=False)
     end_date = Column(DateTime, nullable=True)
-    oldest_paper_date = Column(DateTime, nullable=True)
+    goal_oldest_paper_date = Column(DateTime, nullable=True)
+    goal_reached = Column(String, default="false")
+    reached_date = Column(DateTime, nullable=True)

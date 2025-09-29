@@ -1,7 +1,4 @@
-import os
-import sys
 from dataclasses import dataclass
-sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(__file__))))
 from Database.db_models import DBPaperRelation
 
 

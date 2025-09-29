@@ -6,6 +6,7 @@ import torch
 import os
 from object.paper import Paper
 from util.logger import Logger
+from config import cfg
 
 """
 03-August-2025 - Lenio
@@ -22,8 +23,8 @@ class Model:
         replace this later with SciBERT or allenai/specter
         """
         self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-        model_name = os.getenv("TRANSFORMER_MODEL", "all-MiniLM-L6-v2")
         self._arxiv = arxiv_client
+        model_name = cfg.get("semanticpaper", "transformer_model", os.getenv("TRANSFORMER_MODEL", "all-MiniLM-L6-v2"))
         self._transformer = SentenceTransformer(model_name)
         self._model = self._transformer.to(self.device)
         self.logger = Logger("Model")

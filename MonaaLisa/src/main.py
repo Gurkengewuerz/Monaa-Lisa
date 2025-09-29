@@ -3,11 +3,16 @@ from SemanticPaper.machine_learning.mapper import Mapper
 from SemanticPaper.machine_learning.processor import PaperProcessor
 from SemanticPaper.scheduler import Scheduler
 from util.logger import Logger
-from Database.db import save_paper_to_db, save_paper_relation, get_all_embeddings
+from Database.db import save_paper_to_db, save_paper_relation, get_all_embeddings, engine
+from Database.db_models import db_base
 from dotenv import load_dotenv
+from config import cfg
 from SemanticPaper.machine_learning.model import Model
 from SemanticPaper.config.category_loader import get_semanticpaper_categories
+import os
 import threading
+import faulthandler
+import time
 import os
 import signal
 import sys
@@ -15,8 +20,6 @@ import sys
 logger = Logger("Main")
 
 load_dotenv(".env_public")
-
-UPDATE_INTERVAL = int(os.environ.get("ARXIV_FETCH_INTERVAL", 3600))
 HASH_FILE = 'parsed_hashes.txt'
 
 arxiv_client = ArxivAPI()
@@ -25,7 +28,10 @@ scheduler = Scheduler(arxiv_client)
 # Initialize the embedding cache, which will store embeddings of papers to avoid fetching them from the db everytime
 embedding_cache = {}
 embedding_cache_lock = threading.Lock()
-
+try:
+    faulthandler.enable()
+except Exception:
+    pass
 """
 25-May-2025 - Basti
 Abstract: Loads the local parsed_hashes file
@@ -103,12 +109,16 @@ Args:
 Returns: None
 """
 def main(num_workers: int = 5):
-    log_level = os.getenv("LOG_LEVEL", "DEBUG")
+    log_level = cfg.get("semanticpaper", "log_level", os.getenv("LOG_LEVEL", "DEBUG"))
     logger.set_level(log_level)
     logger.info(f"Initializing scheduler system (log level={log_level})...")
 
     known_hashes = load_hashes()
     logger.info(f"Loaded {len(known_hashes)} known hashes")
+    try:
+        db_base.metadata.create_all(bind=engine)
+    except Exception as e:
+        logger.warning(f"Failed to pre-create tables: {e}")
     logger.info("Loading existing embeddings into cache...")
     with embedding_cache_lock:
         embedding_cache.update(get_all_embeddings())
@@ -145,5 +155,5 @@ def main(num_workers: int = 5):
     signal.pause()
 
 if __name__ == "__main__":
-    workers = int(os.getenv("NUM_WORKERS", str(5)))
+    workers = cfg.get_int("semanticpaper", "num_workers", int(os.getenv("NUM_WORKERS", str(5))))
     main(workers)
