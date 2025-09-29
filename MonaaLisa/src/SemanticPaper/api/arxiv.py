@@ -9,10 +9,11 @@ from object.paper import Paper
 from util.logger import Logger
 import os
 from SemanticPaper.api.rate_limiter import RateLimiter
+from config import cfg
 
 logger = Logger("arxiv")
 
-_interval = float(os.getenv("ARXIV_MIN_INTERVAL", "3.0"))
+_interval = cfg.get_float("semanticpaper", "arxiv_min_interval", float(os.getenv("ARXIV_MIN_INTERVAL", "3.0")))
 rate_limiter = RateLimiter(min_interval=_interval)
 
 # Funny test comment ! :D
@@ -131,27 +132,42 @@ def fetch_papers(category: str = CS_CG_CATEGORY, amount: int = 10) -> list:
 def fetch_historical_batch(category: str, batch_size: int = 50, start_offset: int = 0) -> tuple[list[Paper], bool]:
     rate_limiter.wait()
     try:
-        total_needed = start_offset + batch_size        
+        # Ask for enough results to reach the desired offset without materializing all
+        total_needed = start_offset + batch_size
         search = arx.Search(
             query=f"cat:{category}",
             max_results=total_needed,
             sort_by=arx.SortCriterion.SubmittedDate,
             sort_order=arx.SortOrder.Ascending
         )
-        
-        all_results = list(client.results(search))
-        target_results = all_results[start_offset:start_offset + batch_size]
-        papers = []
-        for result in target_results:
+        results_iter = client.results(search)
+
+        # Skip up to start_offset results without storing them
+        skipped = 0
+        try:
+            while skipped < start_offset:
+                next(results_iter)
+                skipped += 1
+        except StopIteration:
+            # Nothing left at or beyond this offset
+            logger.info(f"No more historical results for {category} at offset {start_offset}")
+            return [], False
+
+        papers: list[Paper] = []
+        for _ in range(batch_size):
+            try:
+                result = next(results_iter)
+            except StopIteration:
+                break
             if result:
                 paper = Paper.from_arxiv(result)
                 paper.category = category
                 papers.append(paper)
-        
-        has_more = len(all_results) > total_needed
+
+        has_more = len(papers) == batch_size
         logger.info(f"Fetched {len(papers)} historical papers for {category} (offset: {start_offset})")
         return papers, has_more
-        
+
     except Exception as e:
         logger.error(f"Error fetching historical batch for {category}: {e}")
         return [], False

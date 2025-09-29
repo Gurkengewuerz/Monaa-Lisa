@@ -31,8 +31,12 @@ class PaperProcessor:
         paper_hash = self.paper.hash_paper_details()
         if paper_hash not in known_hashes:
             self.logger.info(f"Extracting metadata for: {self.paper.title}")
-            self.paper.extract_metadata()
-            self.logger.info(f"Finished extracting metadata for: {self.paper.title}")
+            try:
+                self.paper.extract_metadata()
+                self.logger.info(f"Finished extracting metadata for: {self.paper.title}")
+            except Exception as e:
+                self.logger.error(f"Unexpected error during metadata extraction for '{self.paper.title}': {e}")
+                return False
             return True
         self.logger.info(f"[{worker_name}] Paper already processed: {getattr(self.paper, 'title', 'Unknown Title')}")
         return False
@@ -143,7 +147,10 @@ class PaperProcessor:
                 return None
 
             weighted_average = np.average(embedding_arrays, weights=final_weights, axis=0)
-            return Embedding(belonging_paper_entry_id=self.paper.entry_id, content=weighted_average)
+            emb = Embedding(belonging_paper_entry_id=self.paper.entry_id, content=weighted_average)
+            self.paper._paper_txt = None
+            self.paper._grobid_xml = None
+            return emb
         except Exception as e:
             self.logger.error(f"Error while calculating weighted average of embeddings: {e}")
             return None

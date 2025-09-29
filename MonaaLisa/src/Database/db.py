@@ -1,18 +1,12 @@
-import json
 import os
 import sys
-import tempfile
-from datetime import datetime
-from typing import Optional, cast, List
-import numpy as np
-import requests
-from arxiv import arxiv
-from pymupdf import pymupdf
-
-
-from sqlalchemy import create_engine, Column, String, Float, DateTime, Integer, JSON, ForeignKey
-from sqlalchemy.orm import declarative_base, sessionmaker
+from datetime import datetime, timezone
+from typing import cast, List
+from sqlalchemy import create_engine, or_, and_, exists, select
+from sqlalchemy.orm import sessionmaker
 from dotenv import load_dotenv
+from config import cfg
+from sqlalchemy.exc import ProgrammingError
 from Database.db_models import db_base, DBPaper, DBPaperRelation, DBEmbedding, ProgramRun, HistoricalCompletion
 from object.paper import Paper
 from object.relation import Relation
@@ -27,9 +21,21 @@ load_dotenv()
 
 logger = Logger("Database")
 
+# DATABASE_URL remains env-driven for Docker; do not move into config.ini
 DATABASE_URL = os.environ.get("DATABASE_URL")
-engine = create_engine(DATABASE_URL)
-SessionLocal = sessionmaker(bind=engine)
+engine = create_engine(
+    DATABASE_URL,
+    pool_size=int(os.getenv("DB_POOL_SIZE", "10")),
+    max_overflow=int(os.getenv("DB_MAX_OVERFLOW", "20")),
+    pool_pre_ping=True,
+    pool_recycle=int(os.getenv("DB_POOL_RECYCLE", "1800")),
+    pool_timeout=int(os.getenv("DB_POOL_TIMEOUT", "30")),
+    future=True,
+)
+SessionLocal = sessionmaker(bind=engine, autocommit=False, autoflush=False, future=True)
+
+
+
 
 
 """
@@ -40,7 +46,19 @@ Returns: A dictionary where keys are paper entry IDs and values are Embedding ob
 def get_all_embeddings():
     session = SessionLocal()
     try:
-        db_embeddings_rows = session.query(DBEmbedding).all()
+        limit = cfg.get_int(
+            "semanticpaper",
+            "embeddings_preload_limit",
+            int(os.getenv("EMBEDDINGS_PRELOAD_LIMIT", "5000"))
+        )
+        q = session.query(DBEmbedding)
+        if limit > 0:
+            q = q.limit(limit)
+        try:
+            db_embeddings_rows = q.all()
+        except ProgrammingError as e:
+            logger.warning(f"Embeddings table missing or not initialized yet: {e}")
+            return {}
         # Get rid of the warning in pycharm
         db_embeddings = cast(List[DBEmbedding], db_embeddings_rows)
         embedding_dict = {
@@ -157,43 +175,24 @@ Args:
 Returns: bool -> True if the relation exists, False otherwise.
 """
 def relation_exists(session, source_id: str, target_id: str):
+    # 29.09.25 Nico - Verbesserte Version der Abfrage. Aktuell werden 2 SQL Befehle ausgeführt (nicht effizient) dabei kann man das in einem Befehl mit OR kombinieren. 
+    # Die Variante mit beiden Befehlen liefert auch die kompletten Zeilen obwohl man am Ende nur ein Boolean generieren möchte
+    """ Der Befehl mit einer Abfrage sieht dann so aus: SELECT EXISTS (
+    SELECT EXISTS (
+        SELECT 1
+        FROM paper_relation
+        WHERE (source_id = :source_id AND target_id = :target_id)
+           OR (source_id = :target_id AND target_id = :source_id)
+    )
+    """
     # Check if the relation exists in either direction
-    relation1 = session.query(DBPaperRelation).filter_by(source_id=source_id, target_id=target_id).first()
-    relation2 = session.query(DBPaperRelation).filter_by(source_id=target_id, target_id=source_id).first()
-    return relation1 is not None or relation2 is not None
-
-"""
-25-May-2025 - Basti
-Abstract: (for future development) - 
-Args:
-- None
-Returns: 
-"""
-@FutureWarning
-def update_paper_references(paper_id, related_papers, citations):
-    session = SessionLocal()
-    try:
-        paper = session.query(DBPaper).filter_by(entry_id=paper_id).first()
-        if paper:
-            paper.related_papers = related_papers
-            paper.citations = citations
-            session.commit()
-            logger.info(f"Updated references for paper: {paper.title}")
-            return True
-        else:
-            logger.warning(f"Paper with ID {paper_id} not found for reference update")
-            return False
-    except Exception as e:
-        logger.error(f"DB error updating references: {e}")
-        session.rollback()
-        return False
-    finally:
-        session.close()
-
-if __name__ == "__main__":
-    logger.info("Creating database tables...")
-    db_base.metadata.create_all(bind=engine)
-    logger.info("Tables created successfully!")
+    sql_statement = select(exists().where(
+        or_(
+            and_(DBPaperRelation.source_id == source_id, DBPaperRelation.target_id == target_id),
+            and_(DBPaperRelation.source_id == target_id, DBPaperRelation.target_id == source_id),
+        )
+    ))
+    return bool(session.execute(stmt).scalar())
 
 """
 13-August-2025 - Basti
@@ -202,7 +201,6 @@ Abstract: Creates a new program run record and returns its ID.
 def create_program_run():
     session = SessionLocal()
     try:
-        # Deactivate any prior runs
         session.query(ProgramRun).filter_by(is_active="true").update({"is_active": "false"})
         run = ProgramRun(start_date=datetime.now(), is_active="true")
         session.add(run)
@@ -237,11 +235,92 @@ def is_category_historically_completed(program_run_id, category):
         session.close()
 
 """
-13-August-2025 - Basti
-Abstract: Marks a category as completed historically for this run.
+21-September-2025 - Basti
+Abstract: Converts a datetime to naive UTC (if no timezone info)
+Args: dt: datetime 
+Returns: datetime in UTC without tzinfo or None if input was None
 """
-def mark_category_historically_completed(program_run_id, category, oldest_paper_date=None):
+def _to_naive_utc(dt: datetime | None) -> datetime | None:
+    if dt is None:
+        return None
+    try:
+        if dt.tzinfo is not None and dt.utcoffset() is not None:
+            return dt.astimezone(timezone.utc).replace(tzinfo=None)
+        return dt
+    except Exception:
+        return dt
 
+"""
+13-August-2025 - Basti
+Abstract: Ensures a HistoricalCompletion start record exists for a category in this run.
+Optionally sets the goal oldest paper date.
+"""
+def ensure_historical_start(program_run_id, category, goal_oldest_paper_date: datetime | None = None):
+    session = SessionLocal()
+    try:
+        normalized_goal = _to_naive_utc(goal_oldest_paper_date)
+        record = (
+            session.query(HistoricalCompletion)
+            .filter_by(program_run_id=program_run_id, category=category)
+            .order_by(HistoricalCompletion.start_date.desc())
+            .first()
+        )
+        if record is None or record.end_date is not None:
+            new_rec = HistoricalCompletion(
+                program_run_id=program_run_id,
+                category=category,
+                start_date=datetime.now(),
+                goal_oldest_paper_date=normalized_goal,
+            )
+            session.add(new_rec)
+            session.commit()
+            logger.info(f"Started historical fetch for {category} in run {program_run_id}")
+        elif record.goal_oldest_paper_date is None and normalized_goal is not None:
+            record.goal_oldest_paper_date = normalized_goal
+            session.commit()
+        return True
+    except Exception as e:
+        logger.error(f"Error ensuring historical start: {e}")
+        session.rollback()
+        return False
+    finally:
+        session.close()
+
+"""
+13-August-2025 - Basti
+Abstract: Updates progress for a category's historical fetch with the current oldest fetched date.
+"""
+def update_historical_progress(program_run_id, category, oldest_seen_date: datetime | None):
+    session = SessionLocal()
+    try:
+        record = (
+            session.query(HistoricalCompletion)
+            .filter_by(program_run_id=program_run_id, category=category)
+            .order_by(HistoricalCompletion.start_date.desc())
+            .first()
+        )
+        if not record:
+            logger.error(f"No start entry to update for {category} in run {program_run_id}")
+            return False
+        # Keep storing any incidental progress-related state here in future if needed.
+        # Intentionally not toggling goal_reached anymore.
+        session.commit()
+        return True
+    except Exception as e:
+        logger.error(f"Error updating historical progress: {e}")
+        session.rollback()
+        return False
+    finally:
+        session.close()
+
+"""
+13-August-2025 - Basti
+Updated: 20-September-2025 - Align semantics
+Abstract: Marks a category as completed historically for this run.
+Behavior: Sets end_date and marks goal_reached = true with reached_date = now,
+          treating "goal" as completion of historical ingestion.
+"""
+def mark_category_historically_completed(program_run_id, category, oldest_seen_date=None):
     session = SessionLocal()
     try:
         record = (
@@ -254,7 +333,9 @@ def mark_category_historically_completed(program_run_id, category, oldest_paper_
             logger.error(f"No start entry to complete for {category} in run {program_run_id}")
             return False
         record.end_date = datetime.now()
-        record.oldest_paper_date = oldest_paper_date
+        if record.goal_reached != "true":
+            record.goal_reached = "true"
+            record.reached_date = datetime.now()
         session.commit()
         logger.info(f"Completed historical fetch for {category} in run {program_run_id}")
         return True
@@ -264,3 +345,8 @@ def mark_category_historically_completed(program_run_id, category, oldest_paper_
         return False
     finally:
         session.close()
+
+if __name__ == "__main__":
+    logger.info("Creating database tables...")
+    db_base.metadata.create_all(bind=engine)
+    logger.info("Tables created successfully!")
