@@ -1,16 +1,4 @@
-import os
-import sys
-import tempfile
 from dataclasses import dataclass
-from datetime import datetime
-import arxiv as arx
-from typing import List, Optional, Dict
-import json
-
-import pymupdf
-import requests
-from sqlalchemy import Column, Integer, String, DateTime, JSON, Float
-sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(__file__))))
 from Database.db_models import DBPaperRelation
 
 
