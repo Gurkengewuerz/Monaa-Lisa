@@ -192,7 +192,7 @@ def relation_exists(session, source_id: str, target_id: str):
             and_(DBPaperRelation.source_id == target_id, DBPaperRelation.target_id == source_id),
         )
     ))
-    return bool(session.execute(stmt).scalar())
+    return bool(session.execute(sql_statement).scalar())
 
 """
 13-August-2025 - Basti
