@@ -82,7 +82,7 @@ Annotation: Removed redundant parameters hash and date, these should come from t
 def save_paper_to_db(paper: Paper):
     session = SessionLocal()
 
-    if paper_exists(session, paper.hash):
+    if paper_exists(session, paper):
         logger.info(f"Paper already exists in DB: {paper.title} (hash: {paper.hash})")
         session.close()
         return True
@@ -154,37 +154,46 @@ def save_paper_relation(paper_relation: Relation):
         session.close()
 
 """
-25-May-2025 - Basti
+25-May-2025 - Basti - Tweaked 30-September-2025 - Lenio
 Abstract: Checks if a paper hash already exists in the database
 Args:
 - session: -> Current database session
-- paper_hash: -> the hash of the given arXiv paper
-Returns: bool -> True if: query of the paper is not Null/None | False if: query of the paper is None 
+- paper: -> the paper object to check for
+Returns: bool -> True if: query of the paper is not Null/None | False if: query of the paper is None
+
+Tweak:
+Previously this only checked if the hash is saved into the database, now it checks via the unique entry_id of the paper.
+This is necessary because A) hash collisions are possible (though unlikely) and B) the entry_id is a unique field in the DB so it is more reliable.
+
+Additionally:
+Checking by hash could be a way of checking for updates to a paper, but that is not implemented yet.
 """
-def paper_exists(session, paper_hash):
-    return session.query(DBPaper).filter_by(hash=paper_hash).first() is not None
+def paper_exists(session, paper: Paper):
+    return session.query(DBPaper).filter_by(entry_id=paper.entry_id).first() is not None
 
 
-"""
-20-August-2025 - Lenio
-Abstract: Checks if a relation between two papers already exists in the database.
-Args:
-- session: The current database session.
-- source_id: The ID of the first paper.
-- target_id: The ID of the second paper.
-Returns: bool -> True if the relation exists, False otherwise.
-"""
+""" 28.09. Nico
+    Prüft, ob eine Relation zwischen zwei Paper-IDs existiert, 
+    unabhängig von der Richtung (source_id ↔ target_id).
+
+    Hintergrund:
+    - Frühere Implementierung führte zwei separate SQL-Abfragen aus 
+      und lieferte vollständige Zeilen zurück.
+    - Diese Version kombiniert beide Bedingungen in einer Abfrage mit OR 
+      und nutzt `EXISTS`, um direkt ein Boolean-Ergebnis zu erzeugen.
+
+    SQL-Äquivalent:
+        SELECT EXISTS (
+            SELECT 1
+            FROM paper_relation
+            WHERE (source_id = :source_id AND target_id = :target_id)
+               OR (source_id = :target_id AND target_id = :source_id)
+        );
+    """
 def relation_exists(session, source_id: str, target_id: str):
     # 29.09.25 Nico - Verbesserte Version der Abfrage. Aktuell werden 2 SQL Befehle ausgeführt (nicht effizient) dabei kann man das in einem Befehl mit OR kombinieren. 
     # Die Variante mit beiden Befehlen liefert auch die kompletten Zeilen obwohl man am Ende nur ein Boolean generieren möchte
-    """ Der Befehl mit einer Abfrage sieht dann so aus: SELECT EXISTS (
-    SELECT EXISTS (
-        SELECT 1
-        FROM paper_relation
-        WHERE (source_id = :source_id AND target_id = :target_id)
-           OR (source_id = :target_id AND target_id = :source_id)
-    )
-    """
+
     # Check if the relation exists in either direction
     sql_statement = select(exists().where(
         or_(
@@ -192,7 +201,7 @@ def relation_exists(session, source_id: str, target_id: str):
             and_(DBPaperRelation.source_id == target_id, DBPaperRelation.target_id == source_id),
         )
     ))
-    return bool(session.execute(stmt).scalar())
+    return bool(session.execute(sql_statement).scalar())
 
 """
 13-August-2025 - Basti
