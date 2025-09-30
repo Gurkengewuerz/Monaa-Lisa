@@ -82,7 +82,7 @@ Annotation: Removed redundant parameters hash and date, these should come from t
 def save_paper_to_db(paper: Paper):
     session = SessionLocal()
 
-    if paper_exists(session, paper.hash):
+    if paper_exists(session, paper):
         logger.info(f"Paper already exists in DB: {paper.title} (hash: {paper.hash})")
         session.close()
         return True
@@ -154,15 +154,22 @@ def save_paper_relation(paper_relation: Relation):
         session.close()
 
 """
-25-May-2025 - Basti
+25-May-2025 - Basti - Tweaked 30-September-2025 - Lenio
 Abstract: Checks if a paper hash already exists in the database
 Args:
 - session: -> Current database session
-- paper_hash: -> the hash of the given arXiv paper
-Returns: bool -> True if: query of the paper is not Null/None | False if: query of the paper is None 
+- paper: -> the paper object to check for
+Returns: bool -> True if: query of the paper is not Null/None | False if: query of the paper is None
+
+Tweak:
+Previously this only checked if the hash is saved into the database, now it checks via the unique entry_id of the paper.
+This is necessary because A) hash collisions are possible (though unlikely) and B) the entry_id is a unique field in the DB so it is more reliable.
+
+Additionally:
+Checking by hash could be a way of checking for updates to a paper, but that is not implemented yet.
 """
-def paper_exists(session, paper_hash):
-    return session.query(DBPaper).filter_by(hash=paper_hash).first() is not None
+def paper_exists(session, paper: Paper):
+    return session.query(DBPaper).filter_by(entry_id=paper.entry_id).first() is not None
 
 
 """ 28.09. Nico
