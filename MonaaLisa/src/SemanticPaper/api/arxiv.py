@@ -4,6 +4,7 @@ from util.logger import Logger
 import os
 from SemanticPaper.api.rate_limiter import RateLimiter
 from config import cfg
+from typing import Optional
 
 """
 Original File by Basti - 04-May-2025
@@ -51,11 +52,12 @@ class ArxivAPI:
 
     """
     04-May-2025 - Basti
-    Abstract: Takes one paper from the cs_CG category and proceeds to retrieve the newest paper from that category
+    Updated 30 09 Nico
+    Abstract: Takes one paper from the cs.CG category and proceeds to retrieve the newest paper from that category
     Args: None 
-    Returns: One arXiv paper -> Result
+    Returns: One arXiv paper -> Result or None
     """
-    def fetch_latest_paper(self) -> Paper:
+    def fetch_latest_paper(self) -> Optional[Paper]:
         self.rate_limiter.wait()
         search = arx.Search(
             query=f"cat:cs.CG",
@@ -67,7 +69,7 @@ class ArxivAPI:
         return Paper.from_arxiv(results[0]) if results else None
 
     """
-    04-May-2025 - Basti
+    30-09 Nico Komplett refactored benutzt jetzt unseren erstellten Client mit Rate limiting auth usw
     Abstract: Fetches a x amount of papers in y category
     Args:
     
@@ -84,8 +86,9 @@ class ArxivAPI:
             sort_by=arx.SortCriterion.SubmittedDate,
             sort_order=arx.SortOrder.Descending
         )
-        papers = []
-        for result in search.results():
+        papers: list[Paper] = [] # Typisieren wenn es geht hilft beim Coding
+        for result in self.client.results(search):
+            self.rate_limiter.wait()
             if result:
                 paper = Paper.from_arxiv(result)
                 paper.category = category
