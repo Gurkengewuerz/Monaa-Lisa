@@ -13,7 +13,5 @@ class ArxivPlayground(Playground):
     def test(self):
         self.logger.info("Testing arxiv functionalities...")
         latest = self.arxiv_client.fetch_latest_paper()
+        self.logger.info(f"Paper attributes: {attributes}")
         self.logger.info(f"Latest Paper Title: {latest.title}")
-
-if __name__ == "__main__":
-    playground = ArxivPlayground()

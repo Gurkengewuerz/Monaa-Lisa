@@ -89,7 +89,8 @@ Parameters:
 - is_active: String flag indicating if the run is active.
 """
 class ProgramRun(db_base):
-    __tablename__ = "program_runs"
+    # 30-September-2025 - Lenio - Changed to singular form "program_run" for the table name
+    __tablename__ = "program_run"
     id = Column(Integer, primary_key=True, autoincrement=True)
     start_date = Column(DateTime, nullable=False)
     is_active = Column(String, default="true")
@@ -109,9 +110,10 @@ Parameters:
 - reached_date: Timestamp when the goal was reached.
 """
 class HistoricalCompletion(db_base):
-    __tablename__ = "historical_completions"
+    # 30-September-2025 - Lenio - Changed to singular form "historical_completion" for the table name
+    __tablename__ = "historical_completion"
     id = Column(Integer, primary_key=True, autoincrement=True)
-    program_run_id = Column(Integer, ForeignKey("program_runs.id"), nullable=False)
+    program_run_id = Column(Integer, ForeignKey("program_run.id"), nullable=False)
     category = Column(String, nullable=False)
     start_date = Column(DateTime, nullable=False)
     end_date = Column(DateTime, nullable=True)

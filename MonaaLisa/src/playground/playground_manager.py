@@ -2,6 +2,7 @@ from playground import Playground
 from util.logger import Logger
 
 from arxiv_playground import ArxivPlayground
+from paper_playground import PaperPlayground
 
 """
 29-September-2025 - Lenio
@@ -34,6 +35,8 @@ if __name__ == "__main__":
     # arxiv_playground = ArxivPlayground()
     # manager.register_playground("Arxiv", arxiv_playground)
     arxiv_playground = ArxivPlayground()
+    paper_playground = PaperPlayground()
     manager.register_playground("Arxiv", arxiv_playground)
+    manager.register_playground("Paper-Arxiv", paper_playground)
     manager.logger.info(f"Registered Playgrounds: {manager.list_playgrounds()}")
     manager.run_all_tests()

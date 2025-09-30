@@ -16,9 +16,8 @@ class ArxivAPI:
     def __init__(self):
         self.logger = Logger("ArxivAPI")
         self.client = arx.Client()
-        self.rate_limiter = RateLimiter(min_interval=float(os.getenv("ARXIV_MIN_INTERVAL", "3.0")))
-_interval = cfg.get_float("semanticpaper", "arxiv_min_interval", float(os.getenv("ARXIV_MIN_INTERVAL", "3.0")))
-rate_limiter = RateLimiter(min_interval=_interval)
+        _interval = cfg.get_float("semanticpaper", "arxiv_min_interval", float(os.getenv("ARXIV_MIN_INTERVAL", "3.0")))
+        self.rate_limiter = RateLimiter(min_interval=_interval)
 
 
     """
@@ -96,111 +95,45 @@ rate_limiter = RateLimiter(min_interval=_interval)
         return papers
 
 
-def fetch_historical_batch(category: str, batch_size: int = 50, start_offset: int = 0) -> tuple[list[Paper], bool]:
-    rate_limiter.wait()
-    try:
-        # Ask for enough results to reach the desired offset without materializing all
-        total_needed = start_offset + batch_size
-        search = arx.Search(
-            query=f"cat:{category}",
-            max_results=total_needed,
-            sort_by=arx.SortCriterion.SubmittedDate,
-            sort_order=arx.SortOrder.Ascending
-        )
-        results_iter = client.results(search)
-
-        # Skip up to start_offset results without storing them
-        skipped = 0
+    def fetch_historical_batch(self, category: str, batch_size: int = 50, start_offset: int = 0) -> tuple[list[Paper], bool]:
+        self.rate_limiter.wait()
         try:
-            while skipped < start_offset:
-                next(results_iter)
-                skipped += 1
-        except StopIteration:
-            # Nothing left at or beyond this offset
-            logger.info(f"No more historical results for {category} at offset {start_offset}")
-            return [], False
+            # Ask for enough results to reach the desired offset without materializing all
+            total_needed = start_offset + batch_size
+            search = arx.Search(
+                query=f"cat:{category}",
+                max_results=total_needed,
+                sort_by=arx.SortCriterion.SubmittedDate,
+                sort_order=arx.SortOrder.Ascending
+            )
+            results_iter = self.client.results(search)
 
-        papers: list[Paper] = []
-        for _ in range(batch_size):
+            # Skip up to start_offset results without storing them
+            skipped = 0
             try:
-                result = next(results_iter)
+                while skipped < start_offset:
+                    next(results_iter)
+                    skipped += 1
             except StopIteration:
-                break
-            if result:
-                paper = Paper.from_arxiv(result)
-                paper.category = category
-                papers.append(paper)
+                # Nothing left at or beyond this offset
+                self.logger.info(f"No more historical results for {category} at offset {start_offset}")
+                return [], False
 
-        has_more = len(papers) == batch_size
-        logger.info(f"Fetched {len(papers)} historical papers for {category} (offset: {start_offset})")
-        return papers, has_more
+            papers: list[Paper] = []
+            for _ in range(batch_size):
+                try:
+                    result = next(results_iter)
+                except StopIteration:
+                    break
+                if result:
+                    paper = Paper.from_arxiv(result)
+                    paper.category = category
+                    papers.append(paper)
 
-    except Exception as e:
-        logger.error(f"Error fetching historical batch for {category}: {e}")
-        return [], False
+            has_more = len(papers) == batch_size
+            self.logger.info(f"Fetched {len(papers)} historical papers for {category} (offset: {start_offset})")
+            return papers, has_more
 
-
-"""
-///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-FROM HERE ON ONLY SOME TESTING FUNCTIONS WILL BE DECLARED - THESE WILL LATER MOVE TO UNIT TESTS - IGNORE FOR NOW!
-
-"""
-
-"""
-04-May-2025 - Basti
-Abstract: Simple method to test (as of now the API of testing_arxiv - should not have much use for production)
-Args:
-Returns: 
-"""
-def testing_arxiv():
-    search = arx.Search(
-        query="submittedDate:[NOW-7DAYS TO NOW]",
-        max_results = 10,
-        sort_by = arx.SortCriterion.SubmittedDate,
-        sort_order = arx.SortOrder.Descending
-    )
-
-    results = client.results(search)
-
-    for r in results:
-        logger.debug(f"Title: {r.title}\nDate: {r.published}")
-
-
-"""
-04-May-2025 - Basti
-Abstract: Simple method to fetch the newest arXiv Results using feedparser instead of the arXiv Python API
-Args:
-Returns:
-"""
-def testing_feedparser():
-    url = "http://export.arxiv.org/api/query?search_query=all:*&sortBy=lastUpdatedDate&sortOrder=descending&max_results=5&version=2"
-    feed = feedparser.parse(url)
-    logger.debug(len(feed.entries))
-    for entry in feed.entries:
-        logger.debug(f"Title: {entry.title}")
-        logger.debug(f"Updated: {entry.updated}")
-        logger.debug(f"Link: {entry.link}")
-        logger.debug('-' * 80)
-
-
-
-"""
-04-May-2025 - Basti
-Abstract: Tests if every category is accessible and is reachable through the arXiv API
-Args:
-Returns: 
-
-@DeprecationWarning
-def test_categories():
-    print("Deprecated now! Categories have all passed the check as of 4th May 2025")
-    client = arx.Client()
-    for cat in categories:
-        current_search = arx.Search(query=f"{cat}", max_results=1, sort_by=arx.SortCriterion.SubmittedDate, sort_order=arx.SortOrder.Descending)
-        results = list(client.results(current_search))
-        if len(results) == 0:
-            print(f"Failed for category: {cat}")
-            break
-
-        print(f"Category {cat} passed!")
-"""
-
+        except Exception as e:
+            self.logger.error(f"Error fetching historical batch for {category}: {e}")
+            return [], False
