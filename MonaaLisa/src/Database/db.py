@@ -169,7 +169,7 @@ Additionally:
 Checking by hash could be a way of checking for updates to a paper, but that is not implemented yet.
 """
 def paper_exists(session, paper: Paper):
-    return session.query(DBPaper).filter_by(entry_id=paper.entry_id).first() is not None
+    return session.query(DBPaper).filter_by(hash=paper.hash).first() is not None
 
 
 """ 28.09. Nico
@@ -211,7 +211,7 @@ def create_program_run():
     session = SessionLocal()
     try:
         session.query(ProgramRun).filter_by(is_active="true").update({"is_active": "false"})
-        run = ProgramRun(start_date=datetime.now(), is_active="true")
+        run = ProgramRun(start_date=datetime.now(timezone.utc).replace(tzinfo=None), is_active="true")
         session.add(run)
         session.commit()
         logger.info(f"Created ProgramRun ID: {run.id}")
@@ -341,7 +341,7 @@ def mark_category_historically_completed(program_run_id, category, oldest_seen_d
         if not record:
             logger.error(f"No start entry to complete for {category} in run {program_run_id}")
             return False
-        record.end_date = datetime.now()
+        record.end_date = datetime.now(timezone.utc).replace(tzinfo=None)
         if record.goal_reached != "true":
             record.goal_reached = "true"
             record.reached_date = datetime.now()

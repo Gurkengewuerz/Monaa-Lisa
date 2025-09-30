@@ -59,7 +59,7 @@ class Paper:
     @classmethod
     def from_arxiv(cls, arxiv_result: arx.Result):
         return cls(
-            entry_id=arxiv_result.entry_id.split("/")[-1],  # Extract the last part of the entry_id
+            entry_id=arxiv_result.entry_id.replace("http://arxiv.org/", ""),  # Remove base URL
             title=arxiv_result.title,
             authors=[str(a) for a in arxiv_result.authors], # TODO # Normalize authors as objects
             abstract=arxiv_result.summary,

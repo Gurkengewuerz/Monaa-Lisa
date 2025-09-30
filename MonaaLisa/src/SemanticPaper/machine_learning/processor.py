@@ -1,12 +1,7 @@
-import concurrent
 import threading
-from collections import defaultdict
-from concurrent.futures import ThreadPoolExecutor
-
 import numpy as np
 from object.paper import Paper
 from object.embedding import Embedding
-from sklearn.metrics.pairwise import cosine_similarity
 from util.logger import Logger
 from SemanticPaper.machine_learning.model import Model
 

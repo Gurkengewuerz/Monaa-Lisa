@@ -1,9 +1,7 @@
-import numpy as np
 from sentence_transformers import SentenceTransformer
-from ..api.arxiv import fetch_latest_paper, read_meta, CS_CG_CATEGORY
+from ..api.arxiv import ArxivAPI
 from sklearn.manifold import TSNE
 import numpy as np
-import arxiv as arx
 import torch
 import os
 from object.paper import Paper
@@ -19,12 +17,13 @@ Annotation: largely refactored Bastians code here to fit the new structure
 """
 class Model:
 
-    def __init__(self):
+    def __init__(self, arxiv_client: ArxivAPI):
         """
         Testing it as of 4th May 2025 with this Pretrained Sentence Transformer
         replace this later with SciBERT or allenai/specter
         """
         self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+        self._arxiv = arxiv_client
         model_name = cfg.get("semanticpaper", "transformer_model", os.getenv("TRANSFORMER_MODEL", "all-MiniLM-L6-v2"))
         self._transformer = SentenceTransformer(model_name)
         self._model = self._transformer.to(self.device)
@@ -53,7 +52,7 @@ class Model:
     """
     def parse_full_data(self, paper: Paper, chunk_size: int = 512):
         self.logger.info("Reading current paper...\n")
-        read_meta(paper)
+        self._arxiv.read_meta(paper)
 
         full_text = paper.get_formatted_text()
         if not full_text:

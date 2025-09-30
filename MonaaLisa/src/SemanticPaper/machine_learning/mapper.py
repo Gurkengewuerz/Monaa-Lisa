@@ -1,10 +1,8 @@
 import concurrent
 from collections import defaultdict
 from concurrent.futures import ThreadPoolExecutor
-
 import numpy as np
 from sklearn.metrics.pairwise import cosine_similarity
-
 from object.paper import Paper
 from object.relation import Relation
 from util.logger import Logger

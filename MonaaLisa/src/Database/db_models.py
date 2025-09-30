@@ -54,6 +54,7 @@ class DBPaperRelation(db_base):
 
 """
 17-July-2025 - Lenio
+Updated 30 09 Nico
 Abstract: Represents a reference found in a paper.
 Parameters:
 - belonging_paper_id: The ID of the first paper.
@@ -63,12 +64,13 @@ Parameters:
 class DBReference(db_base):
     __tablename__ = "reference"
     id = Column(Integer, primary_key=True, autoincrement=True)
-    belonging_paper_entry_id = Column(String, ForeignKey("paper.entry_id"), primary_key=True)
+    belonging_paper_entry_id = Column(String, ForeignKey("paper.entry_id"), index=True, nullable=False)
     title = Column(String, nullable=False)
 
 
 """
 21-August-2025 - Lenio
+Updated 30 09 Nico
 Abstract: Represents an embedding in the database.
 Parameters:
 - content: The content of the embedding, stored as a JSON object.
@@ -76,7 +78,7 @@ Parameters:
 class DBEmbedding(db_base):
     __tablename__ = "embedding"
     id = Column(Integer, primary_key=True, autoincrement=True)
-    belonging_paper_entry_id = Column(String, ForeignKey("paper.entry_id"), primary_key=True)
+    belonging_paper_entry_id = Column(String, ForeignKey("paper.entry_id"), index=True, unique=True, nullable=False)
     content = Column(JSON, nullable=False)
 
 
@@ -89,9 +91,11 @@ Parameters:
 - is_active: String flag indicating if the run is active.
 """
 class ProgramRun(db_base):
-    __tablename__ = "program_runs"
+    # 30-September-2025 - Lenio - Changed to singular form "program_run" for the table name
+    __tablename__ = "program_run"
     id = Column(Integer, primary_key=True, autoincrement=True)
     start_date = Column(DateTime, nullable=False)
+    # Nico - Wert "True"|"False" von String in echten Boolean geändert
     is_active = Column(String, default="true")
 
 """
@@ -109,12 +113,15 @@ Parameters:
 - reached_date: Timestamp when the goal was reached.
 """
 class HistoricalCompletion(db_base):
-    __tablename__ = "historical_completions"
+    # 30-September-2025 - Lenio - Changed to singular form "historical_completion" for the table name
+    __tablename__ = "historical_completion"
     id = Column(Integer, primary_key=True, autoincrement=True)
-    program_run_id = Column(Integer, ForeignKey("program_runs.id"), nullable=False)
+    program_run_id = Column(Integer, ForeignKey("program_run.id"), nullable=False)
     category = Column(String, nullable=False)
     start_date = Column(DateTime, nullable=False)
     end_date = Column(DateTime, nullable=True)
     goal_oldest_paper_date = Column(DateTime, nullable=True)
     goal_reached = Column(String, default="false")
     reached_date = Column(DateTime, nullable=True)
+    # Nico 30.09. - in der Funktionsbeschreibung steht oldest_paper_date, das Feld fehlt bis dato
+    oldest_paper_date = Column(DateTime, nullable=True)  # ← Fortschrittsmarker jetzt da
