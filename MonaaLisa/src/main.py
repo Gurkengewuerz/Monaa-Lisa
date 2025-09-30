@@ -9,10 +9,8 @@ from dotenv import load_dotenv
 from config import cfg
 from SemanticPaper.machine_learning.model import Model
 from SemanticPaper.config.category_loader import get_semanticpaper_categories
-import os
 import threading
 import faulthandler
-import time
 import os
 import signal
 import sys

@@ -76,7 +76,7 @@ class ArxivAPI:
     
     Returns: List -> of fetches papers
     """
-    def fetch_papers(self, category: str = "CS_CG_CATEGORY", amount: int = 10) -> list:
+    def fetch_papers(self, category: str = "cs.CG", amount: int = 10) -> list:
         self.rate_limiter.wait()
         search = arx.Search(
             query=f"cat:{category}",

@@ -1,5 +1,7 @@
 from playground import Playground
+import arxiv as arx
 from SemanticPaper.api.arxiv import ArxivAPI
+from object.paper import Paper
 
 
 class ArxivPlayground(Playground):
@@ -13,5 +15,9 @@ class ArxivPlayground(Playground):
     def test(self):
         self.logger.info("Testing arxiv functionalities...")
         latest = self.arxiv_client.fetch_latest_paper()
-        self.logger.info(f"Paper attributes: {attributes}")
-        self.logger.info(f"Latest Paper Title: {latest.title}")
+        papers = arx.Search(query="Theta and zeta functions for odd-dimensional locally symmetric spaces of rank one", max_results=5).results()
+        self.logger.info(f"Paper attributes: ")
+        self.logger.info(f"Latest Paper Entry ID: {latest.entry_id}")
+        for paper in papers:
+            xpaper = Paper.from_arxiv(paper)
+            self.logger.info(f"Paper Entry ID: {xpaper.entry_id}")
