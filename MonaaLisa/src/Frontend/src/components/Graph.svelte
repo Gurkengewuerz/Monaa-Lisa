@@ -78,7 +78,7 @@
 
     //set all nodes to a semi-transparent black to help focus on selections
     graph.forEachNode((n: string) => {
-      graph.setNodeAttribute(n, 'color', 'rgba(0, 0, 0, 0.1)');
+      graph.setNodeAttribute(n, 'color', 'rgba(0, 0, 0, 0.25)');
     });
 
     //highlight selected node in green
