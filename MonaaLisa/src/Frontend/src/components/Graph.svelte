@@ -142,6 +142,24 @@
     //later, replace dummypapers import with api call in parent
     const dataSource = useDummyData ? dummyPapers : papers;
 
+    // compute inbound citation counts (times a paper is cited by others)
+    const inDegree = new Map<number, number>();
+    dataSource.forEach(p => inDegree.set(p.id, 0));
+    dataSource.forEach(p => {
+      p.citations.forEach(cid => {
+        if (inDegree.has(cid)) inDegree.set(cid, (inDegree.get(cid) || 0) + 1);
+      });
+    });
+    let maxIn = 0;
+    inDegree.forEach(v => { if (v > maxIn) maxIn = v; });
+    const minSize = 1;
+    const maxSize = 6;
+    const sizeFor = (count: number) => {
+      if (maxIn === 0) return minSize;
+      const t = count / maxIn;
+      return minSize + t * (maxSize - minSize);
+    };
+
     //populate graph with nodes from the selected data source
     dataSource.forEach(paper => {
       
@@ -149,14 +167,18 @@
       const scaledX = paper.tsne1 * scaleFactor;
       const scaledY = paper.tsne2 * scaleFactor;
 
+      const inCitations = inDegree.get(paper.id) || 0;
+      const nodeSize = sizeFor(inCitations);
+
       graph!.addNode(paper.id.toString(), {
         x: scaledX,
         y: scaledY,
-        size: 1.5,
+        size: nodeSize,
         label: paper.title,
         color: clusterCol[paper.cluster] || '#999999',
         originalColor: clusterCol[paper.cluster] || '#999999',
-        paper: paper
+        paper: paper,
+        inCitations // extra attribute for debugging/inspection
       });
 
       //cache paper for fast lookup
