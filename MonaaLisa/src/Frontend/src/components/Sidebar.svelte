@@ -9,16 +9,21 @@
 
   const dispatch = createEventDispatcher();
 
+  //badges next to the papers in the sidebar
+  //colors by cluster identifiers (falls back to grey when missing)
+  //REMOVE: only for testing, will be pointless when BE is implemented
   const clusterColors: Record<string, string> = {
     A: '#FF6347',
     B: '#4682B4',
     C: '#32CD32',
   };
 
+  //toggle so parent can open/close sidebar
   function toggleSidebar() {
     dispatch('toggle');
   }
 
+  //notify parent of selected paper so it can sync the selection state
   function selectPaper(paper: Paper) {
     dispatch('selectPaper', paper);
   }
