@@ -255,7 +255,7 @@
 <style>
   .sidebar-toggle {
     position: absolute;
-    right: 20px;
+    right: -5px;
     top: 50%;
     transform: translateY(-50%);
     background-color: #4a9eff;
