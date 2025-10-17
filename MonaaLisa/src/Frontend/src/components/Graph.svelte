@@ -324,7 +324,7 @@
         //debounce: delay setting selectedPaper by 100ms
         hoverTimeout = setTimeout(() => {
           selectedPaper = paperCache.get(node) || null;
-        }, 100) as unknown as number;
+        }, 200) as unknown as number;
       });
 
       renderer.on('leaveNode', () => {
