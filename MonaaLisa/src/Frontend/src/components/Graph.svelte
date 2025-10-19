@@ -359,7 +359,7 @@
         renderer!.refresh();
 
         dispatch('nodeDeselected');
-        console.log('❌ EMITTED nodeDeselected');
+        console.log('EMITTED nodeDeselected');
       });
 
       //cleanup: destroy renderer and clear cache on unmount
@@ -375,7 +375,7 @@
   .graph-container {
     width: 100%;
     height: 600px;
-    border: 1px solid #ccc;
+    border: none;
     background-color: #1e1e27;
   }
 
