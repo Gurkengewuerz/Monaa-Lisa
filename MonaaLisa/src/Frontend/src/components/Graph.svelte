@@ -101,7 +101,7 @@
       if (graph!.hasNode(citedId.toString())) {
         graph!.addEdge(nodeId, citedId.toString(), {
           color: '#FFFFFF',
-          size: 0.5
+          size: 1.5
         });
       }
     });
