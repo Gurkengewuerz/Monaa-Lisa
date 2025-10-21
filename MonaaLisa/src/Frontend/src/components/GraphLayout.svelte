@@ -68,8 +68,8 @@
 <div class="app-container">
   <!-- search component at top -->
   <Header 
-    {papers}
-    {useDummyData}
+    papers={papers as unknown as never}
+    useDummyData={useDummyData as unknown as never}
     on:filtered={handleFiltered}
   />
 
@@ -77,8 +77,8 @@
   <div class="main-content">
     <!-- graph visualization component with selection binding -->
     <Graph 
-      {papers}
-      {useDummyData}
+      papers={papers as unknown as never}
+      useDummyData={useDummyData as unknown as never}
       {selectedPaperId}
       on:nodeSelected={handleNodeSelected}
       on:nodeDeselected={handleNodeDeselected}
@@ -87,7 +87,7 @@
     <!-- sidebar component for the paper list -->
     <Sidebar 
       papers={filteredPapers}
-      {useDummyData}
+      useDummyData={useDummyData as unknown as never}
       isOpen={sidebarOpen}
       {selectedPaperId}
       on:toggle={handleToggleSidebar}
