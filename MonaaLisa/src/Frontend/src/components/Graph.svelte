@@ -71,14 +71,14 @@
     if (!graph || !renderer || !graph.hasNode(nodeId)) return;
 
     //clear all edges to reset the view
-    const edgesToRemove = graph.edges();
+    const edgesToRemove = graph!.edges();
     edgesToRemove.forEach(edge => {
-      graph.dropEdge(edge);
+      graph!.dropEdge(edge);
     });
 
     //set all nodes to a semi-transparent black to help focus on selections
-    graph.forEachNode((n: string) => {
-      graph.setNodeAttribute(n, 'color', 'rgba(0, 0, 0, 0.25)');
+    graph!.forEachNode((n: string) => {
+      graph!.setNodeAttribute(n, 'color', 'rgba(0, 0, 0, 0.25)');
     });
 
     //highlight selected node in green
@@ -111,24 +111,26 @@
     console.log('Zooming to node:', nodeId, 'Position:', nodePosition.x, nodePosition.y);
     
     const camera = renderer.getCamera();
+    // TypeScript's AnimateOptions may not include x/y directly depending on the sigma types;
+    // cast to any to allow passing x/y while keeping runtime behavior unchanged.
     camera.animatedReset({
       x: nodePosition.x,
       y: nodePosition.y,
       ratio: 0.5,  // Zoom in closer (smaller ratio = more zoomed)
       duration: 800
-    });
+    } as any);
 
     selectedNode = nodeId;
     renderer.refresh();
 
     // *** CRITICAL: EMIT EVENT TO SIDEBAR ***
     dispatch('nodeSelected', nodeId);
-    console.log('✅ EMITTED nodeSelected:', nodeId);
+    console.log('EMITTED nodeSelected:', nodeId);
   }
 
   //react to prop changes: update selection when selectedpaperid changes
   $: if (selectedPaperId && selectedPaperId !== selectedNode && graph && renderer) {
-    console.log('🔄 Graph reacting to sidebar selection:', selectedPaperId);
+    console.log('Graph reacting to sidebar selection:', selectedPaperId);
     selectNodeById(selectedPaperId);
   }
 
