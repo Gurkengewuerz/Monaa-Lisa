@@ -1,6 +1,7 @@
 <script lang="ts">
   import { createEventDispatcher, tick } from 'svelte';
   import { dummyPapers, type Paper } from '../testdata/dummyData'; //temporary import for demo data; replace with api later
+  import { clusterColors as clusterColors } from '../utils/clusterColors';
 
   /**
    * array of papers to display.
@@ -151,7 +152,7 @@
   //badges next to the papers in the sidebar
   //colors by cluster identifiers (falls back to grey when missing)
   //todo: remove when backend provides cluster colors or make dynamic
-  const clusterColors: Record<string, string> = {
+  /*const clusterColors: Record<string, string> = {
     A: '#CC6666',
     B: '#66B2B2',
     C: '#9966CC',
@@ -159,7 +160,7 @@
     E: '#6699CC',
     F: '#FF4500',
     G: '#00CED1',
-  };
+  };*/
 </script>
 
 <!-- sidebar toggle button -->
