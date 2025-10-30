@@ -4,6 +4,7 @@
   import Graph from 'graphology';
   import Sigma from 'sigma';
   import { dummyPapers, type Paper } from '../testdata/dummyData'; //temporary import for the dummy thick data; replace with api later
+  import { clusterColors as clusterCol } from '../utils/clusterColors';
 
   /**
    * array of papers to display in the graph.
@@ -52,7 +53,7 @@
 
   //cluster color mapping for visual grouping
   //todo: figure out if we even need this later on or if cluster colors are static instead of dynamic
-  const clusterCol: Record<string, string> = {
+  /*const clusterCol: Record<string, string> = {
     A: '#CC6666',
     B: '#66B2B2',
     C: '#9966CC',
@@ -60,7 +61,7 @@
     E: '#6699CC',
     F: '#FF4500',
     G: '#00CED1',
-  };
+  };*/
 
   /**
    * selects and highlights a node in the graph, updating visuals and connections.
