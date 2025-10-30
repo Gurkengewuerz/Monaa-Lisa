@@ -6,7 +6,7 @@
   .header {
     padding: 1rem;
     background-color: #2a2a35;
-    border-bottom: 1px solid #a9a9ca;
+    border-bottom: 1px solid #3a3a45;
     display: flex;
     align-items: center;
     justify-content: center;
