@@ -1,5 +1,9 @@
 /**
- * Nico August 2025
+ * Nico & Nick August 2025
+ *
+ * Ziel dieses Specs:
+ * - "Smoke Test": Lädt das TestingModule und stellt sicher, dass der Service existiert.
+ * - Hinweis: PapersService injiziert PrismaService
  */
 import { Test, TestingModule } from '@nestjs/testing';
 import { PapersService } from './papers.service';
