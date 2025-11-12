@@ -47,6 +47,25 @@ class Scheduler:
 
 
     """
+    12-November-2025 - Basti
+    Abstract: Attempts to enqueue a paper without blocking; returns False if the queue is full.
+    """
+    def _enqueue_paper(self, paper) -> bool:
+        if paper is None:
+            return False
+        try:
+            self.paper_queue.put_nowait(paper)
+            return True
+        except queue.Full:
+            self.logger.warning(
+                "Paper queue capacity (%s) reached; dropping '%s'",
+                self.QUEUE_MAX_SIZE,
+                getattr(paper, "title", "Unknown Title")
+            )
+            return False
+
+
+    """
     30-September-2025 - Lenio
     Abstract: Checks wether the scheduler is running
     Returns: bool indicating if the scheduler is running
@@ -69,7 +88,12 @@ class Scheduler:
             papers = self._arxiv_client.fetch_papers(category=cat, amount=1)
             for paper in papers:
                 if paper:
-                    self.paper_queue.put(paper)
+                    if not self._enqueue_paper(paper):
+                        self.logger.info(
+                            "Skipped enqueuing newest paper for %s because the queue is full",
+                            cat
+                        )
+                        return
                     self.logger.info(f"Enqueued paper: {paper.title}")
 
     """
@@ -117,10 +141,17 @@ class Scheduler:
                 self._arxiv_client.get_rate_limiter().wait()
                 papers, has_more = self._arxiv_client.fetch_historical_batch(cat, batch_size=50, start_offset=offset)
                 if papers:
+                    enqueued_count = 0
                     for paper in papers:
                         if paper:
-                            self.paper_queue.put(paper)
-                    self.logger.info(f"Enqueued {len(papers)} historical papers for {cat}")
+                            if not self._enqueue_paper(paper):
+                                self.logger.info(
+                                    "Queue full while enqueuing historical papers for %s; remaining batch dropped",
+                                    cat
+                                )
+                                break
+                            enqueued_count += 1
+                    self.logger.info(f"Enqueued {enqueued_count} historical papers for {cat}")
                     try:
                         min_date = min(p.published for p in papers if p is not None)
                         update_historical_progress(self._current_program_run_id, cat, min_date)
