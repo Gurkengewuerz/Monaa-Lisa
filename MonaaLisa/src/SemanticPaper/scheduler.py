@@ -57,10 +57,9 @@ class Scheduler:
             self.paper_queue.put_nowait(paper)
             return True
         except queue.Full:
+            title = getattr(paper, "title", "Unknown Title")
             self.logger.warning(
-                "Paper queue capacity (%s) reached; dropping '%s'",
-                self.QUEUE_MAX_SIZE,
-                getattr(paper, "title", "Unknown Title")
+                f"Paper queue capacity ({self.QUEUE_MAX_SIZE}) reached; dropping '{title}'"
             )
             return False
 
