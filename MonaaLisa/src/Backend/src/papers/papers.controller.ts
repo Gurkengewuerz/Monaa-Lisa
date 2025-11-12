@@ -51,16 +51,41 @@ export class PapersController {
 
   // Nick - November 2025
   // Die Möglichkeiten mehrere Papers zu finden und anschließend im FE zu filtern soll gegeben sein
+  /**
+   * GET /papers
+   * Listet Papers mit Suche, Filtern und Pagination.
+   *
+   * Query-Parameter (QueryPaperDto):
+   * - search: Volltext-like über title/authors/summary
+   * - category: exakter Match
+   * - dateFrom/dateTo: Datumsbereich (published)
+   * - skip/take: Pagination
+   *
+   * Rückgabe: { items, total, skip, take }
+   */
   @Get()
   findMany(@Query() q: QueryPaperDto) {
     return this.papers.findMany(q);
   }
 
+  /**
+   * GET /papers/:entryId
+   * Holt ein einzelnes Paper anhand der externen `entryId`.
+   * Achtung: Das ist die externe ID (z.B. aus dem Feed), nicht die DB-Primär-ID.
+   */
   @Get(':entryId')
   findOne(@Param('entryId') entryId: string) {
     return this.papers.findByEntryId(entryId);
   }
 
+  /**
+   * PATCH /papers/:entryId
+   * Aktualisiert Felder eines Papers.
+   *
+   * Verhalten:
+   * - Nur übergebene Felder werden geändert.
+   * - `published` wird nur gesetzt, wenn im DTO vorhanden.
+   */
   @Patch(':entryId')
   update(@Param('entryId') entryId: string, @Body() dto: UpdatePaperDto) {
     return this.papers.updateByEntryId(entryId, dto);
@@ -68,6 +93,10 @@ export class PapersController {
 
   // Nick - November 2025
   // Die Möglichkeiten ein paper zu löschen damit es neugeladen werden kann
+  /**
+   * DELETE /papers/:entryId
+   * Löscht ein Paper.
+   */
   @Delete(':entryId')
   remove(@Param('entryId') entryId: string) {
     return this.papers.deleteByEntryId(entryId);
