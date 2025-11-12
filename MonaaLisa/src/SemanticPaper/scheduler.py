@@ -92,7 +92,7 @@ class Scheduler:
                             "Skipped enqueuing newest paper for %s because the queue is full",
                             cat
                         )
-                        return
+                        break
                     self.logger.info(f"Enqueued paper: {paper.title}")
 
     """
