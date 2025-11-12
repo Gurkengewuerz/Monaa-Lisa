@@ -66,7 +66,7 @@ class Scheduler:
 
     """
     30-September-2025 - Lenio
-    Abstract: Checks wether the scheduler is running
+    Abstract: Checks whether the scheduler is running
     Returns: bool indicating if the scheduler is running
     """
     def is_running(self) -> bool:
