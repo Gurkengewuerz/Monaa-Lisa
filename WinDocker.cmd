@@ -169,7 +169,7 @@ if "%DB_CONTAINER%"=="" (
     docker exec -it %DB_CONTAINER% psql -U %POSTGRES_USER% -d %POSTGRES_DB% -c "\dt"
     echo.
     echo Number of papers in database:
-    docker exec -it %DB_CONTAINER% psql -U %POSTGRES_USER% -d %POSTGRES_DB% -c "SELECT count(*) FROM papers;"
+    docker exec -it %DB_CONTAINER% psql -U %POSTGRES_USER% -d %POSTGRES_DB% -c "SELECT count(*) FROM paper;"
 )
 
 echo.
