@@ -58,13 +58,19 @@ class Paper:
     """
     @classmethod
     def from_arxiv(cls, arxiv_result: arx.Result):
+        entry_id = arxiv_result.entry_id.replace("http://arxiv.org/", "")
+        pdf_url = arxiv_result.pdf_url
+        if not pdf_url:
+            slug = entry_id.split("/")[-1]
+            if slug:
+                pdf_url = f"https://arxiv.org/pdf/{slug}.pdf"
         return cls(
-            entry_id=arxiv_result.entry_id.replace("http://arxiv.org/", ""),  # Remove base URL
+            entry_id=entry_id,  # Remove base URL
             title=arxiv_result.title,
             authors=[str(a) for a in arxiv_result.authors], # TODO # Normalize authors as objects
             abstract=arxiv_result.summary,
             published=arxiv_result.published,
-            url=arxiv_result.pdf_url
+            url=pdf_url
         )
 
     """
@@ -257,8 +263,18 @@ class Paper:
         local_logger = Paper.get_grobid_logger()
         temp_file_path = None
         try:
+            pdf_url = self.url
+            if not pdf_url:
+                local_logger.warning(
+                    "No PDF URL available for '%s'; skipping Grobid extraction", self.title
+                )
+                return None
+            if not pdf_url.startswith(("http://", "https://")):
+                pdf_url = f"https://{pdf_url.lstrip('/')}"
+                # Persist sanitized URL so future calls reuse it
+                self.url = pdf_url
             # Download PDF with timeout and streaming to avoid blocking and large memory usage
-            response = requests.get(self.url, stream=True, timeout=(5, 60))
+            response = requests.get(pdf_url, stream=True, timeout=(5, 60))
             if not response.ok:
                 raise Exception(f"Failed to download PDF: HTTP Error Code is - {response.status_code}")
 
