@@ -152,6 +152,11 @@ export class PapersService {
   }
 }
 
+
+/**
+ *
+ * Konvertiert einen unbekannten Wert in eine endliche Zahl, wobei der angegebene Fallback zurückgegeben wird, wenn die Konvertierung nicht möglich ist.
+ */
 function toNumber(value: unknown, fallback: number): number {
   const parsed =
     typeof value === 'string' && value.trim() !== ''
