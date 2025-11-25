@@ -74,18 +74,18 @@ def paper_worker(worker_id, known_hashes):
         if processor.prepare_paper(known_hashes):
             embedding = processor.create_structured_embedding()
             if embedding is not None:
-                tsne = (0.0, 0.0)
-                """
-                21-August-2025 - Lenio
-                Abstract: Save TSNE into the appropriate field of the paper object, compare the papers embedding to the existing embeddings
-                """
-                data = {"tsne1": tsne[0], "tsne2": tsne[1]}
-                processor.paper.tsne = data
                 processor.paper.embedding = embedding
                 mapper = Mapper(processor.paper)
                 # Get all embeddings from the cache
                 with embedding_cache_lock:
                     current_embeddings = embedding_cache.copy()
+
+                tsne_coords = processor.compute_tsne_coordinates(current_embeddings)
+                if tsne_coords is not None:
+                    processor.paper.tsne = {"tsne1": tsne_coords[0], "tsne2": tsne_coords[1]}
+                else:
+                    processor.paper.tsne = {"tsne1": 0.0, "tsne2": 0.0}
+
                 relations = mapper.map_paper(current_embeddings)
                 logger.info(f"Found {len(relations)} relations for {paper.title}")
                 if save_paper_to_db(processor.paper):
