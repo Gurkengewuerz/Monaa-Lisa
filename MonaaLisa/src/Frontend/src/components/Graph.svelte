@@ -3,7 +3,7 @@
   import { onMount } from 'svelte';
   import Graph from 'graphology';
   import Sigma from 'sigma';
-  import { dummyPapers, type Paper } from '../testdata/dummyData'; //temporary import for the dummy thick data; replace with api later
+  import type { Paper } from '$lib/types/paper';
   import { clusterColors as clusterCol } from '../utils/clusterColors';
 
   /**
@@ -25,7 +25,7 @@
    * when true, uses dummypapers instead of the papers prop.
    * set to true for demo, false for real data.
    * @type {boolean}
-   */
+   
   export let useDummyData: boolean = true;
 
   // DEMO-ONLY: easy-to-remove organic layout pass to make dummy clusters look organic (no FA2).
@@ -35,7 +35,7 @@
   // DEMO-ONLY: global compression factor (0..1). Lower brings clusters closer together.
   // Remove by deleting this export and the block labeled "DEMO-ONLY GLOBAL COMPRESSION" below.
   export let demoClusterCompression: number = 0.45;
-
+*/
   //internal state variables for component management
   let container: HTMLDivElement | null = null;
   let selectedPaper: Paper | null = null;
@@ -73,7 +73,7 @@
 
     //clear all edges to reset the view
     const edgesToRemove = graph!.edges();
-    edgesToRemove.forEach(edge => {
+    edgesToRemove.forEach((edge: string) => {
       graph!.dropEdge(edge);
     });
 
@@ -87,20 +87,21 @@
 
     //retrieve paper data and collect only direct citations (no related or citing papers)
     const paper = (graph.getNodeAttributes(nodeId) as any).paper as Paper;
-    const relatedNodes = new Set<number>(paper.citations); //only citations
+    selectedPaper = paper;
+    const relatedNodes = new Set<string>(paper.citations);
 
     //highlight related nodes in yellow
     relatedNodes.forEach(relatedId => {
-      if (graph!.hasNode(relatedId.toString())) {
-        graph!.setNodeAttribute(relatedId.toString(), 'color', '#FFFF00');
+      if (graph!.hasNode(relatedId)) {
+        graph!.setNodeAttribute(relatedId, 'color', '#FFFF00');
       }
     });
 
     //add edges only for citations
     //edges to cited papers
     paper.citations.forEach(citedId => {
-      if (graph!.hasNode(citedId.toString())) {
-        graph!.addEdge(nodeId, citedId.toString(), {
+      if (graph!.hasNode(citedId)) {
+        graph!.addEdge(nodeId, citedId, {
           color: '#FFFFFF',
           size: 1.5
         });
@@ -139,15 +140,12 @@
     //initialize graphology graph for data storage
     graph = new Graph();
 
-    //determine data source: use dummypapers if flag is set, otherwise use papers prop
-    //to use dummy data: set usedummydata={true} in parent component
-    //to use real data: pass papers prop from api/db and set usedummydata={false}
-    //later, replace dummypapers import with api call in parent
-    const dataSource = useDummyData ? dummyPapers : papers;
+    // no more dummy data :D
+    const dataSource = papers;
 
     // compute inbound citation counts (times a paper is cited by others)
-    const inDegree = new Map<number, number>();
-    dataSource.forEach(p => inDegree.set(p.id, 0));
+    const inDegree = new Map<string, number>();
+    dataSource.forEach(p => inDegree.set(p.entry_id, 0));
     dataSource.forEach(p => {
       p.citations.forEach(cid => {
         if (inDegree.has(cid)) inDegree.set(cid, (inDegree.get(cid) || 0) + 1);
@@ -170,10 +168,10 @@
       const scaledX = paper.tsne1 * scaleFactor;
       const scaledY = paper.tsne2 * scaleFactor;
 
-      const inCitations = inDegree.get(paper.id) || 0;
+      const inCitations = inDegree.get(paper.entry_id) || 0;
       const nodeSize = sizeFor(inCitations);
 
-      graph!.addNode(paper.id.toString(), {
+      graph!.addNode(paper.entry_id, {
         x: scaledX,
         y: scaledY,
         size: nodeSize,
@@ -185,127 +183,8 @@
       });
 
       //cache paper for fast lookup
-      paperCache.set(paper.id.toString(), paper);
+      paperCache.set(paper.entry_id, paper);
     });
-
-    // --- DEMO-ONLY ORGANIC LAYOUT (jitter + rotate + compress) ---
-    // Remove this entire block to disable the organic pass for demos.
-    if (useDummyData && organicDemoLayout) {
-      const g = graph!;
-      const nodes = g.nodes();
-      if (nodes.length > 0) {
-        // gaussian sampler
-        const randn = () => {
-          const u = 1 - Math.random();
-          const v = 1 - Math.random();
-          return Math.sqrt(-2 * Math.log(u)) * Math.cos(2 * Math.PI * v);
-        };
-
-        // compute global center and per-cluster centroids
-        let gx = 0, gy = 0;
-        const centroids = new Map<string, { x: number; y: number; c: number }>();
-
-        nodes.forEach(n => {
-          const a = g.getNodeAttributes(n) as any;
-          gx += a.x; gy += a.y;
-          const cl = (a.paper?.cluster as string) ?? 'U';
-          const cur = centroids.get(cl) ?? { x: 0, y: 0, c: 0 };
-          cur.x += a.x; cur.y += a.y; cur.c += 1;
-          centroids.set(cl, cur);
-        });
-        gx /= nodes.length; gy /= nodes.length;
-        centroids.forEach((v, k) => { v.x /= v.c; v.y /= v.c; centroids.set(k, v); });
-
-        // random small rotation per cluster
-        const rotations = new Map<string, number>();
-        centroids.forEach((_, cl) => rotations.set(cl, ((Math.random() * 40 - 20) * Math.PI) / 180));
-
-        // parameters tuned for natural look and speed
-        const jitter = 0.35;        // gaussian position noise
-        const roundnessPull = 4; // <1 pulls slightly toward centroid
-        const globalSquash = 12;  // <1 brings clusters closer together
-        const edgeSoften = 0.22;    // soften square edges via radial distortion
-        const globalRot = ((Math.random() * 20 - 10) * Math.PI) / 180;
-
-        nodes.forEach(n => {
-          const a = g.getNodeAttributes(n) as any;
-          const cl = (a.paper?.cluster as string) ?? 'U';
-          const c = centroids.get(cl)!;
-
-          // vector from cluster centroid
-          const vx = a.x - c.x;
-          const vy = a.y - c.y;
-
-          // per-cluster rotation to avoid axis-aligned blocks
-          const rot = rotations.get(cl) || 0;
-          const rx = Math.cos(rot) * vx - Math.sin(rot) * vy;
-          const ry = Math.sin(rot) * vx + Math.cos(rot) * vy;
-
-          // radial distortion to round off grid/square boundaries
-          const ang = Math.atan2(ry, rx);
-          const r = Math.hypot(rx, ry);
-          const r2 = r * (1 - edgeSoften + edgeSoften * Math.sin(2 * ang));
-
-          const base = r === 0 ? 1 : r;
-          let nxRel = (rx / base) * r2 + randn() * jitter;
-          let nyRel = (ry / base) * r2 + randn() * jitter;
-
-          // gentle centroid pull
-          nxRel *= roundnessPull;
-          nyRel *= roundnessPull;
-
-          // recompose around cluster centroid
-          let nx = c.x + nxRel;
-          let ny = c.y + nyRel;
-
-          // compress toward global center (reduces big gaps)
-          nx = gx + (nx - gx) * globalSquash;
-          ny = gy + (ny - gy) * globalSquash;
-
-          g.setNodeAttribute(n, 'x', nx);
-          g.setNodeAttribute(n, 'y', ny);
-        });
-
-        // tiny global rotation to remove any grid feel
-        if (Math.abs(globalRot) > 0.01) {
-          nodes.forEach(n => {
-            const a = g.getNodeAttributes(n) as any;
-            const tx = a.x - gx;
-            const ty = a.y - gy;
-            const rx = Math.cos(globalRot) * tx - Math.sin(globalRot) * ty;
-            const ry = Math.sin(globalRot) * tx + Math.cos(globalRot) * ty;
-            g.setNodeAttribute(n, 'x', gx + rx);
-            g.setNodeAttribute(n, 'y', gy + ry);
-          });
-        }
-      }
-    }
-    // --- END DEMO-ONLY ORGANIC LAYOUT ---
-
-    // --- DEMO-ONLY GLOBAL COMPRESSION (brings clusters closer to the global center) ---
-    // Remove this entire block to disable the global compression for demos.
-    if (useDummyData && demoClusterCompression < 1) {
-      const g = graph!;
-      const nodes = g.nodes();
-      if (nodes.length > 0) {
-        let gx = 0, gy = 0;
-        nodes.forEach(n => {
-          const a = g.getNodeAttributes(n) as any;
-          gx += a.x; gy += a.y;
-        });
-        gx /= nodes.length; gy /= nodes.length;
-
-        const ratio = Math.max(0.05, Math.min(1, demoClusterCompression));
-        nodes.forEach(n => {
-          const a = g.getNodeAttributes(n) as any;
-          const nx = gx + (a.x - gx) * ratio;
-          const ny = gy + (a.y - gy) * ratio;
-          g.setNodeAttribute(n, 'x', nx);
-          g.setNodeAttribute(n, 'y', ny);
-        });
-      }
-    }
-    // --- END DEMO-ONLY GLOBAL COMPRESSION ---
 
     //initialize sigma renderer for visualization
     if (container) {
@@ -320,7 +199,7 @@
       });
 
       //handle node hover: show paper details with debounce
-      renderer.on('enterNode', ({ node }) => {
+      renderer.on('enterNode', ({ node }: { node: string }) => {
         //clear previous timeout
         if (hoverTimeout) clearTimeout(hoverTimeout);
         
@@ -337,7 +216,7 @@
       });
 
       // *** FIXED CLICK HANDLER - NO DUPLICATE DISPATCH ***
-      renderer.on('clickNode', ({ node }) => {
+      renderer.on('clickNode', ({ node }: { node: string }) => {
         console.log('🖱️ CLICKED NODE:', node);
         selectNodeById(node); // This emits the event internally
       });
@@ -345,6 +224,7 @@
       //handle stage click: deselect and reset view
       renderer.on('clickStage', () => {
         selectedNode = null;
+        selectedPaper = null;
 
         //restore original node colors
         graph!.forEachNode((n: string) => {
@@ -354,7 +234,7 @@
 
         //remove all edges
         const edgesToRemove = graph!.edges();
-        edgesToRemove.forEach(edge => {
+        edgesToRemove.forEach((edge: string) => {
           graph!.dropEdge(edge);
         });
 
@@ -419,7 +299,7 @@
     <h3>{selectedPaper.title}</h3>
     <p><strong>authors:</strong> {selectedPaper.authors}</p>
     <p><strong>summary:</strong> {selectedPaper.summary}</p>
-    <p><strong>published:</strong> {new Date(selectedPaper.published).toLocaleDateString()}</p>
+    <p><strong>published:</strong> {selectedPaper.published ? new Date(selectedPaper.published).toLocaleDateString() : 'Unbekannt'}</p>
     <p><strong>citations:</strong> {selectedPaper.citations.length}</p>
   </div>
 {/if}
