@@ -19,6 +19,7 @@
     void loadPapers();
   });
 
+  // lädt Papers vom Backend
   async function loadPapers() {
     loading = true;
     error = null;
@@ -54,6 +55,7 @@
     }
   }
 
+  // normalisiert rohes Paper-Objekt vom Backend in internes Paper-Format
   function normalizePaper(raw: ApiPaper, index: number, total: number): Paper | null {
     if (!raw || !raw.entry_id || !raw.title) {
       return null;
@@ -83,6 +85,7 @@
     };
   }
 
+  // formatiert Autorenliste als String
   function formatAuthors(authors: ApiPaper['authors']): string {
     if (!authors) return '';
     if (Array.isArray(authors)) {
@@ -91,6 +94,7 @@
     return authors;
   }
 
+  // wandelt verschiedene Formate von Zitationsangaben in ein String-Array um
   function deriveStringArray(value: unknown): string[] {
     if (!value) return [];
     if (Array.isArray(value)) {
@@ -124,6 +128,7 @@
     return [];
   }
 
+  // holt tSNE Koordinaten aus verschiedenen möglichen Formaten
   function deriveTsne(value: unknown, index: number, total: number) {
     const fallback = circlePosition(index, total);
     if (Array.isArray(value) && value.length >= 2) {
@@ -145,6 +150,7 @@
     return fallback;
   }
 
+  // fallback methode falls keine tSNE Koordinaten vorhanden sind - verteilt Punkte im Kreis
   function circlePosition(index: number, total: number) {
     const angle = (index / Math.max(total, 1)) * Math.PI * 2;
     const radius = 10;
