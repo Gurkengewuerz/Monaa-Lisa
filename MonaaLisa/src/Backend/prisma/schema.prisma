@@ -18,7 +18,7 @@ model Paper {
   id        Int      @id @default(autoincrement())
   entry_id  String   @unique
   title     String
-  authors   String[]
+  authors   String
   summary   String
   published DateTime?
   category  String?
@@ -27,41 +27,53 @@ model Paper {
   citations Json?
   tsne      Json?
   added     DateTime
+
+  @@map("paper")
 }
 
 model PaperRelation {
   source_id  String @map("source_id")
   target_id  String @map("target_id")
   confidence Float
+
   @@id([source_id, target_id])
+  @@map("paper_relation")
 }
 
 model Reference {
   id                      Int    @id @default(autoincrement())
   belonging_paper_entry_id String
   title                   String
+
+  @@map("reference")
 }
 
 model Embedding {
   id                      Int    @id @default(autoincrement())
   belonging_paper_entry_id String @unique
   content                 Json
+
+  @@map("embedding")
 }
 
 model ProgramRun {
   id        Int      @id @default(autoincrement())
   start_date DateTime
-  is_active Boolean  @default(true)
+  is_active String   @default("true")
+
+  @@map("program_run")
 }
 
 model HistoricalCompletion {
-  id                    Int      @id @default(autoincrement())
-  program_run_id        Int
-  category              String
-  start_date            DateTime
-  end_date              DateTime?
-  oldest_paper_date     DateTime?
+  id                     Int      @id @default(autoincrement())
+  program_run_id         Int
+  category               String
+  start_date             DateTime
+  end_date               DateTime?
   goal_oldest_paper_date DateTime?
-  goal_reached          Boolean  @default(false)
-  reached_date          DateTime?
+  goal_reached           String   @default("false")
+  reached_date           DateTime?
+  oldest_paper_date      DateTime?
+
+  @@map("historical_completion")
 }

@@ -1,6 +1,6 @@
 <script lang="ts">
   import { createEventDispatcher, tick } from 'svelte';
-  import { dummyPapers, type Paper } from '../testdata/dummyData'; //temporary import for demo data; replace with api later
+  import type { Paper } from '$lib/types/paper';
   import { clusterColors as clusterColors } from '../utils/clusterColors';
 
   /**
@@ -9,14 +9,6 @@
    * @type {Paper[]}
    */
   export let papers: Paper[] = [];
-
-  /**
-   * flag to use dummy data for showcasing.
-   * when true, uses dummypapers instead of the papers prop.
-   * set to true for demo, false for real data.
-   * @type {boolean}
-   */
-  export let useDummyData: boolean = true;
 
   /**
    * control for sidebar visibility.
@@ -32,22 +24,18 @@
 
   const dispatch = createEventDispatcher();
 
-  //determine data source: use dummypapers if flag is set, otherwise use papers prop
-  //to use dummy data: set usedummydata={true} in parent component
-  //to use real data: pass papers prop from api/db and set usedummydata={false}
-  //later, replace dummypapers import with api call in parent
-  $: dataSource = useDummyData ? dummyPapers : papers;
+  $: dataSource = papers;
 
   // UI state
   let query = '';
   let focusSelected = false; // if true, only the selected paper is shown
-  let expandedCitations = new Set<number>(); // paper.id values with expanded citations
+  let expandedCitations = new Set<string>();
   let localSelected: Paper | null = null; // local selected for immediate display
 
   // *** BULLETPROOF REACTIVE - WAITS FOR DATA ***
   $: {
     if (selectedPaperId && dataSource && dataSource.length > 0) {
-      const foundPaper = dataSource.find((p) => p.id.toString() === selectedPaperId);
+      const foundPaper = dataSource.find((p) => p.entry_id === selectedPaperId);
       
       localSelected = foundPaper || null;
       focusSelected = true;
@@ -83,10 +71,10 @@
 
   function sortSelectedFirst(list: Paper[]) {
     if (!localSelected) return list;
-    const selId = localSelected.id;
+    const selId = localSelected.entry_id;
     return list.slice().sort((a, b) => {
-      if (a.id === selId && b.id !== selId) return -1;
-      if (b.id === selId && a.id !== selId) return 1;
+      if (a.entry_id === selId && b.entry_id !== selId) return -1;
+      if (b.entry_id === selId && a.entry_id !== selId) return 1;
       return 0;
     });
   }
@@ -120,11 +108,11 @@
     dispatch('toggle');
   }
 
-  function toggleCitations(paperId: number) {
-    if (expandedCitations.has(paperId)) {
-      expandedCitations.delete(paperId);
+  function toggleCitations(paperEntryId: string) {
+    if (expandedCitations.has(paperEntryId)) {
+      expandedCitations.delete(paperEntryId);
     } else {
-      expandedCitations.add(paperId);
+      expandedCitations.add(paperEntryId);
     }
     expandedCitations = new Set(expandedCitations); // trigger reactivity
   }
@@ -138,14 +126,14 @@
     // Scroll to the selected paper
     tick().then(() => {
       const el = document.querySelector(
-        `[data-paper-id="${paper.id}"]`
+        `[data-paper-id="${paper.entry_id}"]`
       ) as HTMLElement | null;
       if (el) el.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
     });
   }
 
-  function selectCitedPaper(citedId: number) {
-    const target = dataSource.find((p) => p.id === citedId);
+  function selectCitedPaper(citedId: string) {
+    const target = dataSource.find((p) => p.entry_id === citedId);
     if (target) selectPaper(target);
   }
 
@@ -197,11 +185,11 @@
     {#if displayedPapers.length === 0}
       <div class="empty">No papers found.</div>
     {:else}
-      {#each displayedPapers as paper (paper.id)}
+      {#each displayedPapers as paper (paper.entry_id)}
         <div 
           class="paper-item" 
-          class:selected={selectedPaperId === paper.id.toString()}
-          data-paper-id={paper.id}
+          class:selected={selectedPaperId === paper.entry_id}
+          data-paper-id={paper.entry_id}
           on:click|stopPropagation={() => selectPaper(paper)}
         >
           <div class="paper-cluster" style="background-color: {clusterColors[paper.cluster] || '#999999'}">
@@ -210,21 +198,25 @@
           <div class="paper-info">
             <h4>{paper.title}</h4>
             <p class="paper-authors">{paper.authors}</p>
-            <p class="paper-summary">{paper.summary.substring(0, 100)}...</p>
+            <p class="paper-summary">
+              {paper.summary.length > 100
+                ? `${paper.summary.substring(0, 100)}...`
+                : paper.summary}
+            </p>
             <div class="paper-meta">
               <button
                 class="citations"
-                on:click|stopPropagation={() => toggleCitations(paper.id)}
+                on:click|stopPropagation={() => toggleCitations(paper.entry_id)}
               >
-                Citations ({paper.citations?.length ?? 0}) {expandedCitations.has(paper.id) ? '▾' : '▸'}
+                Citations ({paper.citations?.length ?? 0}) {expandedCitations.has(paper.entry_id) ? '▾' : '▸'}
               </button>
-              <span class="date">{new Date(paper.published).getFullYear()}</span>
+              <span class="date">{paper.published ? new Date(paper.published).getFullYear() : '—'}</span>
             </div>
 
-            {#if expandedCitations.has(paper.id) && (paper.citations?.length ?? 0) > 0}
+            {#if expandedCitations.has(paper.entry_id) && (paper.citations?.length ?? 0) > 0}
               <div class="cited-papers">
                 {#each paper.citations as citedId}
-                  {@const citedPaper = dataSource.find((p) => p.id === citedId)}
+                  {@const citedPaper = dataSource.find((p) => p.entry_id === citedId)}
                   {#if citedPaper}
                     <div 
                       class="cited-paper-item" 

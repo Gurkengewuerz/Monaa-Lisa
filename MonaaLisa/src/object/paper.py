@@ -7,7 +7,6 @@ from dataclasses import dataclass
 from datetime import datetime
 import arxiv as arx
 from typing import List, Optional, Dict
-import json
 
 import requests
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(__file__))))
@@ -87,7 +86,7 @@ class Paper:
             summary=self.abstract,
             published=self.published,
             category=self.category,
-            tsne=json.dumps(self.tsne) if self.tsne else None,
+            tsne=self.tsne if self.tsne else None,
             url=self.url,
             hash=self.hash,
             citations=self.citations,

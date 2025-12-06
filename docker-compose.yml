@@ -27,6 +27,26 @@ services:
       - .:/app
     command: ["/bin/sh", "-c", "export PYTHONPATH=/app/MonaaLisa/src && python MonaaLisa/src/Database/db.py && python MonaaLisa/src/main.py"]
 
+  backend:
+    image: node:20
+    working_dir: /app
+    depends_on:
+      db:
+        condition: service_healthy
+    env_file:
+      - .env
+    environment:
+      DATABASE_URL: postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB}
+      PORT: 3000
+    volumes:
+      - ./MonaaLisa/src/Backend:/app
+      - backend_node_modules:/app/node_modules
+    command: ["sh", "-c", "npm install && npm run build && npm run start:prod"]
+    ports:
+      - "3000:3000"
+    stdin_open: true
+    tty: true
+
   playground:
     build: .
     depends_on:
@@ -50,11 +70,12 @@ services:
       - "5173:5173"
     depends_on:
       - app
+      - backend
     volumes:
       - ./MonaaLisa/src/Frontend:/app
       - /app/node_modules
     environment:
-      VITE_API_URL: "http://app:5000"
+      VITE_API_URL: "http://backend:3000"
 
   grobid:
     image: lfoppiano/grobid:latest-develop
@@ -70,3 +91,4 @@ services:
     
 volumes:
   pgdata:
+  backend_node_modules:

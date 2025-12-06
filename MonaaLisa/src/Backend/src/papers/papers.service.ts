@@ -78,23 +78,27 @@ export class PapersService {
    * Pagination via `skip`/`take`, dazu Gesamtanzahl für UI.
    */
   async findMany(q: QueryPaperDto) {
+    const skip = toNumber(q.skip, 0);
+    const take = toNumber(q.take, 20);
     const where: Prisma.PaperWhereInput = {};
 
     // Mini-Volltext: simpel, aber schnell & ausreichend für UI-Suche
     if (q.search) {
+      const searchTerm = q.search.trim();
       where.OR = [
-        { title: { contains: q.search, mode: 'insensitive' } },
-        { authors: { contains: q.search, mode: 'insensitive' } },
-        { summary: { contains: q.search, mode: 'insensitive' } },
+        { title: { contains: searchTerm, mode: 'insensitive' } },
+        { authors: { contains: searchTerm, mode: 'insensitive' } },
+        { summary: { contains: searchTerm, mode: 'insensitive' } },
       ];
     }
     if (q.category) where.category = { equals: q.category };
 
     // Datumsbereich (inklusive Grenzen)
     if (q.dateFrom || q.dateTo) {
-      where.published = {};
-      if (q.dateFrom) (where.published as any).gte = new Date(q.dateFrom);
-      if (q.dateTo) (where.published as any).lte = new Date(q.dateTo);
+      const publishedFilter: Prisma.DateTimeNullableFilter = {};
+      if (q.dateFrom) publishedFilter.gte = new Date(q.dateFrom);
+      if (q.dateTo) publishedFilter.lte = new Date(q.dateTo);
+      where.published = publishedFilter;
     }
 
     // wir starten transaction damit keine verwaisten einträge entstehen und falls jemand auch ein paper erstellt oder löscht, count nicht pltz falsch ist
@@ -102,13 +106,13 @@ export class PapersService {
       this.prisma.paper.findMany({
         where,
         orderBy: [{ published: 'desc' }, { added: 'desc' }],
-        skip: q.skip,
-        take: q.take,
+        skip,
+        take,
       }),
       this.prisma.paper.count({ where }),
     ]);
 
-    return { items, total, skip: q.skip, take: q.take };
+    return { items, total, skip, take };
   }
 
   /**
@@ -146,4 +150,23 @@ export class PapersService {
   async deleteByEntryId(entry_id: string) {
     return this.prisma.paper.delete({ where: { entry_id } });
   }
+}
+
+
+/**
+ *
+ * Konvertiert einen unbekannten Wert in eine endliche Zahl, wobei der angegebene Fallback zurückgegeben wird, wenn die Konvertierung nicht möglich ist.
+ */
+function toNumber(value: unknown, fallback: number): number {
+  const parsed =
+    typeof value === 'string' && value.trim() !== ''
+      ? Number(value)
+      : typeof value === 'number'
+        ? value
+        : NaN;
+
+  if (Number.isFinite(parsed)) {
+    return parsed;
+  }
+  return fallback;
 }

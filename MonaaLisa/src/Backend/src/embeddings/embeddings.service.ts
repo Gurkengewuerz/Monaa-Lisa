@@ -1,6 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
-import type { Prisma } from '@prisma/client';
+import { Prisma } from '@prisma/client';
 
 @Injectable()
 export class EmbeddingsService {
@@ -8,10 +8,11 @@ export class EmbeddingsService {
 
   /** Upsert für ein Paper-Embedding (keyed by belonging_paper_entry_id) */
   upsert(entryId: string, content: Prisma.JsonValue) {
+    const jsonContent = this.toJsonInput(content);
     return this.prisma.embedding.upsert({
       where: { belonging_paper_entry_id: entryId },
-      update: { content },
-      create: { belonging_paper_entry_id: entryId, content },
+      update: { content: jsonContent },
+      create: { belonging_paper_entry_id: entryId, content: jsonContent },
     });
   }
 
@@ -32,5 +33,11 @@ export class EmbeddingsService {
     } catch {
       return { deleted: false }; // nicht gefunden → ok
     }
+  }
+
+  private toJsonInput(value: Prisma.JsonValue):
+    | Prisma.InputJsonValue
+    | Prisma.JsonNullValueInput {
+    return value === null ? Prisma.JsonNull : (value as Prisma.InputJsonValue);
   }
 }
