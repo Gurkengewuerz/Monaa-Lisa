@@ -87,7 +87,7 @@ export class PapersService {
       const searchTerm = q.search.trim();
       where.OR = [
         { title: { contains: searchTerm, mode: 'insensitive' } },
-        { authors: { hasSome: [searchTerm] } },
+        { authors: { contains: searchTerm, mode: 'insensitive' } },
         { summary: { contains: searchTerm, mode: 'insensitive' } },
       ];
     }
