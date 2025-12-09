@@ -183,3 +183,4 @@ cython_debug/
 .pypirc
 config.ini
 .env
+MonaaLisa/src/logs/Paper.log.1
