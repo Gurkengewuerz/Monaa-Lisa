@@ -1,20 +1,25 @@
 import threading
-import os
-import random
+# why do we type check here? to avoid circular imports 
+from typing import TYPE_CHECKING
+
 import numpy as np
+
 from object.paper import Paper
 from object.embedding import Embedding
 from util.logger import Logger
 from SemanticPaper.machine_learning.model import Model
-from config import cfg
+# please let this finally fix the fuckinmg circular import issue
+if TYPE_CHECKING:
+    from SemanticPaper.machine_learning.reducer import UMAPReducer
 
 
 class PaperProcessor:
-    def __init__(self, paper: Paper, model: Model):
+    def __init__(self, paper: Paper, model: Model, reducer: 'UMAPReducer | None' = None):
         self.paper = paper
         self.logger = Logger("PaperProcessor")
         self._keywords = []
         self._model = model
+        self._reducer = reducer
 
     """
     03-August-2025 - Lenio
@@ -153,49 +158,37 @@ class PaperProcessor:
             self.logger.error(f"Error while calculating weighted average of embeddings: {e}")
             return None
 
-    def compute_tsne_coordinates(self, existing_embeddings: dict[str, Embedding], sample_size: int | None = None):
-        """Project the current paper embedding into 2D using a sampled subset of existing embeddings."""
+
+    """
+    14 Dec 2025 - Basti
+    Abstract: computes the 2D coordinates for the paper using the shared UMAP reducer
+    Args:
+    - existing_embeddings: dict -> of existing embeddings to consider for projection
+    Returns: Tuple (x, y) or None if projection could not be computed
+    """
+    def compute_projection_coordinates(self, existing_embeddings: dict[str, Embedding]):
+        if self._reducer is None:
+            # this happens in case of not enough embeddings yet to fit the reducer
+            self.logger.debug("UMAP reducer not available yet")
+            return None
         if self.paper.embedding is None:
-            self.logger.warning("Cannot compute t-SNE coordinates without a paper embedding")
+            self.logger.warning("Cannot compute projection without a paper embedding")
             return None
 
-        if sample_size is None:
-            sample_size = cfg.get_int(
-                "semanticpaper",
-                "tsne_sample_size",
-                int(os.getenv("TSNE_SAMPLE_SIZE", "256"))
-            )
-        sample_size = max(2, sample_size)
-
-        neighbor_embeddings = [
-            emb for emb in existing_embeddings.values()
-            if isinstance(emb, Embedding) and emb.content is not None
-        ]
-
-        if neighbor_embeddings:
-            limit = min(len(neighbor_embeddings), sample_size - 1)
-            if limit <= 0:
-                selected_neighbors = []
-            elif len(neighbor_embeddings) <= limit:
-                selected_neighbors = neighbor_embeddings
-            else:
-                rnd = random.Random(self.paper.entry_id)
-                selected_neighbors = rnd.sample(neighbor_embeddings, limit)
-        else:
-            selected_neighbors = []
-
-        vectors = [self.paper.embedding.content]
-        vectors.extend([neighbor.content for neighbor in selected_neighbors])
-
-        if len(vectors) < 2:
-            self.logger.debug("Not enough embeddings for t-SNE; defaulting to origin")
+        """
+        
+        """
+        combined_embeddings = dict(existing_embeddings)
+        combined_embeddings[self.paper.entry_id] = self.paper.embedding
+        coords = self._reducer.transform(self.paper.embedding, combined_embeddings)
+        if coords is None:
             return None
-
         try:
-            tsne_points = Model.extract_tsne_coordinates(vectors)
-            return tsne_points[0]
-        except Exception as e:
-            self.logger.error(f"Failed to compute t-SNE coordinates: {e}")
+            
+            x, y = float(coords[0]), float(coords[1])
+            return x, y
+        except (TypeError, ValueError, IndexError):
+            self.logger.error("Invalid projection coordinates returned by reducer: %s", coords)
             return None
 
     """
