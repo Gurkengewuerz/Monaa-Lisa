@@ -1,7 +1,7 @@
 <script lang="ts">
   import { createEventDispatcher, tick } from 'svelte';
   import type { Paper } from '$lib/types/paper';
-  import { clusterColors as clusterColors } from '../utils/clusterColors';
+  import { getClusterColor } from '../utils/clusterColors';
 
   /**
    * array of papers to display.
@@ -192,7 +192,7 @@
           data-paper-id={paper.entry_id}
           on:click|stopPropagation={() => selectPaper(paper)}
         >
-          <div class="paper-cluster" style="background-color: {clusterColors[paper.cluster] || '#999999'}">
+          <div class="paper-cluster" style="background-color: {getClusterColor(paper.category, paper.cluster)}">
             {paper.cluster}
           </div>
           <div class="paper-info">
