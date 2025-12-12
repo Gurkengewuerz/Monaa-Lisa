@@ -4,7 +4,7 @@
   import Graph from 'graphology';
   import Sigma from 'sigma';
   import type { Paper } from '$lib/types/paper';
-  import { clusterColors as clusterCol } from '../utils/clusterColors';
+  import { getClusterColor } from '../utils/clusterColors';
 
   /**
    * array of papers to display in the graph.
@@ -51,17 +51,7 @@
 
   const dispatch = createEventDispatcher();
 
-  //cluster color mapping for visual grouping
-  //todo: figure out if we even need this later on or if cluster colors are static instead of dynamic
-  /*const clusterCol: Record<string, string> = {
-    A: '#CC6666',
-    B: '#66B2B2',
-    C: '#9966CC',
-    D: '#CC66B2',
-    E: '#6699CC',
-    F: '#FF4500',
-    G: '#00CED1',
-  };*/
+  const FALLBACK_NODE_COLOR = '#999999';
 
   /**
    * selects and highlights a node in the graph, updating visuals and connections.
@@ -171,13 +161,15 @@
       const inCitations = inDegree.get(paper.entry_id) || 0;
       const nodeSize = sizeFor(inCitations);
 
+      const nodeColor = getClusterColor(paper.category, paper.cluster) ?? FALLBACK_NODE_COLOR;
+
       graph!.addNode(paper.entry_id, {
         x: scaledX,
         y: scaledY,
         size: nodeSize,
         label: paper.title,
-        color: clusterCol[paper.cluster] || '#999999',
-        originalColor: clusterCol[paper.cluster] || '#999999',
+        color: nodeColor,
+        originalColor: nodeColor,
         paper: paper,
         inCitations // extra attribute for debugging/inspection
       });
