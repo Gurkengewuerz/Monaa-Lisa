@@ -49,10 +49,10 @@ class Logger:
             file_handler.setLevel(self.config['file_level'])
             file_handler.setFormatter(formatter)
             self.logger.addHandler(file_handler)
-"""
-14 Dec 2025 - Basti
-The logger used to have a weird function signature that made it odd to use normally.
-"""
+    """
+    14 Dec 2025 - Basti
+    The logger used to have a weird function signature that made it odd to use normally.
+    """
     def info(self, message: str, *args, **kwargs):
         self.logger.info(message, *args, **kwargs)
 
