@@ -69,6 +69,28 @@ def get_all_embeddings():
     finally:
         session.close()
 
+
+"""
+20-December-2025 - Basti - Refactor for the supervised UMAP
+Abstract: Returns a mapping of paper entry_id to its arXiv category for supervised reducers.
+Args:
+- limit: optional limit mirroring embedding preload limits to avoid excessive memory use
+Returns: Dict[str, str | None]
+"""
+def get_embedding_labels(limit: int | None = None) -> dict[str, str | None]:
+    session = SessionLocal()
+    try:
+        q = session.query(DBPaper.entry_id, DBPaper.category).filter(DBPaper.category.isnot(None))
+        if limit is not None:
+            q = q.limit(limit)
+        rows = q.all()
+        return {entry_id: category for entry_id, category in rows if entry_id}
+    except Exception as e:
+        logger.error(f"Failed to load embedding labels: {e}")
+        return {}
+    finally:
+        session.close()
+
 """
 25-May-2025 - Basti
 Abstract: Saves one given arXiv paper into the Postgres database
@@ -266,6 +288,43 @@ def create_program_run():
         logger.error(f"Error creating program run: {e}")
         session.rollback()
         return None
+    finally:
+        session.close()
+
+
+"""
+20-December-2025 - Basti
+Abstract: Checks whether a program run exists.
+"""
+def program_run_exists(run_id: int) -> bool:
+    session = SessionLocal()
+    try:
+        return session.query(ProgramRun.id).filter_by(id=run_id).first() is not None
+    except Exception as e:
+        logger.error(f"Error checking program run existence: {e}")
+        return False
+    finally:
+        session.close()
+
+
+"""
+Abstract: Reactivates an existing program run and deactivates the others.
+Returns: bool -> True if the run was reactivated, False otherwise.
+"""
+def set_active_program_run(run_id: int) -> bool:
+    session = SessionLocal()
+    try:
+        if session.query(ProgramRun.id).filter_by(id=run_id).first() is None:
+            return False
+        session.query(ProgramRun).update({"is_active": "false"})
+        session.query(ProgramRun).filter_by(id=run_id).update({"is_active": "true"})
+        session.commit()
+        logger.info(f"Reactivated ProgramRun ID: {run_id}")
+        return True
+    except Exception as e:
+        logger.error(f"Error reactivating program run {run_id}: {e}")
+        session.rollback()
+        return False
     finally:
         session.close()
 
