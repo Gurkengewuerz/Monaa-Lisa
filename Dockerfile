@@ -9,8 +9,8 @@ RUN apt-get update && apt-get install -y \
     && rm -rf /var/lib/apt/lists/*
 
 COPY requirements.txt .
-RUN --mount=type=cache,target=/root/.cache/pip \
-    pip install -r requirements.txt
+# Avoid BuildKit-specific cache mounts so the image can build anywhere
+RUN pip install --no-cache-dir -r requirements.txt
 
 COPY . .
 
