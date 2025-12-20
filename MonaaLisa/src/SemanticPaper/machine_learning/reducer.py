@@ -81,16 +81,17 @@ class UMAPReducer:
         except Exception as exc:
             self.logger.warning("Failed to load cached UMAP reducer: %s", exc)
 
-    def bootstrap(self, embeddings: Dict[str, Embedding]):
-        """Ensure we have a reducer before workers start processing."""
-        self._ensure_reducer(embeddings.values())
+# Update - Basti - 22-December-2025 updated the function signature to accept labels for supervised UMAP
+
+    def bootstrap(self, embeddings: Dict[str, Embedding], labels: Dict[str, str] | None = None):
+        self._ensure_reducer(embeddings.values(), labels)
 
     def has_model(self) -> bool:
         with self._lock:
             return self._reducer is not None
 
-    def transform(self, embedding: Embedding, embeddings: Dict[str, Embedding]):
-        reducer = self._ensure_reducer(embeddings.values())
+    def transform(self, embedding: Embedding, embeddings: Dict[str, Embedding], labels: Dict[str, str] | None = None):
+        reducer = self._ensure_reducer(embeddings.values(), labels)
         if reducer is None:
             return None
         vector = np.asarray(embedding.content, dtype=np.float32).reshape(1, -1)
@@ -102,7 +103,7 @@ class UMAPReducer:
             self.logger.error("UMAP transform failed: %s", exc)
             return None
 
-    def notify_dataset_change(self, embeddings: Dict[str, Embedding]):
+    def notify_dataset_change(self, embeddings: Dict[str, Embedding], labels: Dict[str, str] | None = None):
         """Called after a new embedding has been persisted to consider refitting."""
         total = len(embeddings)
         if total < self.min_fit_samples:
@@ -115,7 +116,7 @@ class UMAPReducer:
             )
             if needs_initial_fit:
                 self.logger.info("Fitting initial UMAP reducer on %s embeddings", total)
-                self._fit_reducer(list(embeddings.values()))
+                self._fit_reducer(list(embeddings.values()), labels)
                 return
             if not needs_growth_refit:
                 return
@@ -123,12 +124,12 @@ class UMAPReducer:
                 return
             self._refit_thread = threading.Thread(
                 target=self._fit_reducer,
-                args=(list(embeddings.values()),),
+                args=(list(embeddings.values()), labels),
                 daemon=True,
             )
             self._refit_thread.start()
 
-    def _ensure_reducer(self, embeddings: Iterable[Embedding]):
+    def _ensure_reducer(self, embeddings: Iterable[Embedding], labels: Dict[str, str] | None = None):
         with self._lock:
             if self._reducer is not None:
                 return self._reducer
@@ -139,27 +140,36 @@ class UMAPReducer:
             )
             return None
         self.logger.info(f"Fitting UMAP reducer on {len(embeddings_list)} embeddings")
-        self._fit_reducer(embeddings_list)
+        self._fit_reducer(embeddings_list, labels)
         with self._lock:
             return self._reducer
 
-    def _fit_reducer(self, embeddings: list[Embedding]):
+    def _fit_reducer(self, embeddings: list[Embedding], labels: Dict[str, str] | None = None):
         with self._fit_lock:
             with self._lock:
                 if self._reducer is not None and len(embeddings) <= self._last_fit_count:
                     return
-            vectors = self._to_matrix(embeddings)
+            vectors, y = self._to_matrix(embeddings, labels)
             if vectors is None:
                 return
             reducer = umap.UMAP(
                 n_components=2,
                 metric="cosine",
-                n_neighbors=min(15, vectors.shape[0] - 1) if vectors.shape[0] > 2 else 2,
+                n_neighbors=15,
                 min_dist=0.1,
+                target_weight=0.5, # Reduced supervision to allow local structure to breathe
                 random_state=42,
                 transform_seed=42,
             )
-            reducer.fit(vectors)
+            if y is not None:
+                # UMAP expects numeric labels or encoded strings, but sometimes fails with raw strings
+                # We encode the string labels to integers for safety
+                from sklearn.preprocessing import LabelEncoder
+                le = LabelEncoder()
+                y_encoded = le.fit_transform(y)
+                reducer.fit(vectors, y=y_encoded)
+            else:
+                reducer.fit(vectors)
             with self._lock:
                 self._reducer = reducer
                 self._last_fit_count = vectors.shape[0]
@@ -168,11 +178,46 @@ class UMAPReducer:
                 except Exception as exc:
                     self.logger.warning(f"Failed to persist UMAP reducer: {exc}")
 
-    def _to_matrix(self, embeddings: Iterable[Embedding]):
-        vectors = [np.asarray(emb.content, dtype=np.float32) for emb in embeddings if emb.content is not None]
+    """ 22-Dec-2025 - Basti
+    Abstract: Converts a list of Embedding objects to a matrix suitable for UMAP fitting.
+    Args:
+    - embeddings: Iterable[Embedding] -> The embeddings to convert.
+    - labels: Dict[str, str] | None -> Optional labels for supervised UMAP.
+    Returns: Tuple (matrix, y) where matrix is a 2D numpy array of embedding
+    vectors and y is a list of labels or None.
+    """
+    def _to_matrix(self, embeddings: Iterable[Embedding], labels: Dict[str, str] | None):
+        vectors = []
+        y: list[str] = []
+
+        if labels:
+            for emb in embeddings:
+                label = labels.get(emb.belonging_paper_entry_id)
+                if label is None:
+                    continue
+                vectors.append(np.asarray(emb.content, dtype=np.float32))
+                y.append(label)
+            if len(vectors) < self.min_fit_samples:
+                # Fall back to unsupervised if we do not have enough labeled samples
+                self.logger.debug(
+                    f"Not enough labeled embeddings ({len(vectors)}/{self.min_fit_samples}); falling back to unsupervised UMAP"
+                )
+                vectors.clear()
+                y.clear()
+
+        if not vectors:
+            for emb in embeddings:
+                if emb.content is None:
+                    continue
+                vectors.append(np.asarray(emb.content, dtype=np.float32))
+
         if len(vectors) < self.min_fit_samples:
             self.logger.debug(
                 f"UMAP fit aborted, need at least {self.min_fit_samples} embeddings (have {len(vectors)})"
             )
-            return None
-        return np.vstack(vectors)
+            return None, None
+
+        matrix = np.vstack(vectors)
+        if labels and y and len(y) == len(vectors):
+            return matrix, y
+        return matrix, None

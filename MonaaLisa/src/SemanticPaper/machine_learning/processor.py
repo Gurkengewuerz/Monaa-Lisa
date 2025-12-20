@@ -166,7 +166,7 @@ class PaperProcessor:
     - existing_embeddings: dict -> of existing embeddings to consider for projection
     Returns: Tuple (x, y) or None if projection could not be computed
     """
-    def compute_projection_coordinates(self, existing_embeddings: dict[str, Embedding]):
+    def compute_projection_coordinates(self, existing_embeddings: dict[str, Embedding], labels: dict[str, str] | None = None):
         if self._reducer is None:
             # this happens in case of not enough embeddings yet to fit the reducer
             self.logger.debug("UMAP reducer not available yet")
@@ -180,7 +180,14 @@ class PaperProcessor:
         """
         combined_embeddings = dict(existing_embeddings)
         combined_embeddings[self.paper.entry_id] = self.paper.embedding
-        coords = self._reducer.transform(self.paper.embedding, combined_embeddings)
+        # add label for this paper if available
+        if labels is None:
+            labels = {}
+        
+        labels = dict(labels)
+        labels[self.paper.entry_id] = getattr(self.paper, "category", None)
+
+        coords = self._reducer.transform(self.paper.embedding, combined_embeddings, labels)
         if coords is None:
             return None
         try:
