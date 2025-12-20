@@ -8,6 +8,7 @@ from Database.db import (
     save_paper_to_db,
     save_paper_relation,
     get_all_embeddings,
+    get_embedding_labels,
     engine,
     update_paper_projection,
     get_entry_ids_missing_projection,
@@ -35,6 +36,8 @@ reducer = UMAPReducer()
 # Initialize the embedding cache, which will store embeddings of papers to avoid fetching them from the db everytime
 embedding_cache = {}
 embedding_cache_lock = threading.Lock()
+embedding_labels: dict[str, str | None] = {}
+embedding_labels_lock = threading.Lock()
 pending_projection_ids: set[str] = set()
 pending_projection_lock = threading.Lock()
 try:
@@ -91,12 +94,22 @@ def paper_worker(worker_id, known_hashes):
                 
                 with embedding_cache_lock:
                     current_embeddings = embedding_cache.copy()
-                    # Add the new embedding to the snapshot
+                with embedding_labels_lock:
+                    current_labels = embedding_labels.copy()
                 projection_embeddings = current_embeddings.copy()
                 projection_embeddings[processor.paper.entry_id] = embedding
 
-                # Compute projection coordinates
-                projection = processor.compute_projection_coordinates(projection_embeddings)
+                """ - Basti - 19-December-2025
+                with projection_labels, we add the current paper's category
+                to ensure that supervised UMAP has the correct label information
+                """
+                projection_labels = current_labels.copy()
+                projection_labels[processor.paper.entry_id] = processor.paper.category
+
+                projection = processor.compute_projection_coordinates(
+                    projection_embeddings,
+                    projection_labels
+                )
                 if projection is not None:
                     # save the projection to the paper in the db
                     processor.paper.tsne = {"x": projection[0], "y": projection[1], "method": "umap"}
@@ -114,7 +127,9 @@ def paper_worker(worker_id, known_hashes):
                     # Save the embedding to the cache
                     with embedding_cache_lock:
                         embedding_cache[processor.paper.entry_id] = processor.paper.embedding
-                        reducer.notify_dataset_change(embedding_cache)
+                    with embedding_labels_lock:
+                        embedding_labels[processor.paper.entry_id] = processor.paper.category
+                    reducer.notify_dataset_change(embedding_cache, embedding_labels)
                     save_hash(processor.paper.hash)
                     known_hashes.add(processor.paper.hash)
                     backfill_pending_projections()
@@ -141,7 +156,9 @@ def main(num_workers: int = 5):
     logger.info("Loading existing embeddings into cache...")
     with embedding_cache_lock:
         embedding_cache.update(get_all_embeddings())
-        reducer.bootstrap(embedding_cache)
+    with embedding_labels_lock:
+        embedding_labels.update(get_embedding_labels())
+    reducer.bootstrap(embedding_cache, embedding_labels)
     missing_ids = get_entry_ids_missing_projection()
     if missing_ids:
         with pending_projection_lock:
@@ -170,6 +187,7 @@ def main(num_workers: int = 5):
             scheduler.paper_queue.put(None)
         for t in threads:
             t.join()
+        scheduler.shutdown()
         logger.info("All workers stopped, exiting.")
         sys.exit(0)
 
@@ -236,11 +254,13 @@ def backfill_pending_projections():
         return
     with embedding_cache_lock:
         embeddings_snapshot = embedding_cache.copy()
+    with embedding_labels_lock:
+        labels_snapshot = embedding_labels.copy()
     for entry_id in pending_ids:
         embedding = embeddings_snapshot.get(entry_id)
         if embedding is None:
             continue
-        coords = reducer.transform(embedding, embeddings_snapshot)
+        coords = reducer.transform(embedding, embeddings_snapshot, labels_snapshot)
         if coords is None:
             continue
         projection = {"x": float(coords[0]), "y": float(coords[1]), "method": "umap"}
