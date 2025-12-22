@@ -49,6 +49,7 @@ With this class, we can efficiently manage the UMAP reducer's lifecycle, ensurin
 
 class UMAPReducer:
 
+    
     def __init__(self):
         self.logger = Logger("UMAPReducer")
         self._lock = threading.Lock()
@@ -157,7 +158,7 @@ class UMAPReducer:
                 metric="cosine",
                 n_neighbors=15,
                 min_dist=0.1,
-                target_weight=0.5, # Reduced supervision to allow local structure to breathe
+                target_weight=0.5, 
                 random_state=42,
                 transform_seed=42,
             )
