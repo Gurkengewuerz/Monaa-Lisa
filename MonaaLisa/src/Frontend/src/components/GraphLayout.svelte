@@ -7,7 +7,7 @@
   import { env as publicEnv } from '$env/dynamic/public';
 
   const API_BASE_URL = publicEnv.PUBLIC_API_BASE_URL || 'http://localhost:3000';
-  const DEFAULT_LIMIT = 500;
+  const DEFAULT_LIMIT = 5000;
 
   let papers: Paper[] = [];
   let sidebarOpen = false;
