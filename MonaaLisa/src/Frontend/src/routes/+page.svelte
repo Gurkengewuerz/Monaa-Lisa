@@ -22,13 +22,12 @@
   }
 </script>
 
-<button class="logo-btn" on:click={handleReset}>M-L</button>
-
 {#if !showLanding}
   <main in:fade>
     <GraphLayout />
   </main>
 {:else}
+  <button class="logo-btn" on:click={handleReset} transition:fade>M-L</button>
   <LandingPage bind:this={landingPage} on:start={handleStart} />
 {/if}
 
