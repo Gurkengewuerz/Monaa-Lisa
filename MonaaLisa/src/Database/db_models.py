@@ -33,7 +33,6 @@ class DBPaper(db_base):
     category = Column(String)
     url = Column(String)
     hash = Column(String, unique=True, index=True)
-    citations = Column(JSON, nullable=True)
     tsne = Column(JSON, nullable=True)
     added = Column(DateTime, nullable=False)
 
@@ -52,6 +51,8 @@ class DBPaperRelation(db_base):
     confidence = Column(Float)
 
 
+
+
 """
 17-July-2025 - Lenio
 Updated 30 09 Nico
@@ -65,7 +66,7 @@ class DBReference(db_base):
     __tablename__ = "reference"
     id = Column(Integer, primary_key=True, autoincrement=True)
     belonging_paper_entry_id = Column(String, ForeignKey("paper.entry_id"), index=True, nullable=False)
-    title = Column(String, nullable=False)
+    semanticscholar_obj = Column(JSON, nullable=False)
 
 
 """
@@ -125,3 +126,41 @@ class HistoricalCompletion(db_base):
     reached_date = Column(DateTime, nullable=True)
     # Nico 30.09. - in der Funktionsbeschreibung steht oldest_paper_date, das Feld fehlt bis dato
     oldest_paper_date = Column(DateTime, nullable=True)  # ← Fortschrittsmarker jetzt da
+
+"""
+24-December-2025 - Lenio
+Abstract: Represents a citation found in a paper.
+Parameters:
+- belonging_paper_entry_id: The ID of the paper containing the citation.
+- title: Title of the cited paper.
+"""
+class DBCitation(db_base):
+    __tablename__ = "citation"
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    belonging_paper_entry_id = Column(String, ForeignKey("paper.entry_id"), index=True, nullable=False)
+    semanticscholar_obj = Column(JSON, nullable=False)
+
+"""
+24-December-2025 - Lenio
+Abstract: Represents a citation link between two papers in the database.
+Parameters:
+- belonging_paper_entry_id: The ID of the paper containing the citation.
+- cited_paper_entry_id: The ID of the cited paper.
+"""
+class DBPaperCitation(db_base):
+    __tablename__ = "paper_citation"
+    belonging_paper_entry_id = Column(String, ForeignKey("paper.entry_id"), primary_key=True)
+    cited_paper_entry_id = Column(String, ForeignKey("paper.entry_id"), primary_key=True)
+
+"""
+24-December-2025 - Lenio
+Abstract: Represents a reference link between two papers in the database.
+Parameters:
+- belonging_paper_entry_id: The ID of the paper containing the reference.
+- referenced_paper_entry_id: The ID of the referenced paper.
+"""
+class DBPaperReference(db_base):
+    __tablename__ = "paper_reference"
+    belonging_paper_entry_id = Column(String, ForeignKey("paper.entry_id"), primary_key=True)
+    referenced_paper_entry_id = Column(String, ForeignKey("paper.entry_id"), primary_key=True)
+
