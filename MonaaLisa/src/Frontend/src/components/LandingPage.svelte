@@ -44,6 +44,11 @@
   // 4. Subtitle
   $: subtitleOpacity = Math.max(0, (progress - 0.7) * 5);
 
+  export function reset() {
+    window.scrollTo({ top: 0, behavior: 'instant' });
+    smoothProgress.set(0, { hard: true });
+  }
+
   function start() {
     dispatch('start');
   }
@@ -60,7 +65,6 @@
 
       <!-- Hero Section -->
       <div class="hero" style="opacity: {heroOpacity}; pointer-events: {heroOpacity < 0.1 ? 'none' : 'auto'}">
-          <div class="logo">M-L</div>
           <h1 class="hero-title">Monaa-Lisa</h1>
           <button class="start-btn" on:click={start}>START</button>
           <p class="hero-subtitle">Visualize academia interactively</p>
@@ -160,17 +164,6 @@
     transition: opacity 0.1s linear;
   }
 
-  .logo {
-    position: absolute;
-    top: 40px;
-    left: 40px;
-    font-size: 24px;
-    font-weight: bold;
-    letter-spacing: 2px;
-    border: 2px solid #fff;
-    padding: 5px 10px;
-  }
-
   .hero-title {
     font-size: 8rem;
     margin: 0;
@@ -255,10 +248,6 @@
   @media (max-width: 768px) {
     .hero-title {
       font-size: 4rem;
-    }
-    .logo {
-      top: 20px;
-      left: 20px;
     }
     .hero-subtitle {
       bottom: 20px;

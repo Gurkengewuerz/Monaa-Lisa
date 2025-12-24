@@ -4,18 +4,32 @@
   import { fade } from 'svelte/transition';
 
   let showLanding = true;
+  let landingPage: LandingPage;
 
   function handleStart() {
     showLanding = false;
   }
+
+  function handleReset() {
+    if (showLanding && landingPage) {
+      landingPage.reset();
+    } else {
+      showLanding = true;
+      if (typeof window !== 'undefined') {
+        window.scrollTo({ top: 0, behavior: 'instant' });
+      }
+    }
+  }
 </script>
+
+<button class="logo-btn" on:click={handleReset}>M-L</button>
 
 {#if !showLanding}
   <main in:fade>
     <GraphLayout />
   </main>
 {:else}
-  <LandingPage on:start={handleStart} />
+  <LandingPage bind:this={landingPage} on:start={handleStart} />
 {/if}
 
 <style>
@@ -31,5 +45,34 @@
   main {
     width: 100vw;
     height: 100vh;
+  }
+
+  .logo-btn {
+    position: fixed;
+    top: 40px;
+    left: 40px;
+    z-index: 10000;
+    font-size: 24px;
+    font-weight: bold;
+    letter-spacing: 2px;
+    border: 2px solid #fff;
+    padding: 5px 10px;
+    background: transparent;
+    color: #fff;
+    cursor: pointer;
+    transition: all 0.3s ease;
+    font-family: inherit;
+  }
+
+  .logo-btn:hover {
+    background: #fff;
+    color: #000;
+  }
+
+  @media (max-width: 768px) {
+    .logo-btn {
+      top: 20px;
+      left: 20px;
+    }
   }
 </style>
