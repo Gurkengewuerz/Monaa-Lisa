@@ -2,6 +2,7 @@
   import { createEventDispatcher } from 'svelte';
   import { fade } from 'svelte/transition';
   import { spring } from 'svelte/motion';
+  import arxivLogo from '../assets/arxiv_logo.png';
 
   const dispatch = createEventDispatcher();
 
@@ -9,7 +10,7 @@
   let innerHeight = 1000;
 
   // Scroll progress: 0 to 1
-  $: rawProgress = innerHeight ? scrollY / (innerHeight * 2) : 0;
+  $: rawProgress = innerHeight ? scrollY / (innerHeight * 4) : 0;
 
   const smoothProgress = spring(0, {
     stiffness: 0.02,
@@ -21,16 +22,16 @@
   $: progress = $smoothProgress;
 
   // 1. Hero Section
-  $: heroOpacity = Math.max(0, 1 - progress * 4);
+  $: heroOpacity = Math.max(0, 1 - progress * 10);
   
   // 2. Background Image
   $: bgScale = 1.2 - (progress * 0.2);
   
   // 3. Transition Title "Monaa-Lisa"
   // We want an exponential zoom for linear visual speed.
-  // Range: progress 0.1 to 0.8
+  // Range: progress 0.1 to 0.4
   const zoomStart = 0.1;
-  const zoomEnd = 0.8;
+  const zoomEnd = 0.4;
   $: zoomT = Math.min(1, Math.max(0, (progress - zoomStart) / (zoomEnd - zoomStart)));
   
   // Scale: 3000 -> 1 exponentially
@@ -38,11 +39,20 @@
   
   // Opacity: Starts transparent (0), fades to white (1)
   // User wants it faster/earlier.
-  // Start fading in slightly before the zoom finishes (at 0.75) and finish by 0.8
-  $: titleOpacity = Math.min(1, Math.max(0, (progress - 0.75) * 20));
+  // Start fading in slightly before the zoom finishes (at 0.35) and finish by 0.4
+  $: titleOpacity = Math.min(1, Math.max(0, (progress - 0.35) * 20));
 
   // 4. Subtitle
-  $: subtitleOpacity = Math.max(0, (progress - 0.7) * 5);
+  $: subtitleOpacity = Math.min(1, Math.max(0, (progress - 0.4) * 10));
+
+  // Move title up
+  $: titleY = 50 - (subtitleOpacity * 20);
+
+  // 5. Utilizing Caption
+  $: utilizingOpacity = Math.min(1, Math.max(0, (progress - 0.6) * 10));
+
+  // 6. Arxiv Logo
+  $: arxivOpacity = Math.min(1, Math.max(0, (progress - 0.8) * 10));
 
   export function reset() {
     window.scrollTo({ top: 0, behavior: 'instant' });
@@ -83,20 +93,30 @@
               <defs>
                  <mask id="text-mask">
                     <rect x="0" y="0" width="100%" height="100%" fill="white" />
-                    <text x="50%" y="50%" text-anchor="middle" dominant-baseline="middle" font-size="12" font-weight="900" fill="black">Monaa-Lisa</text>
+                    <text x="50%" y="{titleY}%" text-anchor="middle" dominant-baseline="middle" font-size="12" font-weight="900" fill="black">Monaa-Lisa</text>
                  </mask>
               </defs>
               <!-- The Solid Background with Hole -->
               <rect x="0" y="0" width="100%" height="100%" fill="#1a1f2c" mask="url(#text-mask)" />
               
               <!-- The White Text Fill -->
-              <text x="50%" y="50%" text-anchor="middle" dominant-baseline="middle" font-size="12" font-weight="900" fill="white" opacity={titleOpacity}>Monaa-Lisa</text>
+              <text x="50%" y="{titleY}%" text-anchor="middle" dominant-baseline="middle" font-size="12" font-weight="900" fill="white" opacity={titleOpacity}>Monaa-Lisa</text>
            </svg>
       </div>
       
       <!-- Subtitle is separate, fades in at the end -->
       <div class="subtitle-container" style="opacity: {subtitleOpacity}">
-          <h2 class="sub-title">Graph visualization software</h2>
+          <h2 class="sub-title">A tool to visualize academic papers, their relations and citations</h2>
+      </div>
+
+      <div class="utilizing-container" style="opacity: {utilizingOpacity}">
+          <h2 class="sub-title">utilizing</h2>
+      </div>
+
+      <div class="arxiv-container" style="opacity: {arxivOpacity}; pointer-events: {arxivOpacity > 0.1 ? 'auto' : 'none'}">
+          <a href="https://arxiv.org/" target="_blank" rel="noopener noreferrer">
+            <img src={arxivLogo} alt="arXiv" class="arxiv-logo" />
+          </a>
       </div>
   </div>
   
@@ -115,7 +135,7 @@
   }
 
   .scroll-track {
-    height: 300vh;
+    height: 500vh;
   }
 
   .sticky-wrapper {
@@ -231,10 +251,39 @@
   .subtitle-container {
     position: absolute;
     z-index: 30;
-    top: 60%; /* Position below the title */
+    top: 45%; /* Position below the title */
     width: 100%;
     text-align: center;
     pointer-events: none;
+  }
+
+  .utilizing-container {
+    position: absolute;
+    z-index: 30;
+    top: 55%;
+    width: 100%;
+    text-align: center;
+    pointer-events: none;
+  }
+
+  .arxiv-container {
+    position: absolute;
+    z-index: 40;
+    top: 65%;
+    width: 100%;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+  }
+
+  .arxiv-logo {
+    height: 150px;
+    filter: invert(1);
+    transition: transform 0.3s ease;
+  }
+
+  .arxiv-logo:hover {
+    transform: scale(1.1);
   }
 
   .sub-title {
