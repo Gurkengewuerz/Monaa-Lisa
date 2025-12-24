@@ -296,7 +296,13 @@
 
       // Cleanup
       const killRenderer = () => {
-        if (renderer) renderer.kill();
+        // Hier stellen wir sicher dass wir IMMER evt. noch offene Listener entfernen sonst memory leak - nico
+        if (hoverTimeout) clearTimeout(hoverTimeout);
+        if (renderer) {
+          // Listener entfernen
+          renderer.getCamera().off('updated');
+          renderer.kill();
+        }        
         paperCache.clear();
       };
 
