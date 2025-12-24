@@ -23,3 +23,17 @@ coverage.xml
 *.png
 node_modules
 *.log
+
+# NEU - diese fehlen:
+.git
+.gitignore
+*.md
+docs/
+tests/
+**/__pycache__
+**/*.pyc
+MonaaLisa/src/Frontend/
+MonaaLisa/src/Backend/
+docker-compose*.yml
+Dockerfile
+.dockerignore

@@ -1,3 +1,8 @@
+from object.citation import Citation
+from object.paper_citation import PaperCitation
+from object.paper_reference import PaperReference
+from object.reference import Reference
+from SemanticPaper.api.semantic_scholar import SemanticScholarAPI
 from SemanticPaper.api.arxiv import ArxivAPI
 from SemanticPaper.machine_learning.mapper import Mapper
 from SemanticPaper.machine_learning.processor import PaperProcessor
@@ -32,14 +37,9 @@ HASH_FILE = 'parsed_hashes.txt'
 arxiv_client = ArxivAPI()
 model = Model(arxiv_client)
 scheduler = Scheduler(arxiv_client)
-reducer = UMAPReducer()
 # Initialize the embedding cache, which will store embeddings of papers to avoid fetching them from the db everytime
 embedding_cache = {}
 embedding_cache_lock = threading.Lock()
-embedding_labels: dict[str, str | None] = {}
-embedding_labels_lock = threading.Lock()
-pending_projection_ids: set[str] = set()
-pending_projection_lock = threading.Lock()
 try:
     faulthandler.enable()
 except Exception:
@@ -77,6 +77,117 @@ Returns: None
 def paper_worker(worker_id, known_hashes):
     logger.info(f"Worker {worker_id} started")
     while True:
+        paper = scheduler.paper_queue.get()
+        try:
+            if paper is None:
+                return
+            active_categories = get_semanticpaper_categories()
+            if getattr(paper, "category", None) and paper.category not in active_categories:
+                logger.warning(
+                    f"Worker {worker_id}: Category '{paper.category}' removed; skipping paper '{paper.title}'"
+                )
+                continue
+
+            processor = PaperProcessor(paper, model)
+            if processor.prepare_paper(known_hashes):
+                embedding = processor.create_structured_embedding()
+
+                citations_on_arxiv, citations_not_present = semanticscholar_client.fetch_citations(paper, arxiv_client)
+                logger.info(
+                    f"Worker {worker_id}: Found {len(citations_on_arxiv)} references on arXiv and "
+                    f"{len(citations_not_present)} not present."
+                )
+
+                for citation in citations_on_arxiv:
+                    try:
+                        if not citation:
+                            continue
+                        citation_obj = PaperCitation(paper.entry_id, citation.entry_id)
+                        try:
+                            scheduler.paper_queue.put_nowait(citation)
+                        except queue.Full:
+                            logger.warning(f"Worker {worker_id}: Queue full, dropping citation {citation.entry_id}")
+                        paper.citations.append(citation_obj)
+                    except Exception as e:
+                        logger.error(f"Worker {worker_id}: Error processing citation: {e}")
+
+                for citation in citations_not_present:
+                    try:
+                        if not citation:
+                            continue
+                        citation_obj = Citation(paper.entry_id, citation)
+                        paper.citations.append(citation_obj)
+                    except Exception as e:
+                        logger.error(f"Worker {worker_id}: Error processing non-arxiv citation: {e}")
+
+                references_on_arxiv, references_not_present = semanticscholar_client.fetch_references(paper, arxiv_client)
+                logger.info(
+                    f"Worker {worker_id}: Found {len(references_on_arxiv)} references on arXiv and "
+                    f"{len(references_not_present)} not present."
+                )
+
+                for reference in references_on_arxiv:
+                    try:
+                        if not reference:
+                            continue
+                        reference_obj = PaperReference(paper.entry_id, reference.entry_id)
+                        logger.info("Reference on arXiv: " + str(reference.title))
+                        try:
+                            scheduler.paper_queue.put_nowait(reference)
+                        except queue.Full:
+                            logger.warning(f"Worker {worker_id}: Queue full, dropping reference {reference.entry_id}")
+                        paper.references.append(reference_obj)
+                    except Exception as e:
+                        logger.error(f"Worker {worker_id}: Error processing reference: {e}")
+
+                for reference in references_not_present:
+                    try:
+                        if not reference:
+                            continue
+                        reference_obj = Reference(paper.entry_id, reference)
+                        logger.info("Reference not on arXiv: " + str(reference.title))
+                        paper.references.append(reference_obj)
+                    except Exception as e:
+                        logger.error(f"Worker {worker_id}: Error processing non-arxiv reference: {e}")
+
+                logger.info(f"Appended {len(paper.references)} references for paper {paper.title}")
+                logger.info(f"Appended {len(paper.citations)} citations for paper {paper.title}")
+
+                for reference in paper.references:
+                    logger.info(f"Worker {worker_id}: Reference '{reference}' Type: '{type(reference)}'")
+                for citation in paper.citations:
+                    logger.info(f"Worker {worker_id}: Citation '{citation}' Type: '{type(citation)}'")
+
+                if embedding is not None:
+                    tsne = (0.0, 0.0)
+                    data = {"tsne1": tsne[0], "tsne2": tsne[1]}
+                    processor.paper.tsne = data
+                    processor.paper.embedding = embedding
+
+                    mapper = Mapper(processor.paper)
+                    with embedding_cache_lock:
+                        current_embeddings = embedding_cache.copy()
+
+                    relations = mapper.map_paper(current_embeddings)
+                    logger.info(f"Found {len(relations)} relations for {paper.title}")
+
+                    if save_paper_to_db(processor.paper):
+                        for relation in relations:
+                            logger.info(
+                                f"Similar paper: {relation.source_id} with similarity score: {relation.confidence}"
+                            )
+                            save_paper_relation(relation)
+
+                        with embedding_cache_lock:
+                            embedding_cache[processor.paper.entry_id] = processor.paper.embedding
+
+                        save_hash(processor.paper.hash)
+                        known_hashes.add(processor.paper.hash)
+        except Exception:
+            logger.error(f"Worker {worker_id}: Unhandled exception while processing paper")
+        finally:
+            scheduler.paper_queue.task_done()
+
         paper =  scheduler.paper_queue.get()
         if paper is None:
             break
@@ -91,7 +202,7 @@ def paper_worker(worker_id, known_hashes):
                 processor.paper.embedding = embedding
                 mapper = Mapper(processor.paper)
                 # Prepare embeddings snapshot for projection and mapping
-                
+
                 with embedding_cache_lock:
                     current_embeddings = embedding_cache.copy()
                 with embedding_labels_lock:
@@ -187,7 +298,6 @@ def main(num_workers: int = 5):
             scheduler.paper_queue.put(None)
         for t in threads:
             t.join()
-        scheduler.shutdown()
         logger.info("All workers stopped, exiting.")
         sys.exit(0)
 

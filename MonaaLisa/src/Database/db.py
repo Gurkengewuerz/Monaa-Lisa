@@ -13,6 +13,9 @@ from object.relation import Relation
 from util.logger import Logger
 
 from object.embedding import Embedding
+# Imports für Typ-Prüfung bei Relationen
+from object.paper_reference import PaperReference
+from object.paper_citation import PaperCitation
 
 # os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), ".env")
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(__file__))))
@@ -104,40 +107,100 @@ Annotation: Removed redundant parameters hash and date, these should come from t
 def save_paper_to_db(paper: Paper):
     session = SessionLocal()
 
+    # 1. Check if paper is already fully processed (by hash)
     if paper_exists(session, paper):
         logger.info(f"Paper already exists in DB: {paper.title} (hash: {paper.hash})")
         session.close()
         return True
 
-    db_paper = paper.to_db_model()
-    logger.info("hash: " + paper.hash)
-    db_paper.hash = paper.hash
-    session.add(db_paper)
-
-    # Flush the session to save the paper and make its ID available for foreign keys
     try:
+        # 2. Check if paper exists as a Stub (by entry_id)
+        # We use the entry_id to check because stubs have the ID but no Hash
+        existing_paper = session.query(DBPaper).filter_by(entry_id=paper.entry_id).first()
+
+        if existing_paper:
+            logger.info(f"Updating existing stub/paper: {paper.title}")
+            # Update fields of the existing stub
+            existing_paper.title = paper.title
+            existing_paper.authors = ", ".join(paper.authors)
+            existing_paper.summary = paper.abstract
+            existing_paper.published = paper.published
+            existing_paper.category = paper.category
+            existing_paper.tsne = json.dumps(paper.tsne) if paper.tsne else None
+            existing_paper.url = paper.url
+            existing_paper.hash = paper.hash
+            # existing_paper.added remains as is (creation time of stub)
+        else:
+            # Insert new paper
+            db_paper = paper.to_db_model()
+            logger.info("hash: " + paper.hash)
+            db_paper.hash = paper.hash
+            session.add(db_paper)
+
+        # Flush to ensure the paper (or update) is applied before we add relations
         session.flush()
-    except Exception as e:
-        logger.error(f"DB error on flush: {e}")
-        session.rollback()
-        session.close()
-        return False
 
-    # in the future when we have more calls to grobid this should not happen but rather in a sooner step so we process each paper only once
-    references = paper.references if paper.references else []
-    for ref in references:
-        db_reference = ref.to_db_model()
-        logger.info(f"Adding reference to DB: {db_reference.title}")
-        session.add(db_reference)
-    if paper.embedding is not None:
-        db_embedding = paper.embedding.to_db_model()
-        logger.info(f"Adding embedding to DB for paper: {paper.title}")
-        session.add(db_embedding)
+        # 3. Handle Missing Targets for Relations (Create Stubs)
+        # This ensures that referenced papers exist in the DB so Foreign Keys don't fail
+        references = paper.references if paper.references else []
+        citations = paper.citations if paper.citations else []
 
-    try:
+        needed_ids = set()
+
+        # Collect IDs from PaperReference and PaperCitation objects
+        for ref in references:
+            if isinstance(ref, PaperReference):
+                needed_ids.add(ref.referenced_paper_id)
+
+        for cite in citations:
+            if isinstance(cite, PaperCitation):
+                needed_ids.add(cite.cited_paper_id)
+
+        if needed_ids:
+            # Find which ones are missing in DB
+            existing_stubs = session.query(DBPaper.entry_id).filter(DBPaper.entry_id.in_(needed_ids)).all()
+            found_ids = {r.entry_id for r in existing_stubs}
+
+            missing_ids = needed_ids - found_ids
+
+            if missing_ids:
+                logger.info(f"Creating {len(missing_ids)} stubs for missing relations...")
+                for mid in missing_ids:
+                    # Create Stub
+                    # Hash is None (Postgres allows multiple NULLs in unique columns)
+                    # Title indicates it's a placeholder
+                    stub = DBPaper(
+                        entry_id=mid,
+                        added=datetime.now(),
+                        title="[STUB] Pending Fetch",
+                        hash=None
+                    )
+                    session.add(stub)
+                # Flush stubs so they are available for FK checks immediately
+                session.flush()
+
+        # 4. Save Relations
+        for ref in references:
+            db_reference = ref.to_db_model()
+            session.add(db_reference)
+
+        for cite in citations:
+            db_citation = cite.to_db_model()
+            session.add(db_citation)
+
+        # 5. Handle Embedding
+        if paper.embedding is not None:
+            # Remove existing embedding if we are updating a stub/paper to avoid unique constraint violation
+            session.query(DBEmbedding).filter_by(belonging_paper_entry_id=paper.entry_id).delete()
+
+            db_embedding = paper.embedding.to_db_model()
+            logger.info(f"Adding embedding to DB for paper: {paper.title}")
+            session.add(db_embedding)
+
         session.commit()
         logger.info(f"Saved paper to DB: {paper.title}")
         return True
+
     except Exception as e:
         logger.error(f"DB error: {e}")
         session.rollback()
@@ -221,6 +284,7 @@ def get_entry_ids_missing_projection(limit: int | None = None) -> list[str]:
     finally:
         session.close()
 
+
 """
 25-May-2025 - Basti - Tweaked 30-September-2025 - Lenio
 Abstract: Checks if a paper hash already exists in the database
@@ -237,6 +301,7 @@ Additionally:
 Checking by hash could be a way of checking for updates to a paper, but that is not implemented yet.
 """
 def paper_exists(session, paper: Paper):
+    # Note: Stubs have hash=None, so this returns False for stubs, which is correct (we want to process them)
     return session.query(DBPaper).filter_by(hash=paper.hash).first() is not None
 
 
@@ -288,43 +353,6 @@ def create_program_run():
         logger.error(f"Error creating program run: {e}")
         session.rollback()
         return None
-    finally:
-        session.close()
-
-
-"""
-20-December-2025 - Basti
-Abstract: Checks whether a program run exists.
-"""
-def program_run_exists(run_id: int) -> bool:
-    session = SessionLocal()
-    try:
-        return session.query(ProgramRun.id).filter_by(id=run_id).first() is not None
-    except Exception as e:
-        logger.error(f"Error checking program run existence: {e}")
-        return False
-    finally:
-        session.close()
-
-
-"""
-Abstract: Reactivates an existing program run and deactivates the others.
-Returns: bool -> True if the run was reactivated, False otherwise.
-"""
-def set_active_program_run(run_id: int) -> bool:
-    session = SessionLocal()
-    try:
-        if session.query(ProgramRun.id).filter_by(id=run_id).first() is None:
-            return False
-        session.query(ProgramRun).update({"is_active": "false"})
-        session.query(ProgramRun).filter_by(id=run_id).update({"is_active": "true"})
-        session.commit()
-        logger.info(f"Reactivated ProgramRun ID: {run_id}")
-        return True
-    except Exception as e:
-        logger.error(f"Error reactivating program run {run_id}: {e}")
-        session.rollback()
-        return False
     finally:
         session.close()
 

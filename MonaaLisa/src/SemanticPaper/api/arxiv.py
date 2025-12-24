@@ -88,15 +88,37 @@ class ArxivAPI:
         )
         papers: list[Paper] = [] # Typisieren wenn es geht hilft beim Coding
         for result in self.client.results(search):
+            # 15-December-2025 - Lenio - Question: Why do we wait here again?
             self.rate_limiter.wait()
             if result:
                 paper = Paper.from_arxiv(result)
+                # TODO: Need to rework category assignment, since arxiv api returns multiple categories
                 paper.category = category
                 papers.append(paper)
             else:
                 papers.append(None)
         return papers
 
+    """
+    15-December-2025 - Lenio
+    Abstract: Fetches papers by their arXiv IDs.
+    Args:
+    - arxiv_ids: List of arXiv IDs to fetch papers for.
+    Returns: List of Paper objects corresponding to the provided arXiv IDs.
+    """
+    def fetch_papers_by_ids(self, arxiv_ids: list[str]) -> list[Paper]:
+        self.rate_limiter.wait()
+        search = arx.Search(id_list=arxiv_ids)
+        papers: list[Paper] = []
+        for result in self.client.results(search):
+            if result:
+                paper = Paper.from_arxiv(result)
+                # TODO: Need to rework category assignment, since arxiv api returns multiple categories
+                paper.category = result.primary_category
+                papers.append(paper)
+            else:
+                papers.append(None)
+        return papers
 
     def fetch_historical_batch(self, category: str, batch_size: int = 50, start_offset: int = 0) -> tuple[list[Paper], bool]:
         self.rate_limiter.wait()

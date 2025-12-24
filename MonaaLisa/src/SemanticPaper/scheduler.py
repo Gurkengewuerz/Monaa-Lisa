@@ -158,8 +158,7 @@ class Scheduler:
                         if paper:
                             if not self._enqueue_paper(paper):
                                 self.logger.info(
-                                    "Queue full while enqueuing historical papers for %s; remaining batch dropped",
-                                    cat
+                                    f"Queue full while enqueuing historical papers for {cat}; remaining batch dropped"
                                 )
                                 break
                             enqueued_count += 1
