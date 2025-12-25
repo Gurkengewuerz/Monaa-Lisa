@@ -3,6 +3,8 @@
   import { fade } from 'svelte/transition';
   import { spring } from 'svelte/motion';
   import arxivLogo from '../assets/arxiv_logo.png';
+  import monaaLisaLogo from '../assets/monaa_lisa_logo.png';
+  import mlbg from '../assets/mlbg.png';
 
   const dispatch = createEventDispatcher();
 
@@ -70,14 +72,27 @@
   <div class="sticky-wrapper">
       <!-- Background Image Layer -->
       <div class="background" style="transform: scale({bgScale})">
-           <div class="art-placeholder"></div>
+           <div class="art-placeholder" style="background-image: url({mlbg})"></div>
       </div>
 
-      <!-- Hero Section -->
-      <div class="hero" style="opacity: {heroOpacity}; pointer-events: {heroOpacity < 0.1 ? 'none' : 'auto'}">
+      <!-- Logo Layer -->
+      <div class="logo-layer" style="transform: scale({bgScale})">
+          <img src={monaaLisaLogo} alt="Monaa-Lisa Logo" class="hero-logo" />
+      </div>
+
+      <!-- Hero Section (Title) -->
+      <div class="hero-layer title-layer" style="opacity: {heroOpacity}; pointer-events: none">
           <h1 class="hero-title">Monaa-Lisa</h1>
-          <button class="start-btn" on:click={start}>START</button>
-          <p class="hero-subtitle">Visualize academia interactively</p>
+      </div>
+
+      <!-- Hero Section (Content) -->
+      <div class="hero-layer content-layer" style="opacity: {heroOpacity}; pointer-events: {heroOpacity < 0.1 ? 'none' : 'auto'}">
+          <!-- Spacer to push content down similar to where it would be if title was here -->
+          <div class="title-spacer"></div>
+          <div class="hero-content">
+            <button class="start-btn" on:click={start}>START</button>
+            <p class="hero-subtitle">Visualize academia interactively</p>
+          </div>
       </div>
 
       <!-- Second Section (Zoomed out view) -->
@@ -164,63 +179,104 @@
   .art-placeholder {
     width: 100%;
     height: 100%;
-    background: radial-gradient(circle at center, #2b1055, #7597de);
-    background-image: url('https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?q=80&w=2564&auto=format&fit=crop');
+    background-color: #000;
     background-size: cover;
     background-position: center;
     filter: brightness(0.6);
   }
 
-  .hero {
+  .logo-layer {
     position: absolute;
-    z-index: 10;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    z-index: 15; /* Middle Layer */
+    pointer-events: none;
+    display: flex;
+    justify-content: center;
+    align-items: flex-end;
+  }
+
+  .hero-layer {
+    position: absolute;
     width: 100%;
     height: 100%;
     display: flex;
     flex-direction: column;
-    justify-content: center;
+    justify-content: flex-start;
     align-items: center;
     text-align: center;
     transition: opacity 0.1s linear;
+    padding-top: 10vh;
+  }
+
+  .title-layer {
+    z-index: 10; /* Bottom Layer */
+  }
+
+  .content-layer {
+    z-index: 20; /* Top Layer */
+  }
+
+  .title-spacer {
+    /* Approximate height of title + margin to push button down */
+    height: calc(6rem + 2rem); 
+    width: 1px;
+  }
+
+  .hero-logo {
+    height: 92vh;
+    width: auto;
+    margin-bottom: 0;
+    filter: drop-shadow(0 0 20px rgba(0,0,0,0.8));
   }
 
   .hero-title {
-    font-size: 8rem;
+    font-size: 10rem;
     margin: 0;
+    margin-bottom: 2rem;
     text-transform: uppercase;
     letter-spacing: 10px;
     font-weight: 900;
     text-shadow: 0 0 20px rgba(0,0,0,0.5);
   }
 
+  .hero-content {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+  }
+
   .start-btn {
-    margin-top: 40px;
+    margin-top: 500px;
     padding: 15px 50px;
     font-size: 1.5rem;
-    background: rgba(255, 255, 255, 0.1);
+    background: rgba(100, 100, 255, 0.15); /* Slight blue tint base */
     border: 2px solid #fff;
     color: #fff;
     cursor: pointer;
     text-transform: uppercase;
     letter-spacing: 2px;
     transition: all 0.3s ease;
-    backdrop-filter: blur(5px);
+    backdrop-filter: blur(10px);
+    box-shadow: 0 0 20px rgba(138, 43, 226, 0.3), inset 0 0 20px rgba(0, 191, 255, 0.2); /* Purple glow + Blue inner glow */
   }
 
   .start-btn:hover {
-    background: #fff;
+    background: rgba(255, 255, 255, 0.9);
     color: #000;
     transform: scale(1.05);
+    box-shadow: 0 0 30px rgba(138, 43, 226, 0.6), inset 0 0 20px rgba(0, 191, 255, 0.4);
   }
 
   .hero-subtitle {
-    position: absolute;
-    bottom: 40px;
+    margin-top: 175px;
     font-size: 1.2rem;
-    letter-spacing: 4px;
+    letter-spacing: 9px;
     text-transform: uppercase;
-    opacity: 0.8;
-    text-shadow: 0 0 10px rgba(0,0,0,0.5);
+    opacity: 0.9;
+    text-shadow: 0 2px 2px rgba(0,0,0,0.9);
   }
 
   .second-section {
