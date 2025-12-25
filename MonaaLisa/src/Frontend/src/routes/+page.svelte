@@ -23,12 +23,14 @@
 </script>
 
 {#if !showLanding}
-  <main in:fade>
+  <main in:fade={{ duration: 300 }}>
     <GraphLayout />
   </main>
 {:else}
-  <button class="logo-btn" on:click={handleReset} transition:fade>M-L</button>
-  <LandingPage bind:this={landingPage} on:start={handleStart} />
+  <div class="landing-wrapper" out:fade={{ duration: 300 }}>
+    <button class="logo-btn" on:click={handleReset} transition:fade>M-L</button>
+    <LandingPage bind:this={landingPage} on:start={handleStart} />
+  </div>
 {/if}
 
 <style>
@@ -44,6 +46,9 @@
   main {
     width: 100vw;
     height: 100vh;
+    position: fixed;
+    top: 0;
+    left: 0;
   }
 
   .logo-btn {
