@@ -1,10 +1,19 @@
 <script lang="ts">
+  import { onMount } from 'svelte';
   import GraphLayout from '../components/GraphLayout.svelte';
   import LandingPage from '../components/LandingPage.svelte';
+  import LoadingScreen from '../components/LoadingScreen.svelte';
   import { fade } from 'svelte/transition';
 
+  let loading = true;
   let showLanding = true;
   let landingPage: LandingPage;
+
+  onMount(() => {
+    setTimeout(() => {
+      loading = false;
+    }, 2000);
+  });
 
   function handleStart() {
     showLanding = false;
@@ -22,13 +31,19 @@
   }
 </script>
 
+{#if loading}
+  <LoadingScreen />
+{/if}
+
 {#if !showLanding}
   <main in:fade={{ duration: 300 }}>
     <GraphLayout />
   </main>
 {:else}
   <div class="landing-wrapper" out:fade={{ duration: 300 }}>
-    <button class="logo-btn" on:click={handleReset} transition:fade>M-L</button>
+    {#if !loading}
+      <button class="logo-btn" on:click={handleReset} transition:fade>M-L</button>
+    {/if}
     <LandingPage bind:this={landingPage} on:start={handleStart} />
   </div>
 {/if}
