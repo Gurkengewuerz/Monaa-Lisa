@@ -183,3 +183,6 @@ cython_debug/
 .pypirc
 config.ini
 .env
+
+# get rid of full logs folder, why wasnt this here earlier lol
+logs/

@@ -1,26 +1,20 @@
 <script lang="ts">
-  import { createEventDispatcher } from 'svelte';
-  import { onMount } from 'svelte';
+  import { createEventDispatcher, onMount } from 'svelte';
   import Graph from 'graphology';
   import Sigma from 'sigma';
+  import concaveman from 'concaveman';
   import type { Paper } from '$lib/types/paper';
-  import { clusterColors as clusterCol } from '../utils/clusterColors';
+  import { getClusterColor } from '../utils/clusterColors';
+  import { getCategoryCountryName } from '../utils/categoryCountries';
 
   /**
    * array of papers to display in the graph.
    * passed from the parent component.
    * @type {Paper[]}
-   */
-  export let papers: Paper[] = [];
-
-  /**
-   * id of the currently selected paper
-   * used for external selection control
-   * @type {string | null}
-   */
+   */export let papers: Paper[] = [];
   export let selectedPaperId: string | null = null;
 
-  /**
+   /**
    * flag to use dummy data for showcasing.
    * when true, uses dummypapers instead of the papers prop.
    * set to true for demo, false for real data.
@@ -38,32 +32,21 @@
 */
   //internal state variables for component management
   let container: HTMLDivElement | null = null;
+  let hullCanvas: HTMLCanvasElement | null = null;
   let selectedPaper: Paper | null = null;
   let selectedNode: string | null = null;
   let renderer: Sigma | null = null;
   let graph: Graph | null = null;
 
-  //add cache for quick paper lookup
+    //add cache for quick paper lookup
   let paperCache: Map<string, Paper> = new Map();
-
-  //add debounce for hover
+    //add debounce for hover
   let hoverTimeout: number | null = null;
 
   const dispatch = createEventDispatcher();
+  const FALLBACK_NODE_COLOR = '#999999';
 
-  //cluster color mapping for visual grouping
-  //todo: figure out if we even need this later on or if cluster colors are static instead of dynamic
-  /*const clusterCol: Record<string, string> = {
-    A: '#CC6666',
-    B: '#66B2B2',
-    C: '#9966CC',
-    D: '#CC66B2',
-    E: '#6699CC',
-    F: '#FF4500',
-    G: '#00CED1',
-  };*/
-
-  /**
+    /**
    * selects and highlights a node in the graph, updating visuals and connections.
    * clears edges, resets colors, highlights related nodes, adds edges, and zooms.
    * @param {string} nodeId - the id of the node to select.
@@ -71,33 +54,26 @@
   function selectNodeById(nodeId: string) {
     if (!graph || !renderer || !graph.hasNode(nodeId)) return;
 
-    //clear all edges to reset the view
-    const edgesToRemove = graph!.edges();
-    edgesToRemove.forEach((edge: string) => {
-      graph!.dropEdge(edge);
-    });
+    const edgesToRemove = graph.edges();
+    edgesToRemove.forEach((edge) => graph!.dropEdge(edge));
 
-    //set all nodes to a semi-transparent black to help focus on selections
-    graph!.forEachNode((n: string) => {
+    graph.forEachNode((n) => {
       graph!.setNodeAttribute(n, 'color', 'rgba(0, 0, 0, 0.25)');
     });
 
-    //highlight selected node in green
     graph.setNodeAttribute(nodeId, 'color', '#00FF00');
 
-    //retrieve paper data and collect only direct citations (no related or citing papers)
-    const paper = (graph.getNodeAttributes(nodeId) as any).paper as Paper;
+    const paper = graph.getNodeAttribute(nodeId, 'paper') as Paper;
     selectedPaper = paper;
     const relatedNodes = new Set<string>(paper.citations);
 
-    //highlight related nodes in yellow
     relatedNodes.forEach(relatedId => {
       if (graph!.hasNode(relatedId)) {
         graph!.setNodeAttribute(relatedId, 'color', '#FFFF00');
       }
     });
 
-    //add edges only for citations
+        //add edges only for citations
     //edges to cited papers
     paper.citations.forEach(citedId => {
       if (graph!.hasNode(citedId)) {
@@ -108,42 +84,75 @@
       }
     });
 
-    // *** FIXED ZOOM - CORRECT SIGMA.JS API ***
-    const nodePosition = graph.getNodeAttributes(nodeId) as any;
-    console.log('Zooming to node:', nodeId, 'Position:', nodePosition.x, nodePosition.y);
-    
+    const nodePosition = graph.getNodeAttributes(nodeId);
     const camera = renderer.getCamera();
-    // TypeScript's AnimateOptions may not include x/y directly depending on the sigma types;
+        // TypeScript's AnimateOptions may not include x/y directly depending on the sigma types;
     // cast to any to allow passing x/y while keeping runtime behavior unchanged.
     camera.animatedReset({
       x: nodePosition.x,
       y: nodePosition.y,
-      ratio: 0.5,  // Zoom in closer (smaller ratio = more zoomed)
+      ratio: 0.5,
       duration: 800
     } as any);
 
     selectedNode = nodeId;
     renderer.refresh();
-
-    // *** CRITICAL: EMIT EVENT TO SIDEBAR ***
     dispatch('nodeSelected', nodeId);
-    console.log('EMITTED nodeSelected:', nodeId);
+    console.log(`Node ${nodeId} is currently selected lelele`);
   }
 
-  //react to prop changes: update selection when selectedpaperid changes
   $: if (selectedPaperId && selectedPaperId !== selectedNode && graph && renderer) {
-    console.log('Graph reacting to sidebar selection:', selectedPaperId);
     selectNodeById(selectedPaperId);
   }
 
+  function drawHulls(hulls: any[]) {
+    if (!hullCanvas || !renderer) return;
+    const ctx = hullCanvas.getContext('2d');
+    if (!ctx) return;
+
+    // Resize canvas to match container
+    if (hullCanvas.width !== hullCanvas.offsetWidth || hullCanvas.height !== hullCanvas.offsetHeight) {
+        hullCanvas.width = hullCanvas.offsetWidth;
+        hullCanvas.height = hullCanvas.offsetHeight;
+    }
+
+    ctx.clearRect(0, 0, hullCanvas.width, hullCanvas.height);
+
+    hulls.forEach(hull => {
+        if (!hull.path || hull.path.length < 3) return;
+
+        ctx.beginPath();
+        hull.path.forEach((pt: [number, number], i: number) => {
+            const pos = renderer!.graphToViewport({x: pt[0], y: pt[1]});
+            if (i === 0) ctx.moveTo(pos.x, pos.y);
+            else ctx.lineTo(pos.x, pos.y);
+        });
+        ctx.closePath();
+        ctx.fillStyle = hull.color; 
+        ctx.fill();
+        ctx.strokeStyle = hull.strokeColor;
+        ctx.lineWidth = 2;
+        ctx.stroke();
+
+        // Draw Label
+        const center = renderer!.graphToViewport({x: hull.cx, y: hull.cy});
+        ctx.fillStyle = '#ffffff';
+        ctx.font = 'bold 14px Arial';
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        ctx.shadowColor = 'black';
+        ctx.shadowBlur = 4;
+        ctx.fillText(hull.label, center.x, center.y);
+        ctx.shadowBlur = 0;
+    });
+  }
+
   onMount(() => {
-    //initialize graphology graph for data storage
+    console.log("Graph Component Mounting...");
     graph = new Graph();
-
-    // no more dummy data :D
     const dataSource = papers;
+    console.log(`Processing ${dataSource.length} papers...`);
 
-    // compute inbound citation counts (times a paper is cited by others)
     const inDegree = new Map<string, number>();
     dataSource.forEach(p => inDegree.set(p.entry_id, 0));
     dataSource.forEach(p => {
@@ -161,95 +170,212 @@
       return minSize + t * (maxSize - minSize);
     };
 
-    //populate graph with nodes from the selected data source
+    // Collect points for hulls
+    const categoryPoints = new Map<string, {x: number, y: number}[]>();
+
+    // --- FORCE SEPARATION LOGIC ---
+    // 1. Calculate Centroids per Category
+    const papersByCategory = new Map<string, Paper[]>();
+    const categoryCentroids = new Map<string, {x: number, y: number}>();
+    
+    dataSource.forEach(p => {
+        const cat = p.category || 'Unknown';
+        if (!papersByCategory.has(cat)) papersByCategory.set(cat, []);
+        papersByCategory.get(cat)!.push(p);
+    });
+
+    papersByCategory.forEach((papers, cat) => {
+        let sumX = 0, sumY = 0;
+        papers.forEach(p => { sumX += p.tsne1; sumY += p.tsne2; });
+        categoryCentroids.set(cat, { x: sumX / papers.length, y: sumY / papers.length });
+    });
+
+    // 2. Assign Territory Centers (Phyllotaxis Spiral Layout)
+    const categories = Array.from(papersByCategory.keys()).sort();
+    const territoryCenters = new Map<string, {x: number, y: number}>();
+    
+    // Spiral parameters
+    const SPACING_FACTOR = 400; // Distance between spiral arms
+    const ANGLE_INCREMENT = 137.5 * (Math.PI / 180); // Golden angle in radians
+    
+    categories.forEach((cat, i) => {
+        // Formula: r = c * sqrt(n), theta = n * 137.5 deg
+        const r = SPACING_FACTOR * Math.sqrt(i + 1); 
+        const theta = i * ANGLE_INCREMENT;
+        
+        territoryCenters.set(cat, {
+            x: r * Math.cos(theta),
+            y: r * Math.sin(theta)
+        });
+    });
+
     dataSource.forEach(paper => {
+      const cat = paper.category || 'Unknown';
+      const centroid = categoryCentroids.get(cat) || {x: 0, y: 0};
+      const territory = territoryCenters.get(cat) || {x: 0, y: 0};
       
-      const scaleFactor = 0.5; //adjust as needed for better spacing
-      const scaledX = paper.tsne1 * scaleFactor;
-      const scaledY = paper.tsne2 * scaleFactor;
+      // Local coordinates relative to cluster center
+      // Scale local cluster to keep it compact within its territory
+      const LOCAL_SCALE = 20.0; 
+      const localX = (paper.tsne1 - centroid.x) * LOCAL_SCALE;
+      const localY = (paper.tsne2 - centroid.y) * LOCAL_SCALE;
+
+      const finalX = territory.x + localX;
+      const finalY = territory.y + localY;
 
       const inCitations = inDegree.get(paper.entry_id) || 0;
       const nodeSize = sizeFor(inCitations);
+      const nodeColor = getClusterColor(paper.category, paper.cluster) ?? FALLBACK_NODE_COLOR;
 
       graph!.addNode(paper.entry_id, {
-        x: scaledX,
-        y: scaledY,
+        x: finalX,
+        y: finalY,
         size: nodeSize,
         label: paper.title,
-        color: clusterCol[paper.cluster] || '#999999',
-        originalColor: clusterCol[paper.cluster] || '#999999',
+        color: nodeColor,
+        originalColor: nodeColor,
         paper: paper,
-        inCitations // extra attribute for debugging/inspection
+        inCitations
       });
 
       //cache paper for fast lookup
       paperCache.set(paper.entry_id, paper);
+
+      // Collect points
+      if (!categoryPoints.has(paper.category)) {
+          categoryPoints.set(paper.category, []);
+      }
+      categoryPoints.get(paper.category)!.push({x: finalX, y: finalY});
     });
 
-    //initialize sigma renderer for visualization
+    // Initialize Sigma Renderer FIRST to ensure papers are visible! :)
     if (container) {
+      console.log("Initializing Sigma Renderer...");
       renderer = new Sigma(graph, container, {
         renderEdgeLabels: false,
         defaultNodeType: 'circle',
         defaultEdgeType: 'line',
-        minCameraRatio: 0.1,
-        maxCameraRatio: 10,
-        //labels disabled for clarity; use sidebar/search instead
+        minCameraRatio: 0.001,
+        maxCameraRatio: 100,
         renderLabels: false,
       });
 
+      
       //handle node hover: show paper details with debounce
-      renderer.on('enterNode', ({ node }: { node: string }) => {
-        //clear previous timeout
+      renderer.on('enterNode', ({ node }) => {
         if (hoverTimeout) clearTimeout(hoverTimeout);
-        
-        //debounce: delay setting selectedPaper by 100ms
         hoverTimeout = setTimeout(() => {
           selectedPaper = paperCache.get(node) || null;
         }, 200) as unknown as number;
       });
 
       renderer.on('leaveNode', () => {
-        //clear timeout and hide details
+          //clear timeout and hide details
         if (hoverTimeout) clearTimeout(hoverTimeout);
         selectedPaper = null;
       });
 
       // *** FIXED CLICK HANDLER - NO DUPLICATE DISPATCH ***
-      renderer.on('clickNode', ({ node }: { node: string }) => {
-        console.log('🖱️ CLICKED NODE:', node);
-        selectNodeById(node); // This emits the event internally
+      renderer.on('clickNode', ({ node }) => {
+        selectNodeById(node);
       });
 
-      //handle stage click: deselect and reset view
       renderer.on('clickStage', () => {
         selectedNode = null;
         selectedPaper = null;
-
-        //restore original node colors
-        graph!.forEachNode((n: string) => {
-          const originalColor = (graph!.getNodeAttributes(n) as any).originalColor;
+        graph!.forEachNode((n) => {
+          const originalColor = graph!.getNodeAttribute(n, 'originalColor');
           graph!.setNodeAttribute(n, 'color', originalColor);
         });
-
-        //remove all edges
         const edgesToRemove = graph!.edges();
-        edgesToRemove.forEach((edge: string) => {
-          graph!.dropEdge(edge);
-        });
-
+        edgesToRemove.forEach((edge) => graph!.dropEdge(edge));
         renderer!.getCamera().animatedReset({ duration: 800 });
         renderer!.refresh();
-
         dispatch('nodeDeselected');
-        console.log('EMITTED nodeDeselected');
       });
 
-      //cleanup: destroy renderer and clear cache on unmount
-      return () => {
-        if (renderer) renderer.kill();
+      // Cleanup
+      const killRenderer = () => {
+        // Hier stellen wir sicher dass wir IMMER evt. noch offene Listener entfernen sonst memory leak - nico
+        if (hoverTimeout) clearTimeout(hoverTimeout);
+        if (renderer) {
+          // Listener entfernen
+          renderer.getCamera().off('updated');
+          renderer.kill();
+        }        
         paperCache.clear();
       };
+
+      // Compute Hulls SAFELY and on client side (for now!!)
+      try {
+        console.log("Computing Hulls...");
+        const hulls: any[] = [];
+        categoryPoints.forEach((points, cat) => {
+            if (points.length < 3) return;
+
+            // 1. Centroid of all points
+            const cx = points.reduce((sum, p) => sum + p.x, 0) / points.length;
+            const cy = points.reduce((sum, p) => sum + p.y, 0) / points.length;
+
+            // 2. Filter outliers (98% densest)
+            // this is to prevent concaveman from creating huge hulls due to outliers
+            // we need to name the outliers something cool though
+            const withDist = points.map(p => ({
+                p,
+                // calculate squared distance to centroid
+                dist: (p.x - cx)**2 + (p.y - cy)**2
+            }));
+            // sort by distance
+            withDist.sort((a, b) => a.dist - b.dist);
+            // keep only closest 98%
+            const keepCount = Math.ceil(points.length * 0.98);
+            
+            // ensure at least 3 points to form a hull
+            if (keepCount < 3) return;
+            
+            // extract kept points
+            const keptPoints = withDist.slice(0, keepCount).map(item => [item.p.x, item.p.y] as [number, number]);
+
+            // 3. usage of concaveman package to compute hull 
+            // Use lower concavity (1.0) for tighter hulls to avoid visual overlap
+            let hullPoints;
+            if (typeof concaveman === 'function') {
+                hullPoints = concaveman(keptPoints, 1.0);
+            } else if ((concaveman as any).default) {
+                 // Handle potential ESM/CJS interop issues because I had 
+                 // the issue in some setups where concaveman was an object with a default property
+                hullPoints = (concaveman as any).default(keptPoints, 1.0);
+            } else {
+                console.warn("Concaveman not found or invalid type", concaveman);
+                return;
+            }
+
+            const color = getClusterColor(cat, cat) || '#cccccc';
+            
+            // finally store hull
+            hulls.push({
+                path: hullPoints,
+                color: color + '33', 
+                strokeColor: color + '66',
+                label: getCategoryCountryName(cat),
+                cx, cy
+            });
+        });
+
+        console.log(`Generated ${hulls.length} hulls.`);
+
+        // Bind hull drawing
+        const camera = renderer.getCamera();
+        camera.on('updated', () => drawHulls(hulls));
+        
+        // Initial draw
+        setTimeout(() => drawHulls(hulls), 100);
+
+      } catch (e) {
+        console.error("Error generating hulls:", e);
+      }
+
+      return killRenderer;
     }
   });
 </script>
@@ -260,6 +386,17 @@
     height: 600px;
     border: none;
     background-color: #1e1e27;
+    position: relative; 
+  }
+
+  canvas {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    pointer-events: none; 
+    z-index: 1; 
   }
 
   .paper-details {
@@ -274,6 +411,7 @@
     display: none;
     box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
     font-size: 14px;
+    z-index: 10; 
   }
 
   .paper-details.visible {
@@ -292,7 +430,9 @@
   }
 </style>
 
-<div class="graph-container" bind:this={container}></div>
+<div class="graph-container" bind:this={container}>
+    <canvas bind:this={hullCanvas}></canvas>
+</div>
 
 {#if selectedPaper}
   <div class="paper-details visible">

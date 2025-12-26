@@ -21,6 +21,7 @@
     "econ.EM", "econ.GN", "econ.TH"
   ],
   "semanticpaper_categories": [
-    "cs.CG", "math.DG", "math.CV"
+    "cs.CG", "math.DG", "math.CV", "cs.GR", "cs.DS", "cs.LG", "cs.NE", "stat.ML",
+    "math.OC", "math.NA",  "cs.CV", "cs.AI", "cs.IR", "cs.CL", "cs.CR"
   ]
 }

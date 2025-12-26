@@ -2,7 +2,7 @@ import os
 import sys
 from datetime import datetime, timezone
 from typing import cast, List
-from sqlalchemy import create_engine, or_, and_, exists, select
+from sqlalchemy import create_engine, or_, and_, exists, select, update
 from sqlalchemy.orm import sessionmaker
 from dotenv import load_dotenv
 from config import cfg
@@ -66,6 +66,28 @@ def get_all_embeddings():
             for db_embedding in db_embeddings if db_embedding.content is not None
         }
         return embedding_dict
+    finally:
+        session.close()
+
+
+"""
+20-December-2025 - Basti - Refactor for the supervised UMAP
+Abstract: Returns a mapping of paper entry_id to its arXiv category for supervised reducers.
+Args:
+- limit: optional limit mirroring embedding preload limits to avoid excessive memory use
+Returns: Dict[str, str | None]
+"""
+def get_embedding_labels(limit: int | None = None) -> dict[str, str | None]:
+    session = SessionLocal()
+    try:
+        q = session.query(DBPaper.entry_id, DBPaper.category).filter(DBPaper.category.isnot(None))
+        if limit is not None:
+            q = q.limit(limit)
+        rows = q.all()
+        return {entry_id: category for entry_id, category in rows if entry_id}
+    except Exception as e:
+        logger.error(f"Failed to load embedding labels: {e}")
+        return {}
     finally:
         session.close()
 
@@ -154,6 +176,52 @@ def save_paper_relation(paper_relation: Relation):
         session.close()
 
 """
+14-Dec 2025 - Basti
+Abstract: We can not "freeze" the papers location in the DB when we save them, because the t-SNE/UMAP projection
+may be calculated later. This function updates the projection field of a paper in the DB.
+Args:
+- entry_id: The entry_id of the paper to update
+- projection: The new projection dict to set
+Returns: bool -> True if update was successful, False otherwise
+"""
+def update_paper_projection(entry_id: str, projection: dict) -> bool:
+    session = SessionLocal()
+    try:
+        result = session.execute(
+            update(DBPaper)
+            .where(DBPaper.entry_id == entry_id)
+            .values(tsne=projection)
+        )
+        if result.rowcount == 0:
+            logger.warning(f"No paper found to update projection for entry_id={entry_id}")
+            session.rollback()
+            return False
+        session.commit()
+        logger.info(f"Updated projection for paper {entry_id}")
+        return True
+    except Exception as e:
+        logger.error(f"Failed updating projection for {entry_id}: {e}")
+        session.rollback()
+        return False
+    finally:
+        session.close()
+
+
+def get_entry_ids_missing_projection(limit: int | None = None) -> list[str]:
+    session = SessionLocal()
+    try:
+        query = session.query(DBPaper.entry_id).filter(DBPaper.tsne.is_(None))
+        if limit is not None:
+            query = query.limit(limit)
+        rows = query.all()
+        return [row[0] for row in rows if row[0] is not None]
+    except Exception as e:
+        logger.error(f"Failed to fetch papers missing projection: {e}")
+        return []
+    finally:
+        session.close()
+
+"""
 25-May-2025 - Basti - Tweaked 30-September-2025 - Lenio
 Abstract: Checks if a paper hash already exists in the database
 Args:
@@ -220,6 +288,43 @@ def create_program_run():
         logger.error(f"Error creating program run: {e}")
         session.rollback()
         return None
+    finally:
+        session.close()
+
+
+"""
+20-December-2025 - Basti
+Abstract: Checks whether a program run exists.
+"""
+def program_run_exists(run_id: int) -> bool:
+    session = SessionLocal()
+    try:
+        return session.query(ProgramRun.id).filter_by(id=run_id).first() is not None
+    except Exception as e:
+        logger.error(f"Error checking program run existence: {e}")
+        return False
+    finally:
+        session.close()
+
+
+"""
+Abstract: Reactivates an existing program run and deactivates the others.
+Returns: bool -> True if the run was reactivated, False otherwise.
+"""
+def set_active_program_run(run_id: int) -> bool:
+    session = SessionLocal()
+    try:
+        if session.query(ProgramRun.id).filter_by(id=run_id).first() is None:
+            return False
+        session.query(ProgramRun).update({"is_active": "false"})
+        session.query(ProgramRun).filter_by(id=run_id).update({"is_active": "true"})
+        session.commit()
+        logger.info(f"Reactivated ProgramRun ID: {run_id}")
+        return True
+    except Exception as e:
+        logger.error(f"Error reactivating program run {run_id}: {e}")
+        session.rollback()
+        return False
     finally:
         session.close()
 
