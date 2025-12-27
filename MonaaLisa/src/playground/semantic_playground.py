@@ -9,6 +9,10 @@ import dotenv
 dotenv.load_dotenv()
 
 
+"""
+27-December-2025 - Lenio
+A playground for testing semantic scholar functionalities.
+"""
 class SemanticScholarPlayground(Playground):
 
     def __init__(self):

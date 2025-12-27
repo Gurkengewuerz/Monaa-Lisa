@@ -4,12 +4,12 @@ from Database.db_models import DBPaperReference
 from semanticscholar.Paper import Paper
 
 """
-29-July-2025 - Lenio
-Abstract: Represents a reference found in a paper
+27-December-2025 - Lenio
+Abstract: 
+    Represents a reference found in a paper
 Variables:
 - belonging_paper_id: str -> The ID of the paper this reference belongs to
 - reference_paper_id: str -> The ID of the referenced paper
-Suggestion for later: Consider adding more fields like authors, publication date, etc. for better reference management.
 """
 @dataclass
 class PaperReference:
@@ -18,10 +18,9 @@ class PaperReference:
 
 
     """
-    26-July-2025 - Lenio
-    Abstract: Converts the Paper object to a SQLAlchemy model.
-    Args: DBPaper: SQLAlchemy model class for the paper.
-    Returns: DBPaper -> An instance of the SQLAlchemy model with the paper's data.
+    27-December-2025 - Lenio
+    Abstract: Converts the PaperReference object to a SQLAlchemy model.
+    Returns: DBPaperReference -> An instance of the SQLAlchemy model with the ids of each paper in the relationship.
     """
     def to_db_model(self):
         return DBPaperReference(

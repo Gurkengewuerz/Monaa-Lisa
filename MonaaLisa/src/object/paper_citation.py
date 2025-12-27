@@ -5,6 +5,8 @@ from semanticscholar.Paper import Paper
 
 """
 23-December-2025 - Lenio
+Abstract:
+    Represents a citation found in a paper, linking two paper IDs.
 Variables:
 - belonging_paper_id: str -> The ID of the paper this citation belongs to
 - is_arxiv: bool -> Indicates if the citation is present on arXiv
@@ -18,9 +20,10 @@ class PaperCitation:
 
     """
     23-December-2025 - Lenio
-    Abstract: Converts the Paper object to a SQLAlchemy model.
-    Args: DBPaper: SQLAlchemy model class for the paper.
-    Returns: DBPaper -> An instance of the SQLAlchemy model with the paper's data.
+    Abstract: 
+        Converts the Citation object to a SQLAlchemy model.
+    Returns:
+        DBPaperCitation -> An instance of the SQLAlchemy model which represents the citation relationship between two papers.
     """
     def to_db_model(self):
         return DBPaperCitation(

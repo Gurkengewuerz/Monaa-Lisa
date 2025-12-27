@@ -9,8 +9,19 @@ from object.paper import Paper
 from util.logger import Logger
 
 
+"""
+27-December-2025 - Lenio
+Abstract: A client for interacting with the Semantic Scholar API.
+"""
 class SemanticScholarAPI:
 
+    """
+    27-December-2025 - Lenio
+    Initializes the Semantic Scholar API client.
+    Args:
+        api_key (str | None): Optional API key for authenticated requests.
+    Note: Without an API key, the client will operate in unauthenticated mode with limited rate limits.
+    """
     def __init__(self, api_key: str | None = None):
         self.client = AsyncSemanticScholar(api_key=api_key)
         self.logger = Logger("SemanticScholarAPI")
@@ -19,18 +30,47 @@ class SemanticScholarAPI:
         else:
             self.logger.debug("SemanticScholarAPI initialized without API key (unauthenticated).")
 
+    """
+    27-December-2025 - Lenio
+    Fetches a paper from Semantic Scholar by its Semantic Scholar ID.
+    Args:
+        semantic_scholar_id (str): The Semantic Scholar ID of the paper to fetch.
+    Returns:
+        Paper: The fetched paper object.
+    """
     def fetch_paper(self, semantic_scholar_id: str) -> Paper:
         async def fetch_semantic_scholar_paper(paper_id: str):
             return await self.client.get_paper(paper_id)
 
         return asyncio.run(fetch_semantic_scholar_paper(semantic_scholar_id))
 
+    """
+    27-December-2025 - Lenio
+    Fetches a paper from Semantic Scholar by its arXiv ID.
+    Args:
+        arxiv_id (str): The arXiv ID of the paper to fetch.
+    Returns:
+        Paper: The fetched paper object.
+    Note: This is a test method previously used in the playground.
+    """
     def fetch_arxiv_paper(self, arxiv_id: str) -> Paper:
         async def fetch_arxiv_paper_async(aid: str):
             return await self.client.get_paper(f"ARXIV:{aid}")
 
         return asyncio.run(fetch_arxiv_paper_async(arxiv_id))
 
+
+    """
+    27-December-2025 - Lenio
+    Fetches citations for a given paper from Semantic Scholar.
+    Args:
+        p_paper (Paper): The paper object for which to fetch citations.
+        arxiv_client (ArxivAPI): An instance of the ArxivAPI to fetch papers
+    Returns:
+        Tuple[list[Paper], list[SemanticScholarPaper]]: A tuple containing two lists:
+            - A list of Paper objects for citations found on arXiv.
+            - A list of SemanticScholarPaper objects for citations not found on arXiv.
+    """
     def fetch_citations(self, p_paper: Paper, arxiv_client: ArxivAPI) -> Tuple[list[Paper], list[SemanticScholarPaper]]:
         async def get_citations(paper_obj: Paper):
             entry_id = paper_obj.entry_id or ""
@@ -66,6 +106,17 @@ class SemanticScholarAPI:
         return (citations_on_arxiv, citations_not_present)
 
 
+    """
+    27-December-2025 - Lenio
+    Fetches references for a given paper from Semantic Scholar.
+    Args:
+        p_paper (Paper): The paper object for which to fetch references.
+        arxiv_client (ArxivAPI): An instance of the ArxivAPI to fetch papers
+    Returns:
+        Tuple[list[Paper], list[SemanticScholarPaper]]: A tuple containing two lists:
+            - A list of Paper objects for references found on arXiv.
+            - A list of SemanticScholarPaper objects for references not found on arXiv.
+    """
     def fetch_references(self, p_paper: Paper, arxiv_client: ArxivAPI) -> Tuple[list[Paper], list[SemanticScholarPaper]]:
         async def get_references(paper_obj: Paper):
             entry_id = paper_obj.entry_id or ""

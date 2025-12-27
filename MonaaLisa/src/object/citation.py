@@ -34,9 +34,10 @@ class Citation:
 
     """
     23-December-2025 - Lenio
-    Abstract: Converts the Paper object to a SQLAlchemy model.
-    Args: DBPaper: SQLAlchemy model class for the paper.
-    Returns: DBPaper -> An instance of the SQLAlchemy model with the paper's data.
+    Abstract: 
+        Converts the Citation object to a SQLAlchemy model.
+    Returns: 
+        DBCitation -> An instance of the SQLAlchemy model with the citation's data from Semantic Scholar.
     """
     def to_db_model(self):
         return DBCitation(
