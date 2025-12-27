@@ -209,68 +209,11 @@ def paper_worker(worker_id, known_hashes):
                             reducer.notify_dataset_change(embedding_cache, embedding_labels)
                         save_hash(processor.paper.hash)
                         known_hashes.add(processor.paper.hash)
+                        backfill_pending_projections()
         except Exception:
             logger.error(f"Worker {worker_id}: Unhandled exception while processing paper")
         finally:
             scheduler.paper_queue.task_done()
-
-        paper =  scheduler.paper_queue.get()
-        if paper is None:
-            break
-        active_categories = get_semanticpaper_categories()
-        if getattr(paper, 'category', None) and paper.category not in active_categories:
-            logger.warning(f"Worker {worker_id}: Category '{paper.category}' removed; skipping paper '{paper.title}'")
-            continue
-        processor = PaperProcessor(paper, model, reducer)
-        if processor.prepare_paper(known_hashes):
-            embedding = processor.create_structured_embedding()
-            if embedding is not None:
-                processor.paper.embedding = embedding
-                mapper = Mapper(processor.paper)
-                # Prepare embeddings snapshot for projection and mapping
-
-                with embedding_cache_lock:
-                    current_embeddings = embedding_cache.copy()
-                with embedding_labels_lock:
-                    current_labels = embedding_labels.copy()
-                projection_embeddings = current_embeddings.copy()
-                projection_embeddings[processor.paper.entry_id] = embedding
-
-                """ - Basti - 19-December-2025
-                with projection_labels, we add the current paper's category
-                to ensure that supervised UMAP has the correct label information
-                """
-                projection_labels = current_labels.copy()
-                projection_labels[processor.paper.entry_id] = processor.paper.category
-
-                projection = processor.compute_projection_coordinates(
-                    projection_embeddings,
-                    projection_labels
-                )
-                if projection is not None:
-                    # save the projection to the paper in the db
-                    processor.paper.tsne = {"x": projection[0], "y": projection[1], "method": "umap"}
-                else:
-                    processor.paper.tsne = None
-
-                relations = mapper.map_paper(current_embeddings)
-                logger.info(f"Found {len(relations)} relations for {paper.title}")
-                if save_paper_to_db(processor.paper):
-                    if processor.paper.tsne is None:
-                        mark_projection_pending(processor.paper.entry_id)
-                    for relation in relations:
-                        logger.info(f"Similar paper: {relation.source_id} with similarity score: {relation.confidence}")
-                        save_paper_relation(relation)
-                    # Save the embedding to the cache
-                    with embedding_cache_lock:
-                        embedding_cache[processor.paper.entry_id] = processor.paper.embedding
-                    with embedding_labels_lock:
-                        embedding_labels[processor.paper.entry_id] = processor.paper.category
-                    reducer.notify_dataset_change(embedding_cache, embedding_labels)
-                    save_hash(processor.paper.hash)
-                    known_hashes.add(processor.paper.hash)
-                    backfill_pending_projections()
-    logger.info(f"Worker {worker_id} exiting")
 
 """
 13-August-2025 - Basti
