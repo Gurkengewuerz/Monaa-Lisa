@@ -36,7 +36,7 @@ logger = Logger("Main")
 load_dotenv()
 HASH_FILE = 'parsed_hashes.txt'
 
-semanticscholar_client = SemanticScholarAPI(os.environ['SEMANTICSCHOLAR_API_KEY'])
+semanticscholar_client = SemanticScholarAPI(os.environ['SEMANTIC_SCHOLAR_API_KEY'])
 arxiv_client = ArxivAPI()
 model = Model(arxiv_client)
 scheduler = Scheduler(arxiv_client)

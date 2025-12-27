@@ -284,7 +284,6 @@ def get_entry_ids_missing_projection(limit: int | None = None) -> list[str]:
     finally:
         session.close()
 
-
 """
 25-May-2025 - Basti - Tweaked 30-September-2025 - Lenio
 Abstract: Checks if a paper hash already exists in the database
@@ -301,7 +300,6 @@ Additionally:
 Checking by hash could be a way of checking for updates to a paper, but that is not implemented yet.
 """
 def paper_exists(session, paper: Paper):
-    # Note: Stubs have hash=None, so this returns False for stubs, which is correct (we want to process them)
     return session.query(DBPaper).filter_by(hash=paper.hash).first() is not None
 
 
@@ -324,7 +322,7 @@ def paper_exists(session, paper: Paper):
         );
     """
 def relation_exists(session, source_id: str, target_id: str):
-    # 29.09.25 Nico - Verbesserte Version der Abfrage. Aktuell werden 2 SQL Befehle ausgeführt (nicht effizient) dabei kann man das in einem Befehl mit OR kombinieren. 
+    # 29.09.25 Nico - Verbesserte Version der Abfrage. Aktuell werden 2 SQL Befehle ausgeführt (nicht effizient) dabei kann man das in einem Befehl mit OR kombinieren.
     # Die Variante mit beiden Befehlen liefert auch die kompletten Zeilen obwohl man am Ende nur ein Boolean generieren möchte
 
     # Check if the relation exists in either direction
@@ -353,6 +351,43 @@ def create_program_run():
         logger.error(f"Error creating program run: {e}")
         session.rollback()
         return None
+    finally:
+        session.close()
+
+
+"""
+20-December-2025 - Basti
+Abstract: Checks whether a program run exists.
+"""
+def program_run_exists(run_id: int) -> bool:
+    session = SessionLocal()
+    try:
+        return session.query(ProgramRun.id).filter_by(id=run_id).first() is not None
+    except Exception as e:
+        logger.error(f"Error checking program run existence: {e}")
+        return False
+    finally:
+        session.close()
+
+
+"""
+Abstract: Reactivates an existing program run and deactivates the others.
+Returns: bool -> True if the run was reactivated, False otherwise.
+"""
+def set_active_program_run(run_id: int) -> bool:
+    session = SessionLocal()
+    try:
+        if session.query(ProgramRun.id).filter_by(id=run_id).first() is None:
+            return False
+        session.query(ProgramRun).update({"is_active": "false"})
+        session.query(ProgramRun).filter_by(id=run_id).update({"is_active": "true"})
+        session.commit()
+        logger.info(f"Reactivated ProgramRun ID: {run_id}")
+        return True
+    except Exception as e:
+        logger.error(f"Error reactivating program run {run_id}: {e}")
+        session.rollback()
+        return False
     finally:
         session.close()
 

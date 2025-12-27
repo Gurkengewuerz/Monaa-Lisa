@@ -1,9 +1,12 @@
 import asyncio
+import os
 
 from SemanticPaper.api.semantic_scholar import SemanticScholarAPI
 from playground import Playground
 from SemanticPaper.api.arxiv import ArxivAPI
 from object.paper import Paper
+import dotenv
+dotenv.load_dotenv()
 
 
 class SemanticScholarPlayground(Playground):
@@ -15,7 +18,7 @@ class SemanticScholarPlayground(Playground):
 
     def test(self):
         self.logger.info("Testing semantic scholar functionalities...")
-        semanticscholar_client = SemanticScholarAPI()
+        semanticscholar_client = SemanticScholarAPI(os.environ["SEMANTIC_SCHOLAR_API_KEY"])
         arxiv_client = ArxivAPI()
         pape = semanticscholar_client.fetch_paper("9e5e96f78f4e5f53fa0dc8f090d189ceae5bac7b")
         print(type(pape))
