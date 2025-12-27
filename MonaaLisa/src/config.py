@@ -32,24 +32,6 @@ class AppConfig:
         except Exception:
             return default
 
-    def get_env_or_ini(
-        self,
-        section: str,
-        option: str,
-        env_var: str,
-        default: str | None = None,
-    ) -> str | None:
-        """Reads a value from an environment variable first and falls back to config.ini.
-
-        Empty strings in the environment are treated as "not set".
-        """
-        env_val = os.getenv(env_var)
-        if env_val is not None:
-            env_val = env_val.strip()
-            if env_val != "":
-                return env_val
-        return self.get(section, option, default)
-
     def get_int(self, section: str, option: str, default: int) -> int:
         try:
             return self._config.getint(section, option)
