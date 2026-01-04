@@ -116,7 +116,6 @@ class PaperProcessor:
                     weights.append(weight)
                 else:
                     self.logger.warning(f"No valid embedding for section {section['title']} found.")
-                    self.logger.debug(f"Section content: {section['content']}")
 
         # References (20%)
         if self.paper.references:

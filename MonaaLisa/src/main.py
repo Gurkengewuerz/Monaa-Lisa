@@ -1,3 +1,11 @@
+import queue
+
+from object.paper import Paper
+from object.citation import Citation
+from object.paper_citation import PaperCitation
+from object.paper_reference import PaperReference
+from object.reference import Reference
+from SemanticPaper.api.semantic_scholar import SemanticScholarAPI
 from SemanticPaper.api.arxiv import ArxivAPI
 from SemanticPaper.machine_learning.mapper import Mapper
 from SemanticPaper.machine_learning.processor import PaperProcessor
@@ -26,9 +34,10 @@ import sys
 
 logger = Logger("Main")
 
-load_dotenv(".env_public")
+load_dotenv()
 HASH_FILE = 'parsed_hashes.txt'
 
+semanticscholar_client = SemanticScholarAPI(os.environ['SEMANTIC_SCHOLAR_API_KEY'])
 arxiv_client = ArxivAPI()
 model = Model(arxiv_client)
 scheduler = Scheduler(arxiv_client)
@@ -77,63 +86,71 @@ Returns: None
 def paper_worker(worker_id, known_hashes):
     logger.info(f"Worker {worker_id} started")
     while True:
-        paper =  scheduler.paper_queue.get()
-        if paper is None:
-            break
-        active_categories = get_semanticpaper_categories()
-        if getattr(paper, 'category', None) and paper.category not in active_categories:
-            logger.warning(f"Worker {worker_id}: Category '{paper.category}' removed; skipping paper '{paper.title}'")
-            continue
-        processor = PaperProcessor(paper, model, reducer)
-        if processor.prepare_paper(known_hashes):
-            embedding = processor.create_structured_embedding()
-            if embedding is not None:
-                processor.paper.embedding = embedding
-                mapper = Mapper(processor.paper)
-                # Prepare embeddings snapshot for projection and mapping
-                
-                with embedding_cache_lock:
-                    current_embeddings = embedding_cache.copy()
-                with embedding_labels_lock:
-                    current_labels = embedding_labels.copy()
-                projection_embeddings = current_embeddings.copy()
-                projection_embeddings[processor.paper.entry_id] = embedding
+        paper = scheduler.paper_queue.get()
+        try:
+            if paper is None:
+                return
+            active_categories = get_semanticpaper_categories()
+            if getattr(paper, 'category', None) and paper.category not in active_categories:
+                logger.warning(
+                    f"Worker {worker_id}: Category '{paper.category}' removed; skipping paper '{paper.title}'")
+                continue
+            processor = PaperProcessor(paper, model, reducer)
+            if processor.prepare_paper(known_hashes):
+                embedding = processor.create_structured_embedding()
+                if embedding is not None:
+                    processor.paper.embedding = embedding
+                    extract_citations(processor.paper, worker_id)
+                    extract_references(processor.paper, worker_id)
+                    mapper = Mapper(processor.paper)
+                    # Prepare embeddings snapshot for projection and mapping
 
-                """ - Basti - 19-December-2025
-                with projection_labels, we add the current paper's category
-                to ensure that supervised UMAP has the correct label information
-                """
-                projection_labels = current_labels.copy()
-                projection_labels[processor.paper.entry_id] = processor.paper.category
-
-                projection = processor.compute_projection_coordinates(
-                    projection_embeddings,
-                    projection_labels
-                )
-                if projection is not None:
-                    # save the projection to the paper in the db
-                    processor.paper.tsne = {"x": projection[0], "y": projection[1], "method": "umap"}
-                else:
-                    processor.paper.tsne = None
-
-                relations = mapper.map_paper(current_embeddings)
-                logger.info(f"Found {len(relations)} relations for {paper.title}")
-                if save_paper_to_db(processor.paper):
-                    if processor.paper.tsne is None:
-                        mark_projection_pending(processor.paper.entry_id)
-                    for relation in relations:
-                        logger.info(f"Similar paper: {relation.source_id} with similarity score: {relation.confidence}")
-                        save_paper_relation(relation)
-                    # Save the embedding to the cache
                     with embedding_cache_lock:
-                        embedding_cache[processor.paper.entry_id] = processor.paper.embedding
+                        current_embeddings = embedding_cache.copy()
                     with embedding_labels_lock:
-                        embedding_labels[processor.paper.entry_id] = processor.paper.category
-                    reducer.notify_dataset_change(embedding_cache, embedding_labels)
-                    save_hash(processor.paper.hash)
-                    known_hashes.add(processor.paper.hash)
-                    backfill_pending_projections()
-    logger.info(f"Worker {worker_id} exiting")
+                        current_labels = embedding_labels.copy()
+                    projection_embeddings = current_embeddings.copy()
+                    projection_embeddings[processor.paper.entry_id] = embedding
+
+                    """ - Basti - 19-December-2025
+                    with projection_labels, we add the current paper's category
+                    to ensure that supervised UMAP has the correct label information
+                    """
+                    projection_labels = current_labels.copy()
+                    projection_labels[processor.paper.entry_id] = processor.paper.category
+
+                    projection = processor.compute_projection_coordinates(
+                        projection_embeddings,
+                        projection_labels
+                    )
+                    if projection is not None:
+                        # save the projection to the paper in the db
+                        processor.paper.tsne = {"x": projection[0], "y": projection[1], "method": "umap"}
+                    else:
+                        processor.paper.tsne = None
+
+                    relations = mapper.map_paper(current_embeddings)
+                    logger.info(f"Found {len(relations)} relations for {paper.title}")
+                    if save_paper_to_db(processor.paper):
+                        if processor.paper.tsne is None:
+                            mark_projection_pending(processor.paper.entry_id)
+                        for relation in relations:
+                            logger.info(
+                                f"Similar paper: {relation.source_id} with similarity score: {relation.confidence}")
+                            save_paper_relation(relation)
+                        # Save the embedding to the cache
+                        with embedding_cache_lock:
+                            embedding_cache[processor.paper.entry_id] = processor.paper.embedding
+                        with embedding_labels_lock:
+                            embedding_labels[processor.paper.entry_id] = processor.paper.category
+                        reducer.notify_dataset_change(embedding_cache, embedding_labels)
+                        save_hash(processor.paper.hash)
+                        known_hashes.add(processor.paper.hash)
+                        backfill_pending_projections()
+        except Exception:
+            logger.error(f"Worker {worker_id}: Unhandled exception while processing paper")
+        finally:
+            scheduler.paper_queue.task_done()
 
 """
 13-August-2025 - Basti
@@ -187,7 +204,6 @@ def main(num_workers: int = 5):
             scheduler.paper_queue.put(None)
         for t in threads:
             t.join()
-        scheduler.shutdown()
         logger.info("All workers stopped, exiting.")
         sys.exit(0)
 
@@ -268,6 +284,86 @@ def backfill_pending_projections():
             clear_pending_projection(entry_id)
 
 
+"""
+27-December-2025 - Lenio
+Abstract: 
+    Extracts citations for a given paper and appends them to the paper's citations list
+Args:
+    - paper: Paper -> The paper object for which to extract citations
+    - worker_id: int -> The ID of the worker processing this paper
+Returns: None
+"""
+def extract_citations(paper: Paper, worker_id: int):
+    citations_on_arxiv, citations_not_present = semanticscholar_client.fetch_citations(paper, arxiv_client)
+    logger.info(
+        f"Worker {worker_id}: Found {len(citations_on_arxiv)} references on arXiv and "
+        f"{len(citations_not_present)} not present."
+    )
+    for citation in citations_on_arxiv:
+        try:
+            if not citation:
+                continue
+            citation_obj = PaperCitation(paper.entry_id, citation.entry_id)
+            try:
+                scheduler.paper_queue.put_nowait(citation)
+            except queue.Full:
+                logger.warning(f"Worker {worker_id}: Queue full, dropping citation {citation.entry_id}")
+            paper.citations.append(citation_obj)
+        except Exception as e:
+            logger.error(f"Worker {worker_id}: Error processing citation: {e}")
+
+    for citation in citations_not_present:
+        try:
+            if not citation:
+                continue
+            citation_obj = Citation(paper.entry_id, citation)
+            paper.citations.append(citation_obj)
+        except Exception as e:
+            logger.error(f"Worker {worker_id}: Error processing non-arxiv citation: {e}")
+    logger.info(f"Appended {len(paper.citations)} citations for paper {paper.title}")
+
+
+"""
+27-December-2025 - Lenio
+Abstract:
+    Extracts references for a given paper and appends them to the paper's references list
+Args:
+    - paper: Paper -> The paper object for which to extract references
+    - worker_id: int -> The ID of the worker processing this paper
+Returns: None
+"""
+def extract_references(paper: Paper, worker_id: int):
+    references_on_arxiv, references_not_present = semanticscholar_client.fetch_references(paper, arxiv_client)
+    logger.info(
+        f"Worker {worker_id}: Found {len(references_on_arxiv)} references on arXiv and "
+        f"{len(references_not_present)} not present."
+    )
+
+    for reference in references_on_arxiv:
+        try:
+            if not reference:
+                continue
+            reference_obj = PaperReference(paper.entry_id, reference.entry_id)
+            logger.info("Reference on arXiv: " + str(reference.title))
+            try:
+                scheduler.paper_queue.put_nowait(reference)
+            except queue.Full:
+                logger.warning(f"Worker {worker_id}: Queue full, dropping reference {reference.entry_id}")
+            paper.references.append(reference_obj)
+        except Exception as e:
+            logger.error(f"Worker {worker_id}: Error processing reference: {e}")
+
+    for reference in references_not_present:
+        try:
+            if not reference:
+                continue
+            reference_obj = Reference(paper.entry_id, reference)
+            logger.info("Reference not on arXiv: " + str(reference.title))
+            paper.references.append(reference_obj)
+        except Exception as e:
+            logger.error(f"Worker {worker_id}: Error processing non-arxiv reference: {e}")
+
+    logger.info(f"Appended {len(paper.references)} references for paper {paper.title}")
 
 if __name__ == "__main__":
     workers = cfg.get_int("semanticpaper", "num_workers", int(os.getenv("NUM_WORKERS", str(5))))
