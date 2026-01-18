@@ -39,6 +39,13 @@
   // Scale: 3000 -> 1 exponentially
   $: titleScale = 3000 * Math.pow(1 / 3000, zoomT);
   
+  // OPTIMIZATION: Use SVG ViewBox instead of CSS transform: scale()
+  // This prevents the browser from creating a massive texture layer (3000x screen size).
+  $: vbW = 100 / titleScale;
+  $: vbH = 50 / titleScale;
+  $: vbX = 50 - vbW / 2;
+  $: vbY = 25 - vbH / 2;
+  
   // Opacity: Starts transparent (0), fades to white (1)
   // User wants it faster/earlier.
   // Start fading in slightly before the zoom finishes (at 0.35) and finish by 0.4
@@ -48,7 +55,10 @@
   $: subtitleOpacity = Math.min(1, Math.max(0, (progress - 0.4) * 10));
 
   // Move title up
-  $: titleY = 25 - (subtitleOpacity * 10);
+  $: titleY = 50 - (subtitleOpacity * 20);
+  
+  // Convert percentage-based Y to absolute World Unit Y (World Height is 50)
+  $: titleYAbs = titleY * 0.5;
 
   // 5. Utilizing Caption
   $: utilizingOpacity = Math.min(1, Math.max(0, (progress - 0.6) * 10));
@@ -98,24 +108,22 @@
       <!-- Second Section (Zoomed out view) -->
       <!-- 
         We use an SVG mask to create the "Hole" effect.
-        The SVG scales from 100 -> 1.
-        The Rect is solid dark blue.
-        The Text in the mask creates a hole.
-        The Text Fill fades in to white.
+        The SVG scales via viewBox (zooming camera in/out) instead of CSS transform.
+        This provides performance optimization for the 3000x zoom.
       -->
-      <div class="second-section" style="transform: scale({titleScale}) translateZ(0)">
-           <svg class="overlay-svg" viewBox="0 0 100 50" preserveAspectRatio="xMidYMid slice">
+      <div class="second-section" style="transform: translateZ(0)">
+           <svg class="overlay-svg" viewBox="{vbX} {vbY} {vbW} {vbH}" preserveAspectRatio="xMidYMid slice">
               <defs>
                  <mask id="text-mask">
-                    <rect x="0" y="0" width="100%" height="100%" fill="white" />
-                    <text x="50" y="{titleY}" text-anchor="middle" dominant-baseline="middle" font-size="12" font-weight="900" fill="black">Monaa-Lisa</text>
+                    <rect x="0" y="0" width="100" height="50" fill="white" />
+                    <text x="50" y="{titleYAbs}" text-anchor="middle" dominant-baseline="middle" font-size="12" font-weight="900" fill="black">Monaa-Lisa</text>
                  </mask>
               </defs>
-              <!-- The Solid Background with Hole -->
-              <rect x="0" y="0" width="100%" height="100%" fill="#1a1f2c" mask="url(#text-mask)" />
+              <!-- The Solid Background with Hole (Fixed World Coordinates 100x50) -->
+              <rect x="0" y="0" width="100" height="50" fill="#1a1f2c" mask="url(#text-mask)" />
               
               <!-- The White Text Fill -->
-              <text x="50" y="{titleY}" text-anchor="middle" dominant-baseline="middle" font-size="12" font-weight="900" fill="white" opacity={titleOpacity}>Monaa-Lisa</text>
+              <text x="50" y="{titleYAbs}" text-anchor="middle" dominant-baseline="middle" font-size="12" font-weight="900" fill="white" opacity={titleOpacity}>Monaa-Lisa</text>
            </svg>
       </div>
       
