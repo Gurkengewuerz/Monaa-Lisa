@@ -41,10 +41,25 @@
   
   // OPTIMIZATION: Use SVG ViewBox instead of CSS transform: scale()
   // This prevents the browser from creating a massive texture layer (3000x screen size).
+  
+  // ADJUSTMENT: Center point for the zoom (0-100)
+  // We keep the camera centered in the middle of our viewport (50x25)
+  // And instead, moving the TEXT below to align the letter with this center.
+  const focusX = 50; 
+  const focusY = 25;
+
   $: vbW = 100 / titleScale;
   $: vbH = 50 / titleScale;
-  $: vbX = 50 - vbW / 2;
-  $: vbY = 25 - vbH / 2;
+  $: vbX = focusX - vbW / 2;
+  $: vbY = focusY - vbH / 2;
+
+  // Title X Position: 
+  // 50 = Center
+  // 49.2 = Move Text slightly Left (so camera hits the letter to the Right of the gap)
+  // Logic: 
+  // If at 50 it hits the gap between "aa", the second 'a' is to the right.
+  // We move the text LEFT (smaller X) to bring that 'a' into the center camera view.
+  const titleX = 49.2; 
   
   // Opacity: Starts transparent (0), fades to white (1)
   // User wants it faster/earlier.
@@ -111,19 +126,20 @@
         The SVG scales via viewBox (zooming camera in/out) instead of CSS transform.
         This provides performance optimization for the 3000x zoom.
       -->
-      <div class="second-section" style="transform: translateZ(0)">
+      <div class="second-section">
            <svg class="overlay-svg" viewBox="{vbX} {vbY} {vbW} {vbH}" preserveAspectRatio="xMidYMid slice">
               <defs>
-                 <mask id="text-mask">
-                    <rect x="0" y="0" width="100" height="50" fill="white" />
-                    <text x="50" y="{titleYAbs}" text-anchor="middle" dominant-baseline="middle" font-size="12" font-weight="900" fill="black">Monaa-Lisa</text>
+                 <mask id="text-mask" maskUnits="userSpaceOnUse" maskContentUnits="userSpaceOnUse" x="-5000" y="-5000" width="10000" height="10000">
+                    <!-- Infinite White Rect (The Mask) -->
+                    <rect x="-5000" y="-5000" width="10000" height="10000" fill="white" />
+                    <text x="{titleX}" y="{titleYAbs}" text-anchor="middle" dominant-baseline="middle" font-size="12" font-weight="900" fill="black">Monaa-Lisa</text>
                  </mask>
               </defs>
-              <!-- The Solid Background with Hole (Fixed World Coordinates 100x50) -->
-              <rect x="0" y="0" width="100" height="50" fill="#1a1f2c" mask="url(#text-mask)" />
+              <!-- The Solid Background with Hole (Infinite Rect) -->
+              <rect x="-5000" y="-5000" width="10000" height="10000" fill="#1a1f2c" mask="url(#text-mask)" />
               
               <!-- The White Text Fill -->
-              <text x="50" y="{titleYAbs}" text-anchor="middle" dominant-baseline="middle" font-size="12" font-weight="900" fill="white" opacity={titleOpacity}>Monaa-Lisa</text>
+              <text x="{titleX}" y="{titleYAbs}" text-anchor="middle" dominant-baseline="middle" font-size="12" font-weight="900" fill="white" opacity={titleOpacity}>Monaa-Lisa</text>
            </svg>
       </div>
       
@@ -296,7 +312,7 @@
     justify-content: center;
     align-items: center;
     pointer-events: none;
-    will-change: transform;
+    /* Removed will-change to prevent layer composition artifacts in Chrome */
   }
 
   .overlay-svg {
@@ -308,7 +324,7 @@
   }
   
   .overlay-svg text {
-    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', sans-serif;
+    font-family: Arial, sans-serif;
     text-transform: uppercase;
   }
 
