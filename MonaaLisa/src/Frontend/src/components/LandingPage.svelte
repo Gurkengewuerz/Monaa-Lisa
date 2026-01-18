@@ -11,7 +11,7 @@
   let scrollY = 0;
   let innerHeight = 1000;
 
-  // Scroll progress: 0 to 1
+  // aScroll progress: 0 to 1
   $: rawProgress = innerHeight ? scrollY / (innerHeight * 4) : 0;
 
   const smoothProgress = spring(0, {
