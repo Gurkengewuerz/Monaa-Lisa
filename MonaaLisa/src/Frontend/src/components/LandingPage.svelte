@@ -48,7 +48,7 @@
   $: subtitleOpacity = Math.min(1, Math.max(0, (progress - 0.4) * 10));
 
   // Move title up
-  $: titleY = 50 - (subtitleOpacity * 20);
+  $: titleY = 25 - (subtitleOpacity * 10);
 
   // 5. Utilizing Caption
   $: utilizingOpacity = Math.min(1, Math.max(0, (progress - 0.6) * 10));
@@ -108,14 +108,14 @@
               <defs>
                  <mask id="text-mask">
                     <rect x="0" y="0" width="100%" height="100%" fill="white" />
-                    <text x="50%" y="{titleY}%" text-anchor="middle" dominant-baseline="middle" font-size="12" font-weight="900" fill="black">Monaa-Lisa</text>
+                    <text x="50" y="{titleY}" text-anchor="middle" dominant-baseline="middle" font-size="12" font-weight="900" fill="black">Monaa-Lisa</text>
                  </mask>
               </defs>
               <!-- The Solid Background with Hole -->
               <rect x="0" y="0" width="100%" height="100%" fill="#1a1f2c" mask="url(#text-mask)" />
               
               <!-- The White Text Fill -->
-              <text x="50%" y="{titleY}%" text-anchor="middle" dominant-baseline="middle" font-size="12" font-weight="900" fill="white" opacity={titleOpacity}>Monaa-Lisa</text>
+              <text x="50" y="{titleY}" text-anchor="middle" dominant-baseline="middle" font-size="12" font-weight="900" fill="white" opacity={titleOpacity}>Monaa-Lisa</text>
            </svg>
       </div>
       
