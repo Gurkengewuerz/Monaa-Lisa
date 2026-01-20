@@ -5,6 +5,8 @@
   import arxivLogo from '../assets/arxiv_logo.png';
   import monaaLisaLogo from '../assets/monaa_lisa_logo.png';
   import mlbg from '../assets/mlbg.png';
+  import webmVideo from '../assets/ML_LOOP_main.webm';
+  import mp4Video from '../assets/ML_LOOP_fallback.mp4';
 
   const dispatch = createEventDispatcher();
 
@@ -97,7 +99,17 @@
   <div class="sticky-wrapper">
       <!-- Background Image Layer -->
       <div class="background" style="transform: scale({bgScale})">
-           <div class="art-placeholder" style="background-image: url({mlbg})"></div>
+           <video
+             class="art-placeholder"
+             autoplay
+             loop
+             muted
+             playsinline
+             poster={mlbg}
+           >
+             <source src={webmVideo} type="video/webm" />
+             <source src={mp4Video} type="video/mp4" />
+           </video>
       </div>
 
       <!-- Logo Layer -->
@@ -203,10 +215,8 @@
   .art-placeholder {
     width: 100%;
     height: 100%;
-    background-color: #000;
-    background-size: cover;
-    background-position: center;
-    filter: brightness(0.6);
+    object-fit: cover;
+    filter: brightness(0.9);
   }
 
   .logo-layer {
