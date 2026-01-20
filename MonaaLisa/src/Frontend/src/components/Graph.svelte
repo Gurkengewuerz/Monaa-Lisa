@@ -101,6 +101,81 @@
     console.log(`Node ${nodeId} is currently selected lelele`);
   }
 
+  /**
+   * 
+   * @param points
+   * @param cx
+   * @param cy
+   * @param factor
+   * @param minOffset
+   */
+function inflateAroundCenter(
+  points: [number, number][],
+  cx: number,
+  cy: number,
+  factor: number
+) {
+  return points.map(([x, y]) => {
+    const dx = x - cx;
+    const dy = y - cy;
+    return [cx + dx * factor, cy + dy * factor] as [number, number];
+  });
+}
+
+function inflateToContainPadding(
+  hull: [number, number][],
+  points: { x: number; y: number }[],
+  cx: number,
+  cy: number,
+  padding: number,
+  maxFactor = 1.6 // Schutz gegen Monster-Hulls
+) {
+  const maxPointR = Math.max(...points.map(p => Math.hypot(p.x - cx, p.y - cy)));
+  const maxHullR  = Math.max(...hull.map(([x,y]) => Math.hypot(x - cx, y - cy))) || 1;
+
+  const targetR = maxPointR + padding;
+  const rawFactor = targetR / maxHullR;
+  const factor = Math.min(Math.max(1, rawFactor), maxFactor);
+
+  return inflateAroundCenter(hull, cx, cy, factor);
+}
+
+// optional: Cluster-"Spread" für dynamisches Padding
+function clusterSpread(points: {x:number;y:number}[], cx:number, cy:number) {
+  const meanSq = points.reduce((s, p) => s + (p.x - cx)**2 + (p.y - cy)**2, 0) / points.length;
+  return Math.sqrt(meanSq);
+}
+
+  /**
+   * 
+   * @param points
+   * @param iterations
+   */
+  function chaikinSmooth(points: [number, number][], iterations = 2) {
+  let pts = points;
+  for (let k = 0; k < iterations; k++) {
+    const res: [number, number][] = [];
+    for (let i = 0; i < pts.length; i++) {
+      const p0 = pts[i];
+      const p1 = pts[(i + 1) % pts.length]; // closed ring
+
+      // Q = 0.75*p0 + 0.25*p1
+      res.push([
+        0.75 * p0[0] + 0.25 * p1[0],
+        0.75 * p0[1] + 0.25 * p1[1],
+      ]);
+
+      // R = 0.25*p0 + 0.75*p1
+      res.push([
+        0.25 * p0[0] + 0.75 * p1[0],
+        0.25 * p0[1] + 0.75 * p1[1],
+      ]);
+    }
+    pts = res;
+  }
+  return pts;
+}
+
   $: if (selectedPaperId && selectedPaperId !== selectedNode && graph && renderer) {
     selectNodeById(selectedPaperId);
   }
@@ -242,10 +317,9 @@
       paperCache.set(paper.entry_id, paper);
 
       // Collect points
-      if (!categoryPoints.has(paper.category)) {
-          categoryPoints.set(paper.category, []);
-      }
-      categoryPoints.get(paper.category)!.push({x: finalX, y: finalY});
+      // Kleiner bugfix hier wäre es besser cat zu verwenden statt paper.category
+      if (!categoryPoints.has(cat)) categoryPoints.set(cat, []);
+      categoryPoints.get(cat)!.push({ x: finalX, y: finalY });
     });
 
     // Initialize Sigma Renderer FIRST to ensure papers are visible! :)
@@ -350,11 +424,27 @@
                 return;
             }
 
+            // 1) glätten
+            let smoothHull = chaikinSmooth(hullPoints as [number, number][], 2);
+
+            // 2) Padding dynamisch aus Spread (statt minOffset=35)
+            const spread = clusterSpread(points, cx, cy);
+            const padding = Math.max(20, spread * 0.35);
+
+            // 3) aufblasen bis alle Punkte + padding "radial" reinpassen (mit cap)
+            smoothHull = inflateToContainPadding(
+              smoothHull,
+              points,
+              cx, cy,
+              padding,
+              1.6
+            );
+
             const color = getClusterColor(cat, cat) || '#cccccc';
             
             // finally store hull
             hulls.push({
-                path: hullPoints,
+                path: smoothHull,
                 color: color + '33', 
                 strokeColor: color + '66',
                 label: getCategoryCountryName(cat),
