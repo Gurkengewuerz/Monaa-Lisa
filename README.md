@@ -1,3 +1,4 @@
+![Logo](MonaaLisa/src/Frontend/src/assets/monaa_lisa_logo.png) (c) Nick
 # Monaa-Lisa
 Softwarepraktikum von Basti, Nick, Lenio und Nico
 
@@ -31,5 +32,6 @@ Softwarepraktikum von Basti, Nick, Lenio und Nico
     ```sh
     python3 main.py
     ```
+
 
 
