@@ -118,7 +118,7 @@ function inflateAroundCenter(
     // Berechne den vektroriellen Abstand vom Zentrum zum Punkt
     const dx = x - cx;
     const dy = y - cy;
-    Multipliziere Abstand mit Faktor und addiere zum Zentrum
+    // Multipliziere Abstand mit Faktor und addiere zum Zentrum
     return [cx + dx * factor, cy + dy * factor] as [number, number];
   });
 }
@@ -126,7 +126,7 @@ function inflateAroundCenter(
 /**
  * Berechnet einen Skalierungsfaktor, damit die Hülle (Hull) alle Punkte 
  * inklusive eines Sicherheitsabstands (Padding) umschließt.
- * * @param hull - Die Eckpunkte der aktuellen Hülle.
+ * @param hull - Die Eckpunkte der aktuellen Hülle.
  * @param points - Die tatsächlichen Datenpunkte im Cluster.
  * @param padding - Der gewünschte Pufferabstand in Pixeln/Einheiten.
  * @param maxFactor - Begrenzt die Skalierung, um extrem verzerrte Formen zu vermeiden.
