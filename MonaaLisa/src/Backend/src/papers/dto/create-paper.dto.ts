@@ -41,10 +41,6 @@ export class CreatePaperDto {
   @IsString()
   hash!: string;
 
-  // JSON-Felder optional (class-validator kann JSON nicht sauber prüfen)
-  @IsOptional()
-  citations?: unknown;
-
   @IsOptional()
   tsne?: unknown;
 }
