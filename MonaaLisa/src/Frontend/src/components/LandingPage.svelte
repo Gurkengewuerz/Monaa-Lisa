@@ -305,7 +305,7 @@
   }
 
   .hero-subtitle {
-    margin-top: 175px;
+    margin-top: 100px;
     font-size: 1.2rem;
     letter-spacing: 9px;
     text-transform: uppercase;
