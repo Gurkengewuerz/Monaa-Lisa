@@ -1,6 +1,5 @@
 from sentence_transformers import SentenceTransformer
 from ..api.arxiv import ArxivAPI
-from sklearn.manifold import TSNE
 import numpy as np
 import torch
 import os
@@ -89,12 +88,13 @@ class Model:
     Returns: 
     - Tuple -> of (tsne1, tsne2) tuples one per embedding (x,y)
     """
-    @staticmethod
+    @DeprecationWarning
     def extract_tsne_coordinates(embeddings, random_state=42):
-        embeddings = np.array(embeddings)
-        if len(embeddings) < 2:
-            raise ValueError("At least two embeddings are required for t-SNE.")
-        perplexity = min(30, len(embeddings) - 1)
-        tsne = TSNE(n_components=2, random_state=random_state, perplexity=perplexity)
-        reduced = tsne.fit_transform(embeddings)
-        return [tuple(map(float, coords)) for coords in reduced]
+        # embeddings = np.array(embeddings)
+        # if len(embeddings) < 2:
+        #     raise ValueError("At least two embeddings are required for t-SNE.")
+        # perplexity = min(30, len(embeddings) - 1)
+        # tsne = TSNE(n_components=2, random_state=random_state, perplexity=perplexity)
+        # reduced = tsne.fit_transform(embeddings)
+        # return [tuple(map(float, coords)) for coords in reduced]
+        raise DeprecationWarning("No longer supported - 14. Dec 2025 - good bye good old t-SNE =(")

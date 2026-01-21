@@ -3,6 +3,7 @@ from util.logger import Logger
 
 from arxiv_playground import ArxivPlayground
 from paper_playground import PaperPlayground
+from semantic_playground import SemanticScholarPlayground
 
 """
 29-September-2025 - Lenio
@@ -36,7 +37,7 @@ if __name__ == "__main__":
     # manager.register_playground("Arxiv", arxiv_playground)
     arxiv_playground = ArxivPlayground()
     paper_playground = PaperPlayground()
-    manager.register_playground("Arxiv", arxiv_playground)
-    manager.register_playground("Paper-Arxiv", paper_playground)
+    semanticscholar_playground = SemanticScholarPlayground()
+    manager.register_playground("Semantic Scholar", semanticscholar_playground)
     manager.logger.info(f"Registered Playgrounds: {manager.list_playgrounds()}")
     manager.run_all_tests()

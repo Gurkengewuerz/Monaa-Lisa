@@ -16,6 +16,7 @@ Suggestion for later: Consider adding more metadata like embedding model version
 class Embedding:
     belonging_paper_entry_id: str
     content: np.ndarray
+    label: str | None = None
 
     """
     21-August-2025 - Lenio

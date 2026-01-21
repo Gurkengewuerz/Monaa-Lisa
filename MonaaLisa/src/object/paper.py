@@ -3,12 +3,18 @@ import os
 import sys
 import tempfile
 import textwrap
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import datetime
 import arxiv as arx
 from typing import List, Optional, Dict
 
 import requests
+
+from object.citation import Citation
+
+from object.paper_citation import PaperCitation
+from object.paper_reference import PaperReference
+
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(__file__))))
 from Database.db_models import DBPaper
 from util.logger import Logger
@@ -27,8 +33,8 @@ class Paper:
     url: str
     category: Optional[str] = None
     hash: Optional[str] = None
-    references: Optional[List[Reference]] = None
-    citations: Optional[Dict] = None # TODO # Should not show up here but rather in a separate table (maybe)
+    references: list[Reference | PaperReference] = field(default_factory=list)
+    citations: list[Citation | PaperCitation] = field(default_factory=list)
     tsne: Optional[Dict] = None
     embedding: Optional[Embedding] = None
     added: Optional[datetime] = None
@@ -89,7 +95,6 @@ class Paper:
             tsne=self.tsne if self.tsne else None,
             url=self.url,
             hash=self.hash,
-            citations=self.citations,
             added=self.added or datetime.now()
         )
 
@@ -120,15 +125,6 @@ class Paper:
             self.logger.warning(f"No GROBID XML returned for {self.title}, skipping metadata extraction")
             self.references = []
             return
-        references = self.extract_references()
-        if references:
-            """Annotation 30-July-2025: - Bastian
-            Changed from every paper, to just the length - otherwise we have extreme log spam
-            """
-            self.logger.info(f"Extracted {len(references)} references from {self.title}")
-            self.references = references
-        else:
-            self.logger.warning(f"No references found for {self.title}")
         sections = self.get_sections()
         if sections:
             for section in sections:
@@ -141,7 +137,6 @@ class Paper:
                                              replace_whitespace=True,
                                              break_on_hyphens=True)
                 self._paper_txt = wrapped_text
-                self.logger.debug(f"{wrapped_text}\n")
 
     """
     29-July-2025 - Lenio

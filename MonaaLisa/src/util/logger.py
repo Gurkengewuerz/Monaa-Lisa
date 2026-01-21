@@ -49,18 +49,21 @@ class Logger:
             file_handler.setLevel(self.config['file_level'])
             file_handler.setFormatter(formatter)
             self.logger.addHandler(file_handler)
+    """
+    14 Dec 2025 - Basti
+    The logger used to have a weird function signature that made it odd to use normally.
+    """
+    def info(self, message: str, *args, **kwargs):
+        self.logger.info(message, *args, **kwargs)
 
-    def info(self, message: str, **kwargs):
-        self.logger.info(message, extra=kwargs)
+    def warning(self, message: str, *args, **kwargs):
+        self.logger.warning(message, *args, **kwargs)
 
-    def warning(self, message: str, **kwargs):
-        self.logger.warning(message, extra=kwargs)
+    def error(self, message: str, *args, exc_info=True, **kwargs):
+        self.logger.error(message, *args, exc_info=exc_info, **kwargs)
 
-    def error(self, message: str, exc_info=True, **kwargs):
-        self.logger.error(message, exc_info=exc_info, extra=kwargs)
-
-    def debug(self, message: str, **kwargs):
-        self.logger.debug(message, extra=kwargs)
+    def debug(self, message: str, *args, **kwargs):
+        self.logger.debug(message, *args, **kwargs)
 
     def set_level(self, level: str):
         self.logger.setLevel(getattr(logging, level.upper()))

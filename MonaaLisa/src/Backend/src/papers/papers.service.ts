@@ -30,7 +30,7 @@ export class PapersService {
       data: {
         entry_id: dto.entry_id,
         title: dto.title,
-        authors: dto.authors,
+        authors: authorsToString(dto.authors),
         summary: dto.summary,
         published: dto.published ? new Date(dto.published) : null,
         category: dto.category ?? null,
@@ -51,7 +51,7 @@ export class PapersService {
       where: { entry_id: dto.entry_id },
       update: {
         title: dto.title,
-        authors: dto.authors,
+        authors: authorsToString(dto.authors),
         summary: dto.summary,
         published: dto.published ? new Date(dto.published) : null,
         category: dto.category ?? null,
@@ -61,7 +61,7 @@ export class PapersService {
       create: {
         entry_id: dto.entry_id,
         title: dto.title,
-        authors: dto.authors,
+        authors: authorsToString(dto.authors),
         summary: dto.summary,
         published: dto.published ? new Date(dto.published) : null,
         category: dto.category ?? null,
@@ -87,7 +87,7 @@ export class PapersService {
       const searchTerm = q.search.trim();
       where.OR = [
         { title: { contains: searchTerm, mode: 'insensitive' } },
-        { authors: { hasSome: [searchTerm] } },
+        { authors: { contains: searchTerm, mode: 'insensitive' } }, // passt zu String
         { summary: { contains: searchTerm, mode: 'insensitive' } },
       ];
     }
@@ -120,7 +120,24 @@ export class PapersService {
    * Wirft, wenn es die ID nicht gibt → bewusst, damit der Caller entscheiden kann.
    */
   async findByEntryId(entry_id: string) {
-    return this.prisma.paper.findUniqueOrThrow({ where: { entry_id } });
+    return this.prisma.paper.findUniqueOrThrow({
+      where: { entry_id },
+      include: {
+        embedding: true,
+
+        // Kanten (rausgehend)
+        paperCitations: true,
+        paperReferences: true,
+
+        // Kanten (eingehend)
+        citedBy: true,
+        referencedBy: true,
+
+        // Vorsicht: große JSON-Objekte ggf. Lenio anpassen
+        citations: true,
+        references: true,
+      },
+    });
   }
 
   /**
@@ -133,9 +150,10 @@ export class PapersService {
       where: { entry_id },
       data: {
         title: dto.title,
-        authors: dto.authors,
+        authors:
+          dto.authors === undefined ? undefined : authorsToString(dto.authors),
         summary: dto.summary,
-        published: dto.published ? new Date(dto.published) : undefined, // Wichtig: nur setzen, wenn wirklich vorhanden – sonst bleibt DB-Wert unverändert.
+        published: dto.published ? new Date(dto.published) : undefined,
         category: dto.category,
         url: dto.url,
         hash: dto.hash,
@@ -151,7 +169,6 @@ export class PapersService {
     return this.prisma.paper.delete({ where: { entry_id } });
   }
 }
-
 
 /**
  *
@@ -169,4 +186,16 @@ function toNumber(value: unknown, fallback: number): number {
     return parsed;
   }
   return fallback;
+}
+
+/**
+ * Wandelt ein array von authors (string[]) in einen einzelnen String um, welcher im Frontend dann angezeigt werden kann
+ * @param authors Array von Autoren
+ * @returns Autoren konkateniert
+ */
+function authorsToString(
+  authors: string[] | string | null | undefined,
+): string {
+  if (authors == null) return '';
+  return Array.isArray(authors) ? authors.join(', ') : authors;
 }

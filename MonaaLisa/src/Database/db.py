@@ -2,7 +2,7 @@ import os
 import sys
 from datetime import datetime, timezone
 from typing import cast, List
-from sqlalchemy import create_engine, or_, and_, exists, select
+from sqlalchemy import create_engine, or_, and_, exists, select, update
 from sqlalchemy.orm import sessionmaker
 from dotenv import load_dotenv
 from config import cfg
@@ -13,6 +13,9 @@ from object.relation import Relation
 from util.logger import Logger
 
 from object.embedding import Embedding
+# Imports für Typ-Prüfung bei Relationen
+from object.paper_reference import PaperReference
+from object.paper_citation import PaperCitation
 
 # os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), ".env")
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(__file__))))
@@ -69,6 +72,28 @@ def get_all_embeddings():
     finally:
         session.close()
 
+
+"""
+20-December-2025 - Basti - Refactor for the supervised UMAP
+Abstract: Returns a mapping of paper entry_id to its arXiv category for supervised reducers.
+Args:
+- limit: optional limit mirroring embedding preload limits to avoid excessive memory use
+Returns: Dict[str, str | None]
+"""
+def get_embedding_labels(limit: int | None = None) -> dict[str, str | None]:
+    session = SessionLocal()
+    try:
+        q = session.query(DBPaper.entry_id, DBPaper.category).filter(DBPaper.category.isnot(None))
+        if limit is not None:
+            q = q.limit(limit)
+        rows = q.all()
+        return {entry_id: category for entry_id, category in rows if entry_id}
+    except Exception as e:
+        logger.error(f"Failed to load embedding labels: {e}")
+        return {}
+    finally:
+        session.close()
+
 """
 25-May-2025 - Basti
 Abstract: Saves one given arXiv paper into the Postgres database
@@ -82,40 +107,100 @@ Annotation: Removed redundant parameters hash and date, these should come from t
 def save_paper_to_db(paper: Paper):
     session = SessionLocal()
 
+    # 1. Check if paper is already fully processed (by hash)
     if paper_exists(session, paper):
         logger.info(f"Paper already exists in DB: {paper.title} (hash: {paper.hash})")
         session.close()
         return True
 
-    db_paper = paper.to_db_model()
-    logger.info("hash: " + paper.hash)
-    db_paper.hash = paper.hash
-    session.add(db_paper)
-
-    # Flush the session to save the paper and make its ID available for foreign keys
     try:
+        # 2. Check if paper exists as a Stub (by entry_id)
+        # We use the entry_id to check because stubs have the ID but no Hash
+        existing_paper = session.query(DBPaper).filter_by(entry_id=paper.entry_id).first()
+
+        if existing_paper:
+            logger.info(f"Updating existing stub/paper: {paper.title}")
+            # Update fields of the existing stub
+            existing_paper.title = paper.title
+            existing_paper.authors = ", ".join(paper.authors)
+            existing_paper.summary = paper.abstract
+            existing_paper.published = paper.published
+            existing_paper.category = paper.category
+            existing_paper.tsne = json.dumps(paper.tsne) if paper.tsne else None
+            existing_paper.url = paper.url
+            existing_paper.hash = paper.hash
+            # existing_paper.added remains as is (creation time of stub)
+        else:
+            # Insert new paper
+            db_paper = paper.to_db_model()
+            logger.info("hash: " + paper.hash)
+            db_paper.hash = paper.hash
+            session.add(db_paper)
+
+        # Flush to ensure the paper (or update) is applied before we add relations
         session.flush()
-    except Exception as e:
-        logger.error(f"DB error on flush: {e}")
-        session.rollback()
-        session.close()
-        return False
 
-    # in the future when we have more calls to grobid this should not happen but rather in a sooner step so we process each paper only once
-    references = paper.references if paper.references else []
-    for ref in references:
-        db_reference = ref.to_db_model()
-        logger.info(f"Adding reference to DB: {db_reference.title}")
-        session.add(db_reference)
-    if paper.embedding is not None:
-        db_embedding = paper.embedding.to_db_model()
-        logger.info(f"Adding embedding to DB for paper: {paper.title}")
-        session.add(db_embedding)
+        # 3. Handle Missing Targets for Relations (Create Stubs)
+        # This ensures that referenced papers exist in the DB so Foreign Keys don't fail
+        references = paper.references if paper.references else []
+        citations = paper.citations if paper.citations else []
 
-    try:
+        needed_ids = set()
+
+        # Collect IDs from PaperReference and PaperCitation objects
+        for ref in references:
+            if isinstance(ref, PaperReference):
+                needed_ids.add(ref.referenced_paper_id)
+
+        for cite in citations:
+            if isinstance(cite, PaperCitation):
+                needed_ids.add(cite.cited_paper_id)
+
+        if needed_ids:
+            # Find which ones are missing in DB
+            existing_stubs = session.query(DBPaper.entry_id).filter(DBPaper.entry_id.in_(needed_ids)).all()
+            found_ids = {r.entry_id for r in existing_stubs}
+
+            missing_ids = needed_ids - found_ids
+
+            if missing_ids:
+                logger.info(f"Creating {len(missing_ids)} stubs for missing relations...")
+                for mid in missing_ids:
+                    # Create Stub
+                    # Hash is None (Postgres allows multiple NULLs in unique columns)
+                    # Title indicates it's a placeholder
+                    stub = DBPaper(
+                        entry_id=mid,
+                        added=datetime.now(),
+                        title="[STUB] Pending Fetch",
+                        hash=None
+                    )
+                    session.add(stub)
+                # Flush stubs so they are available for FK checks immediately
+                session.flush()
+
+        # 4. Save Relations
+        for ref in references:
+            db_reference = ref.to_db_model()
+            session.add(db_reference)
+
+        for cite in citations:
+            db_citation = cite.to_db_model()
+            session.add(db_citation)
+
+        # 5. Handle Embedding
+        if paper.embedding is not None:
+            # Remove existing embedding if we are updating a stub/paper to avoid unique constraint violation
+            session.query(DBEmbedding).filter_by(belonging_paper_entry_id=paper.entry_id).delete()
+
+            db_embedding = paper.embedding.to_db_model()
+            logger.info(f"Adding embedding to DB for paper: {paper.title}")
+            session.add(db_embedding)
+
         session.commit()
         logger.info(f"Saved paper to DB: {paper.title}")
         return True
+
     except Exception as e:
         logger.error(f"DB error: {e}")
         session.rollback()
@@ -150,6 +235,52 @@ def save_paper_relation(paper_relation: Relation):
         logger.error(f"DB error saving paper relation: {e}")
         session.rollback()
         return False
+    finally:
+        session.close()
+
+"""
+14-Dec 2025 - Basti
+Abstract: We can not "freeze" the papers location in the DB when we save them, because the t-SNE/UMAP projection
+may be calculated later. This function updates the projection field of a paper in the DB.
+Args:
+- entry_id: The entry_id of the paper to update
+- projection: The new projection dict to set
+Returns: bool -> True if update was successful, False otherwise
+"""
+def update_paper_projection(entry_id: str, projection: dict) -> bool:
+    session = SessionLocal()
+    try:
+        result = session.execute(
+            update(DBPaper)
+            .where(DBPaper.entry_id == entry_id)
+            .values(tsne=projection)
+        )
+        if result.rowcount == 0:
+            logger.warning(f"No paper found to update projection for entry_id={entry_id}")
+            session.rollback()
+            return False
+        session.commit()
+        logger.info(f"Updated projection for paper {entry_id}")
+        return True
+    except Exception as e:
+        logger.error(f"Failed updating projection for {entry_id}: {e}")
+        session.rollback()
+        return False
+    finally:
+        session.close()
+
+
+def get_entry_ids_missing_projection(limit: int | None = None) -> list[str]:
+    session = SessionLocal()
+    try:
+        query = session.query(DBPaper.entry_id).filter(DBPaper.tsne.is_(None))
+        if limit is not None:
+            query = query.limit(limit)
+        rows = query.all()
+        return [row[0] for row in rows if row[0] is not None]
+    except Exception as e:
+        logger.error(f"Failed to fetch papers missing projection: {e}")
+        return []
     finally:
         session.close()
 
@@ -191,7 +322,7 @@ def paper_exists(session, paper: Paper):
         );
     """
 def relation_exists(session, source_id: str, target_id: str):
-    # 29.09.25 Nico - Verbesserte Version der Abfrage. Aktuell werden 2 SQL Befehle ausgeführt (nicht effizient) dabei kann man das in einem Befehl mit OR kombinieren. 
+    # 29.09.25 Nico - Verbesserte Version der Abfrage. Aktuell werden 2 SQL Befehle ausgeführt (nicht effizient) dabei kann man das in einem Befehl mit OR kombinieren.
     # Die Variante mit beiden Befehlen liefert auch die kompletten Zeilen obwohl man am Ende nur ein Boolean generieren möchte
 
     # Check if the relation exists in either direction
@@ -220,6 +351,43 @@ def create_program_run():
         logger.error(f"Error creating program run: {e}")
         session.rollback()
         return None
+    finally:
+        session.close()
+
+
+"""
+20-December-2025 - Basti
+Abstract: Checks whether a program run exists.
+"""
+def program_run_exists(run_id: int) -> bool:
+    session = SessionLocal()
+    try:
+        return session.query(ProgramRun.id).filter_by(id=run_id).first() is not None
+    except Exception as e:
+        logger.error(f"Error checking program run existence: {e}")
+        return False
+    finally:
+        session.close()
+
+
+"""
+Abstract: Reactivates an existing program run and deactivates the others.
+Returns: bool -> True if the run was reactivated, False otherwise.
+"""
+def set_active_program_run(run_id: int) -> bool:
+    session = SessionLocal()
+    try:
+        if session.query(ProgramRun.id).filter_by(id=run_id).first() is None:
+            return False
+        session.query(ProgramRun).update({"is_active": "false"})
+        session.query(ProgramRun).filter_by(id=run_id).update({"is_active": "true"})
+        session.commit()
+        logger.info(f"Reactivated ProgramRun ID: {run_id}")
+        return True
+    except Exception as e:
+        logger.error(f"Error reactivating program run {run_id}: {e}")
+        session.rollback()
+        return False
     finally:
         session.close()
 

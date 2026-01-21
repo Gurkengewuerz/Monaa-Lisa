@@ -1,17 +1,16 @@
 from dataclasses import dataclass
 from typing import List, Optional, Dict, Any
-from Database.db_models import DBReference
+from Database.db_models import DBCitation
 from semanticscholar.Paper import Paper
 
 """
-29-July-2025 - Lenio
-Abstract: Represents a reference found in a paper
+23-December-2025 - Lenio
 Variables:
-- belonging_paper_id: str -> The ID of the paper this reference belongs to
+- belonging_paper_id: str -> The ID of the paper this citation belongs to
 - semantic_scholar_obj -> The original object from Semantic Scholar, in case a paper is not found on arXiv
 """
 @dataclass
-class Reference:
+class Citation:
     belonging_paper_id: str
     semanticscholar_obj: Paper
 
@@ -34,13 +33,14 @@ class Reference:
         return obj
 
     """
-    26-July-2025 - Lenio
-    Abstract: Converts the Reference object to a SQLAlchemy model.
+    23-December-2025 - Lenio
+    Abstract: 
+        Converts the Citation object to a SQLAlchemy model.
     Returns: 
-        DBReference -> An instance of the SQLAlchemy model with the reference's data from Semantic Scholar.
+        DBCitation -> An instance of the SQLAlchemy model with the citation's data from Semantic Scholar.
     """
     def to_db_model(self):
-        return DBReference(
+        return DBCitation(
             belonging_paper_entry_id=self.belonging_paper_id,
             semanticscholar_obj=self.semantic_paper_to_dict(self.semanticscholar_obj)
         )

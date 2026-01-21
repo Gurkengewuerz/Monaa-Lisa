@@ -1,6 +1,5 @@
-FROM python:3.11-slim
-
-WORKDIR /app
+# Stage 1: Dependencies (cached)
+FROM python:3.11-slim AS deps
 
 RUN apt-get update && apt-get install -y \
     git \
@@ -8,9 +7,13 @@ RUN apt-get update && apt-get install -y \
     netcat-openbsd \
     && rm -rf /var/lib/apt/lists/*
 
+WORKDIR /app
 COPY requirements.txt .
-RUN --mount=type=cache,target=/root/.cache/pip \
-    pip install -r requirements.txt
+# Avoid BuildKit-specific cache mounts so the image can build anywhere
+RUN pip install --no-cache-dir -r requirements.txt
+
+# Stage 2: App
+FROM deps AS app
 
 COPY . .
 

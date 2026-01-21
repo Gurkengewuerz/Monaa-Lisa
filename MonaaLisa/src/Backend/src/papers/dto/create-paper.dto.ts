@@ -3,7 +3,6 @@ import {
   IsNotEmpty,
   IsOptional,
   IsString,
-  IsArray,
   IsUrl,
 } from 'class-validator';
 
@@ -17,9 +16,8 @@ export class CreatePaperDto {
   title!: string;
 
   @IsNotEmpty()
-  @IsArray()
-  @IsString({each:true})
-  authors!: string[];
+  @IsString()
+  authors!: string;
 
   @IsNotEmpty()
   @IsString()
@@ -42,10 +40,6 @@ export class CreatePaperDto {
   @IsNotEmpty()
   @IsString()
   hash!: string;
-
-  // JSON-Felder optional (class-validator kann JSON nicht sauber prüfen)
-  @IsOptional()
-  citations?: unknown;
 
   @IsOptional()
   tsne?: unknown;
