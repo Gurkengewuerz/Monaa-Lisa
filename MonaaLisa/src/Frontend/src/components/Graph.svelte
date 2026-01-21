@@ -102,12 +102,11 @@
   }
 
   /**
-   * 
-   * @param points
-   * @param cx
-   * @param cy
-   * @param factor
-   * @param minOffset
+   * Vergrössert die Menge von Punkten ausgehen vom Zentrum eines Polygons
+   * @param points List[] von Punkten [x,y]
+   * @param cx x Koordinate vom Zentrum
+   * @param cy y Koordinate vom Zentrum
+   * @param factor Skalierungsfaktor (alles > 1 vergrößert, == 1 verändert nichts und < 1 verkleinert entsprechend
    */
 function inflateAroundCenter(
   points: [number, number][],
@@ -116,12 +115,22 @@ function inflateAroundCenter(
   factor: number
 ) {
   return points.map(([x, y]) => {
+    // Berechne den vektroriellen Abstand vom Zentrum zum Punkt
     const dx = x - cx;
     const dy = y - cy;
+    Multipliziere Abstand mit Faktor und addiere zum Zentrum
     return [cx + dx * factor, cy + dy * factor] as [number, number];
   });
 }
 
+/**
+ * Berechnet einen Skalierungsfaktor, damit die Hülle (Hull) alle Punkte 
+ * inklusive eines Sicherheitsabstands (Padding) umschließt.
+ * * @param hull - Die Eckpunkte der aktuellen Hülle.
+ * @param points - Die tatsächlichen Datenpunkte im Cluster.
+ * @param padding - Der gewünschte Pufferabstand in Pixeln/Einheiten.
+ * @param maxFactor - Begrenzt die Skalierung, um extrem verzerrte Formen zu vermeiden.
+ */
 function inflateToContainPadding(
   hull: [number, number][],
   points: { x: number; y: number }[],
@@ -130,11 +139,14 @@ function inflateToContainPadding(
   padding: number,
   maxFactor = 1.6 // Schutz gegen Monster-Hulls
 ) {
+  // Finde Punkt welcher am weitesten vom Zentrum entfernt ist
   const maxPointR = Math.max(...points.map(p => Math.hypot(p.x - cx, p.y - cy)));
+  // Verhältnis um das die Hülle wachsen muss
   const maxHullR  = Math.max(...hull.map(([x,y]) => Math.hypot(x - cx, y - cy))) || 1;
 
   const targetR = maxPointR + padding;
   const rawFactor = targetR / maxHullR;
+  // Faktor muss [1, maxFactor] liegen
   const factor = Math.min(Math.max(1, rawFactor), maxFactor);
 
   return inflateAroundCenter(hull, cx, cy, factor);
@@ -147,9 +159,9 @@ function clusterSpread(points: {x:number;y:number}[], cx:number, cy:number) {
 }
 
   /**
-   * 
-   * @param points
-   * @param iterations
+   * Chaikin Algorithmus um Ecken "abzurunden"
+   * @param points Punkte des Landes
+   * @param iterations Anzahl der Durchgänge höher = runder aber rechenintensiver
    */
   function chaikinSmooth(points: [number, number][], iterations = 2) {
   let pts = points;
