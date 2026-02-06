@@ -141,14 +141,14 @@
       <div class="second-section">
            <svg class="overlay-svg" viewBox="{vbX} {vbY} {vbW} {vbH}" preserveAspectRatio="xMidYMid slice">
               <defs>
-                 <mask id="text-mask" maskUnits="userSpaceOnUse" maskContentUnits="userSpaceOnUse" x="-5000" y="-5000" width="10000" height="10000">
+                 <mask id="text-mask" maskUnits="userSpaceOnUse" maskContentUnits="userSpaceOnUse" x="-500" y="-500" width="1000" height="1000">
                     <!-- Infinite White Rect (The Mask) -->
-                    <rect x="-5000" y="-5000" width="10000" height="10000" fill="white" />
+                    <rect x="-500" y="-500" width="1000" height="1000" fill="white" />
                     <text x="{titleX}" y="{titleYAbs}" text-anchor="middle" dominant-baseline="middle" font-size="12" font-weight="900" fill="black">Monaa-Lisa</text>
                  </mask>
               </defs>
               <!-- The Solid Background with Hole (Infinite Rect) -->
-              <rect x="-5000" y="-5000" width="10000" height="10000" fill="#1a1f2c" mask="url(#text-mask)" />
+              <rect x="-500" y="-500" width="1000" height="1000" fill="#1a1f2c" mask="url(#text-mask)" />
               
               <!-- The White Text Fill -->
               <text x="{titleX}" y="{titleYAbs}" text-anchor="middle" dominant-baseline="middle" font-size="12" font-weight="900" fill="white" opacity={titleOpacity}>Monaa-Lisa</text>
@@ -208,7 +208,6 @@
     width: 100%;
     height: 100%;
     z-index: 0;
-    transition: transform 0.1s linear;
     will-change: transform;
   }
 
@@ -241,7 +240,6 @@
     justify-content: flex-start;
     align-items: center;
     text-align: center;
-    transition: opacity 0.1s linear;
     padding-top: 10vh;
   }
 
@@ -329,8 +327,8 @@
     width: 100vw;
     height: 100vh;
     /* Ensure text is crisp */
-    shape-rendering: geometricPrecision;
-    text-rendering: geometricPrecision;
+    shape-rendering: auto;
+    text-rendering: optimizeLegibility;
   }
   
   .overlay-svg text {
