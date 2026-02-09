@@ -30,17 +30,17 @@ export class PapersService {
       data: {
         entry_id: dto.entry_id,
         title: dto.title,
-        authors: authorsToString(dto.authors),
-        summary: dto.summary,
+        authors: authorsToString(dto.authors) ?? null,
+        summary: dto.summary ?? null,
         published: dto.published ? new Date(dto.published) : null,
         category: dto.category ?? null,
         url: dto.url ?? null,
-        hash: dto.hash,
+        hash: dto.hash ?? null,
         added: new Date(),
       },
     });
   }
-  
+
   // Idempotente Ingestion: Upsert über entry_id
   /**
    * Upsert (Create ODER Update) anhand `entry_id`.
@@ -51,22 +51,22 @@ export class PapersService {
       where: { entry_id: dto.entry_id },
       update: {
         title: dto.title,
-        authors: authorsToString(dto.authors),
-        summary: dto.summary,
+        authors: authorsToString(dto.authors) ?? null,
+        summary: dto.summary ?? null,
         published: dto.published ? new Date(dto.published) : null,
         category: dto.category ?? null,
         url: dto.url ?? null,
-        hash: dto.hash,
+        hash: dto.hash ?? null,
       },
       create: {
         entry_id: dto.entry_id,
         title: dto.title,
-        authors: authorsToString(dto.authors),
-        summary: dto.summary,
+        authors: authorsToString(dto.authors) ?? null,
+        summary: dto.summary ?? null,
         published: dto.published ? new Date(dto.published) : null,
         category: dto.category ?? null,
         url: dto.url ?? null,
-        hash: dto.hash,
+        hash: dto.hash ?? null,
         added: new Date(),
       },
     });
@@ -77,67 +77,55 @@ export class PapersService {
    * plus optionaler Kategorie & Datumsbereich.
    * Pagination via `skip`/`take`, dazu Gesamtanzahl für UI.
    */
-  async findMany(q: QueryPaperDto) {
-    const skip = toNumber(q.skip, 0);
-    const take = toNumber(q.take, 20);
-    const where: Prisma.PaperWhereInput = {};
+  // `MonaaLisa/src/Backend/src/papers/papers.service.ts`
 
-    // Mini-Volltext: simpel, aber schnell & ausreichend für UI-Suche
-    if (q.search) {
-      const searchTerm = q.search.trim();
-      where.OR = [
-        { title: { contains: searchTerm, mode: 'insensitive' } },
-        { authors: { contains: searchTerm, mode: 'insensitive' } }, // passt zu String
-        { summary: { contains: searchTerm, mode: 'insensitive' } },
-      ];
-    }
-    if (q.category) where.category = { equals: q.category };
+async findMany(q: QueryPaperDto) {
+  const skip = toNumber(q.skip, 0);
+  const take = toNumber(q.take, 20);
+  const where: Prisma.PaperWhereInput = {};
 
-    // Datumsbereich (inklusive Grenzen)
-    if (q.dateFrom || q.dateTo) {
-      const publishedFilter: Prisma.DateTimeNullableFilter = {};
-      if (q.dateFrom) publishedFilter.gte = new Date(q.dateFrom);
-      if (q.dateTo) publishedFilter.lte = new Date(q.dateTo);
-      where.published = publishedFilter;
-    }
+  // Stub-Titel grundsätzlich ausschließen
+  where.NOT = [
+    { title: { equals: '[STUB] Pending Fetch', mode: 'insensitive' } },
+  ];
 
-    // wir starten transaction damit keine verwaisten einträge entstehen und falls jemand auch ein paper erstellt oder löscht, count nicht pltz falsch ist
-    const [items, total] = await this.prisma.$transaction([
-      this.prisma.paper.findMany({
-        where,
-        orderBy: [{ published: 'desc' }, { added: 'desc' }],
-        skip,
-        take,
-      }),
-      this.prisma.paper.count({ where }),
-    ]);
-
-    return { items, total, skip, take };
+  if (q.search) {
+    const searchTerm = q.search.trim();
+    where.OR = [
+      { title: { contains: searchTerm, mode: 'insensitive' } },
+      { authors: { contains: searchTerm, mode: 'insensitive' } },
+      { summary: { contains: searchTerm, mode: 'insensitive' } },
+    ];
   }
+
+  if (q.category) where.category = { equals: q.category };
+
+  if (q.dateFrom || q.dateTo) {
+    const publishedFilter: Prisma.DateTimeNullableFilter = {};
+    if (q.dateFrom) publishedFilter.gte = new Date(q.dateFrom);
+    if (q.dateTo) publishedFilter.lte = new Date(q.dateTo);
+    where.published = publishedFilter;
+  }
+
+  const [items, total] = await this.prisma.$transaction([
+    this.prisma.paper.findMany({
+      where,
+      orderBy: [{ published: 'desc' }, { added: 'desc' }],
+      skip,
+      take,
+    }),
+    this.prisma.paper.count({ where }),
+  ]);
+
+  return { items, total, skip, take };
+}
 
   /**
    * Holt ein Paper per `entry_id`.
    * Wirft, wenn es die ID nicht gibt → bewusst, damit der Caller entscheiden kann.
    */
   async findByEntryId(entry_id: string) {
-    return this.prisma.paper.findUniqueOrThrow({
-      where: { entry_id },
-      include: {
-        embedding: true,
-
-        // Kanten (rausgehend)
-        paperCitations: true,
-        paperReferences: true,
-
-        // Kanten (eingehend)
-        citedBy: true,
-        referencedBy: true,
-
-        // Vorsicht: große JSON-Objekte ggf. Lenio anpassen
-        citations: true,
-        references: true,
-      },
-    });
+    return this.prisma.paper.findUniqueOrThrow({ where: { entry_id } });
   }
 
   /**
@@ -169,6 +157,7 @@ export class PapersService {
     return this.prisma.paper.delete({ where: { entry_id } });
   }
 }
+
 
 /**
  *

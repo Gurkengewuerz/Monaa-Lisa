@@ -1,0 +1,4 @@
+-- AlterTable
+ALTER TABLE "paper" ALTER COLUMN "authors" DROP NOT NULL,
+ALTER COLUMN "summary" DROP NOT NULL,
+ALTER COLUMN "hash" DROP NOT NULL;
