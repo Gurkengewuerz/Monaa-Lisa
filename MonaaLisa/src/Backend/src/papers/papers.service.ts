@@ -98,6 +98,12 @@ export class PapersService {
 async findMany(q: QueryPaperDto) {
   const skip = toNumber(q.skip, 0);
   const take = toNumber(q.take, 20);
+
+  // ── sort=citations → raw SQL path (order by citation count DESC) ──
+  if (q.sort === 'citations' && q.categories && !q.search && !q.dateFrom && !q.dateTo) {
+    return this.findManyByCitationCount(q.categories, skip, take);
+  }
+
   const where: Prisma.PaperWhereInput = {};
 
   // Stub-Titel grundsätzlich ausschließen
@@ -110,11 +116,11 @@ async findMany(q: QueryPaperDto) {
     where.OR = [
       { title: { contains: searchTerm, mode: 'insensitive' } },
       { authors: { contains: searchTerm, mode: 'insensitive' } },
-      { summary: { contains: searchTerm, mode: 'insensitive' } },
+      { abstract: { contains: searchTerm, mode: 'insensitive' } },
     ];
   }
 
-  if (q.category) where.category = { equals: q.category };
+  if (q.categories) where.categories = { contains: q.categories };
 
   if (q.dateFrom || q.dateTo) {
     const publishedFilter: Prisma.DateTimeNullableFilter = {};
