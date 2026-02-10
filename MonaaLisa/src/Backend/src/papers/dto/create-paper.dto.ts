@@ -1,5 +1,6 @@
 import {
   IsISO8601,
+  IsInt,
   IsNotEmpty,
   IsOptional,
   IsString,
@@ -21,7 +22,11 @@ export class CreatePaperDto {
 
   @IsOptional()
   @IsString()
-  summary?: string;
+  abstract?: string;
+
+  @IsOptional()
+  @IsString()
+  categories?: string;
 
   // ISO-8601 String; im Service in Date konvertieren
   @IsOptional()
@@ -29,17 +34,36 @@ export class CreatePaperDto {
   published?: string;
 
   @IsOptional()
+  @IsISO8601()
+  updated?: string;
+
+  @IsOptional()
   @IsString()
-  category?: string;
+  doi?: string;
+
+  @IsOptional()
+  @IsString()
+  journal_ref?: string;
+
+  @IsOptional()
+  @IsString()
+  license?: string;
 
   @IsOptional()
   @IsUrl()
   url?: string;
 
-  // unique
   @IsOptional()
   @IsString()
-  hash?: string;
+  s2_id?: string;
+
+  @IsOptional()
+  @IsInt()
+  non_arxiv_citation_count?: number;
+
+  @IsOptional()
+  @IsInt()
+  non_arxiv_reference_count?: number;
 
   @IsOptional()
   tsne?: unknown;
