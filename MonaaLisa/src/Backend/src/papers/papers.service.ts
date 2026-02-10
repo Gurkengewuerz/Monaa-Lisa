@@ -156,13 +156,57 @@ async findMany(q: QueryPaperDto) {
         title: dto.title,
         authors:
           dto.authors === undefined ? undefined : authorsToString(dto.authors),
-        summary: dto.summary,
+        abstract: dto.abstract,
+        categories: dto.categories,
         published: dto.published ? new Date(dto.published) : undefined,
-        category: dto.category,
+        updated: dto.updated ? new Date(dto.updated) : undefined,
+        doi: dto.doi,
+        journal_ref: dto.journal_ref,
+        license: dto.license,
         url: dto.url,
-        hash: dto.hash,
+        s2_id: dto.s2_id,
+        non_arxiv_citation_count: dto.non_arxiv_citation_count,
+        non_arxiv_reference_count: dto.non_arxiv_reference_count,
       },
     });
+  }
+
+  /**
+   * Batch-Fetch: holt mehrere Papers anhand einer Liste von `entry_id`s.
+   * Maximal 5000 Ergebnisse.
+   */
+  async findByEntryIds(entryIds: string[], take = 5000) {
+    const papers = await this.prisma.paper.findMany({
+      where: { entry_id: { in: entryIds } },
+      take,
+    });
+    return this.enrichWithCitations(papers);
+  }
+
+  /**
+   * Holt aus der paper_citation-Tabelle die cited_paper_entry_ids für
+   * jedes übergebene Paper und hängt sie als `citations: string[]` an.
+   */
+  private async enrichWithCitations<T extends { entry_id: string }>(papers: T[]): Promise<(T & { citations: string[] })[]> {
+    if (!papers.length) return [];
+
+    const entryIds = papers.map(p => p.entry_id);
+    const rows = await this.prisma.paperCitation.findMany({
+      where: { belonging_paper_entry_id: { in: entryIds } },
+      select: { belonging_paper_entry_id: true, cited_paper_entry_id: true },
+    });
+
+    const citationMap = new Map<string, string[]>();
+    for (const r of rows) {
+      const arr = citationMap.get(r.belonging_paper_entry_id);
+      if (arr) arr.push(r.cited_paper_entry_id);
+      else citationMap.set(r.belonging_paper_entry_id, [r.cited_paper_entry_id]);
+    }
+
+    return papers.map(p => ({
+      ...p,
+      citations: citationMap.get(p.entry_id) ?? [],
+    }));
   }
 
   /**
