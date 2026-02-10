@@ -14,17 +14,23 @@ datasource db {
 }
 
 model Paper {
-  id        Int       @id @default(autoincrement())
-  entry_id  String    @unique
-  title     String
-  authors   String?
-  summary   String?
-  published DateTime?
-  category  String?
-  url       String?
-  hash      String?    @unique
-  tsne      Json?
-  added     DateTime
+  id                        Int       @id @default(autoincrement())
+  entry_id                  String    @unique
+  title                     String
+  authors                   String?
+  abstract                  String?
+  categories                String?
+  published                 DateTime?
+  updated                   DateTime?
+  doi                       String?
+  journal_ref               String?
+  license                   String?
+  url                       String?
+  s2_id                     String?   @unique
+  non_arxiv_citation_count  Int?
+  non_arxiv_reference_count Int?
+  // App-only fields (not in dataset, used by ML pipeline)
+  tsne                      Json?
 
   @@map("paper")
 }
