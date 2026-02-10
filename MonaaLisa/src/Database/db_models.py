@@ -25,16 +25,22 @@ Parameters:
 class DBPaper(db_base):
     __tablename__ = "paper"
     id = Column(Integer, primary_key=True, index=True)
-    entry_id = Column(String, unique=True, index=True)
-    title = Column(String)
-    authors = Column(String)
-    summary = Column(String)
-    published = Column(DateTime)
-    category = Column(String)
-    url = Column(String)
-    hash = Column(String, unique=True, index=True)
+    entry_id = Column(String, unique=True, index=True, nullable=False)
+    title = Column(String, nullable=False)
+    authors = Column(String, nullable=True)
+    abstract = Column(Text, nullable=True)
+    categories = Column(String, nullable=True)
+    published = Column(DateTime, nullable=True)
+    updated = Column(DateTime, nullable=True)
+    doi = Column(String, nullable=True)
+    journal_ref = Column(String, nullable=True)
+    license = Column(String, nullable=True)
+    url = Column(String, nullable=True)
+    s2_id = Column(String, nullable=True, unique=True, index=True)
+    non_arxiv_citation_count = Column(Integer, nullable=True)
+    non_arxiv_reference_count = Column(Integer, nullable=True)
+    # App-only fields (not in dataset, used by ML pipeline)
     tsne = Column(JSON, nullable=True)
-    added = Column(DateTime, nullable=False)
 
 """
 17-July-2025 - Lenio
