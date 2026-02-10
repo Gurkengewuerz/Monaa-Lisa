@@ -156,7 +156,7 @@ Parameters:
 class DBPaperCitation(db_base):
     __tablename__ = "paper_citation"
     belonging_paper_entry_id = Column(String, ForeignKey("paper.entry_id"), primary_key=True)
-    cited_paper_entry_id = Column(String, ForeignKey("paper.entry_id"), primary_key=True)
+    cited_paper_entry_id = Column(String, primary_key=True)  # No FK – cited paper may not exist in DB
 
 """
 24-December-2025 - Lenio
@@ -168,5 +168,5 @@ Parameters:
 class DBPaperReference(db_base):
     __tablename__ = "paper_reference"
     belonging_paper_entry_id = Column(String, ForeignKey("paper.entry_id"), primary_key=True)
-    referenced_paper_entry_id = Column(String, ForeignKey("paper.entry_id"), primary_key=True)
+    referenced_paper_entry_id = Column(String, primary_key=True)  # No FK – referenced paper may not exist in DB
 
