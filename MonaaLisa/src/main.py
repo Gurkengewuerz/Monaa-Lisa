@@ -35,7 +35,6 @@ import sys
 logger = Logger("Main")
 
 load_dotenv()
-HASH_FILE = 'parsed_hashes.txt'
 
 semanticscholar_client = SemanticScholarAPI(os.environ['SEMANTIC_SCHOLAR_API_KEY'])
 arxiv_client = ArxivAPI()
