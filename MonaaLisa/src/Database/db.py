@@ -83,11 +83,11 @@ Returns: Dict[str, str | None]
 def get_embedding_labels(limit: int | None = None) -> dict[str, str | None]:
     session = SessionLocal()
     try:
-        q = session.query(DBPaper.entry_id, DBPaper.category).filter(DBPaper.category.isnot(None))
+        q = session.query(DBPaper.entry_id, DBPaper.categories).filter(DBPaper.categories.isnot(None))
         if limit is not None:
             q = q.limit(limit)
         rows = q.all()
-        return {entry_id: category for entry_id, category in rows if entry_id}
+        return {entry_id: categories for entry_id, categories in rows if entry_id}
     except Exception as e:
         logger.error(f"Failed to load embedding labels: {e}")
         return {}
