@@ -107,34 +107,28 @@ Annotation: Removed redundant parameters hash and date, these should come from t
 def save_paper_to_db(paper: Paper):
     session = SessionLocal()
 
-    # 1. Check if paper is already fully processed (by hash)
+    # 1. Check if paper already exists (by entry_id)
     if paper_exists(session, paper):
-        logger.info(f"Paper already exists in DB: {paper.title} (hash: {paper.hash})")
+        logger.info(f"Paper already exists in DB: {paper.title}")
         session.close()
         return True
 
     try:
         # 2. Check if paper exists as a Stub (by entry_id)
-        # We use the entry_id to check because stubs have the ID but no Hash
         existing_paper = session.query(DBPaper).filter_by(entry_id=paper.entry_id).first()
 
         if existing_paper:
             logger.info(f"Updating existing stub/paper: {paper.title}")
-            # Update fields of the existing stub
             existing_paper.title = paper.title
             existing_paper.authors = ", ".join(paper.authors)
-            existing_paper.summary = paper.abstract
+            existing_paper.abstract = paper.abstract
             existing_paper.published = paper.published
-            existing_paper.category = paper.category
+            existing_paper.categories = paper.categories
             existing_paper.tsne = json.dumps(paper.tsne) if paper.tsne else None
             existing_paper.url = paper.url
-            existing_paper.hash = paper.hash
-            # existing_paper.added remains as is (creation time of stub)
         else:
             # Insert new paper
             db_paper = paper.to_db_model()
-            logger.info("hash: " + paper.hash)
-            db_paper.hash = paper.hash
             session.add(db_paper)
 
         # Flush to ensure the paper (or update) is applied before we add relations
