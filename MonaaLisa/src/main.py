@@ -88,7 +88,7 @@ Args:
 - worker_id -> ID of one of x workers that have been assigned
 Returns: None
 """
-def paper_worker(worker_id, known_hashes):
+def paper_worker(worker_id, known_ids):
     logger.info(f"Worker {worker_id} started")
     while True:
         paper = scheduler.paper_queue.get()
