@@ -87,13 +87,11 @@ class Paper:
             entry_id=self.entry_id,
             title=self.title,
             authors=", ".join(self.authors),
-            summary=self.abstract,
+            abstract=self.abstract,
             published=self.published,
-            category=self.category,
+            categories=self.categories,
             tsne=self.tsne if self.tsne else None,
             url=self.url,
-            hash=self.hash,
-            added=self.added or datetime.now()
         )
 
 
