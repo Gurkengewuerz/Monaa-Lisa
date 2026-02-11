@@ -300,7 +300,7 @@ Additionally:
 Checking by hash could be a way of checking for updates to a paper, but that is not implemented yet.
 """
 def paper_exists(session, paper: Paper):
-    return session.query(DBPaper).filter_by(hash=paper.hash).first() is not None
+    return session.query(DBPaper).filter_by(entry_id=paper.entry_id).first() is not None
 
 
 """ 28.09. Nico
