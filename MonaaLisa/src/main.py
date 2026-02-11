@@ -59,21 +59,27 @@ Args:
 - None
 Returns: Set filled with all parsed/known papers (hashed)
 """
-def load_hashes():
-    if not os.path.exists(HASH_FILE):
+def load_known_entry_ids():
+    """Load known entry_ids from the database at startup."""
+    session = None
+    try:
+        from Database.db import SessionLocal
+        from Database.db_models import DBPaper
+        session = SessionLocal()
+        rows = session.query(DBPaper.entry_id).all()
+        return {r.entry_id for r in rows if r.entry_id}
+    except Exception as e:
+        logger.warning(f"Could not preload entry_ids: {e}")
         return set()
-    with open(HASH_FILE, "r") as f:
-        return set(line.strip() for line in f)
+    finally:
+        if session:
+            session.close()
 """
 25-May-2025 - Basti
-Abstract: Saves one hash string to the local parsed_hashes file
-Args:
-- hash_str: -> the hash of a peper
-Returns: None
+Abstract: No-op kept for compatibility (dedup now via entry_id in DB)
 """
 def save_hash(hash_str):
-    with open(HASH_FILE, "a") as f:
-        f.write(hash_str + "\n")
+    pass
 
 """
 13-August-2025 - Basti
