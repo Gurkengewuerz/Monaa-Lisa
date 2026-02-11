@@ -160,17 +160,11 @@ def save_paper_to_db(paper: Paper):
             if missing_ids:
                 logger.info(f"Creating {len(missing_ids)} stubs for missing relations...")
                 for mid in missing_ids:
-                    # Create Stub
-                    # Hash is None (Postgres allows multiple NULLs in unique columns)
-                    # Title indicates it's a placeholder
                     stub = DBPaper(
                         entry_id=mid,
-                        added=datetime.now(),
                         title="[STUB] Pending Fetch",
-                        hash=None
                     )
                     session.add(stub)
-                # Flush stubs so they are available for FK checks immediately
                 session.flush()
 
         # 4. Save Relations
