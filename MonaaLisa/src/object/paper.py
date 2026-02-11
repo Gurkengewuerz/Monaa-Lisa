@@ -31,13 +31,11 @@ class Paper:
     abstract: str
     published: datetime
     url: str
-    category: Optional[str] = None
-    hash: Optional[str] = None
+    categories: Optional[str] = None
     references: list[Reference | PaperReference] = field(default_factory=list)
     citations: list[Citation | PaperCitation] = field(default_factory=list)
     tsne: Optional[Dict] = None
     embedding: Optional[Embedding] = None
-    added: Optional[datetime] = None
     _grobid_xml: Optional[str] = None
     _paper_txt: Optional[str] = None
     _paper_logger = None
