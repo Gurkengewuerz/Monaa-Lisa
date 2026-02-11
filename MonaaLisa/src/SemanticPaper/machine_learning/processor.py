@@ -28,11 +28,10 @@ class PaperProcessor:
     - known_hashes: Set -> Will be ThreadSafeSet in the future when multithreading branch is merged
     Returns: True if the paper was processed, False if not.
     """
-    def prepare_paper(self, known_hashes):
+    def prepare_paper(self, known_ids):
         worker_name = threading.current_thread().name
         self.logger.info(f"[{worker_name}] Processing paper: {getattr(self.paper, 'title', 'Unknown Title')}")
-        paper_hash = self.paper.hash_paper_details()
-        if paper_hash not in known_hashes:
+        if self.paper.entry_id not in known_ids:
             self.logger.info(f"Extracting metadata for: {self.paper.title}")
             try:
                 self.paper.extract_metadata()
@@ -184,7 +183,7 @@ class PaperProcessor:
             labels = {}
         
         labels = dict(labels)
-        labels[self.paper.entry_id] = getattr(self.paper, "category", None)
+        labels[self.paper.entry_id] = getattr(self.paper, "categories", None)
 
         coords = self._reducer.transform(self.paper.embedding, combined_embeddings, labels)
         if coords is None:
