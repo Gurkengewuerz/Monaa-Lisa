@@ -1,223 +1,306 @@
+<!--
+  GraphLayout.svelte
+  Navigation state machine for the hierarchical graph views:
+    top → subcategory → papers → paper detail
+-->
 <script lang="ts">
-  import { onMount } from 'svelte';
+  import ClusterGraph from './ClusterGraph.svelte';
   import Graph from './Graph.svelte';
+  import PaperDetailGraph from './PaperDetailGraph.svelte';
   import Header from './Header.svelte';
   import Sidebar from './Sidebar.svelte';
-  import type { ApiPaper, Paper, PapersResponse } from '$lib/types/paper';
+  import type { ApiPaper, Paper, PapersResponse, ClusterNode, ViewState } from '$lib/types/paper';
   import { env as publicEnv } from '$env/dynamic/public';
+  import clusterData from '../utils/arxiv_cluster_data.json';
 
   const API_BASE_URL = publicEnv.PUBLIC_API_BASE_URL || 'http://localhost:3000';
-  const DEFAULT_LIMIT = 5000;
+  const PAPER_LIMIT = 5000;
 
+  // ─── navigation state ─────────────────────────────────────────────
+  let view: ViewState = { level: 'top' };
+
+  // paper data (only loaded at papers/detail level)
   let papers: Paper[] = [];
   let sidebarOpen = false;
   let selectedPaperId: string | null = null;
-  let loading = true;
+  let loading = false;
   let error: string | null = null;
 
-  onMount(() => {
-    void loadPapers();
-  });
+  // colour of the current parent category (passed to subcategory + papers)
+  let currentCategoryColor: string = '#4a9eff';
 
-  // lädt Papers vom Backend
-  async function loadPapers() {
-    loading = true;
+  // ─── top-level cluster data from static JSON ──────────────────────
+  const CATEGORY_COLORS: Record<string, string> = {
+    physics:                '#4361ee',
+    computer_science:       '#f72585',
+    mathematics:            '#4cc9f0',
+    statistics:             '#7209b7',
+    electrical_engineering: '#ff7a18',
+    quantitative_biology:   '#2ec4b6',
+    quantitative_finance:   '#ffd166',
+    economics:              '#e71d36',
+  };
+
+  const topClusters: ClusterNode[] = clusterData.map((cat: any) => ({
+    id: cat.id,
+    name: cat.name,
+    count: cat.total_count,
+  }));
+
+  function getSubclusters(parentId: string): ClusterNode[] {
+    const parent = clusterData.find((c: any) => c.id === parentId);
+    return (parent?.children ?? []).map((sub: any) => ({
+      id: sub.id,
+      name: sub.name,
+      count: sub.value,
+    }));
+  }
+
+  // ─── breadcrumbs ──────────────────────────────────────────────────
+  interface Crumb { label: string; action: () => void }
+
+  $: breadcrumbs = buildCrumbs(view);
+
+  function buildCrumbs(v: ViewState): Crumb[] {
+    const crumbs: Crumb[] = [
+      { label: 'All Categories', action: () => { view = { level: 'top' }; papers = []; error = null; } },
+    ];
+
+    if (v.level === 'sub' || v.level === 'papers' || v.level === 'detail') {
+      const pName = v.parentName;
+      const pId = v.level === 'sub' ? v.parentId : '';
+      crumbs.push({
+        label: pName,
+        action: () => {
+          const pid = clusterData.find((c: any) => c.name === pName)?.id ?? '';
+          view = { level: 'sub', parentName: pName, parentId: pid };
+          papers = []; error = null;
+        },
+      });
+    }
+
+    if (v.level === 'papers' || v.level === 'detail') {
+      const cId = v.categoryId;
+      const cName = v.categoryName;
+      const pName = v.parentName;
+      crumbs.push({
+        label: cName,
+        action: () => {
+          view = { level: 'papers', categoryId: cId, categoryName: cName, parentName: pName };
+          loadPapers(cId);
+        },
+      });
+    }
+
+    if (v.level === 'detail') {
+      crumbs.push({ label: truncate(v.paper.title, 35), action: () => {} });
+    }
+
+    return crumbs;
+  }
+
+  function truncate(s: string, n: number): string {
+    return s.length > n ? s.slice(0, n) + '…' : s;
+  }
+
+  // ─── navigation handlers ──────────────────────────────────────────
+  function handleTopClusterClick(e: CustomEvent<{ id: string; name: string; color: string }>) {
+    currentCategoryColor = e.detail.color;
+    view = { level: 'sub', parentName: e.detail.name, parentId: e.detail.id };
+    papers = [];
     error = null;
-    try {
-      const response = await fetch(
-        `${API_BASE_URL}/papers?take=${DEFAULT_LIMIT}&skip=0`,
-      );
-      if (!response.ok) {
-        throw new Error(`Backend request failed (${response.status})`);
-      }
-
-      const payload = (await response.json()) as Partial<PapersResponse> | ApiPaper[];
-      const rawItems = Array.isArray(payload) ? payload : payload?.items ?? [];
-
-      papers = rawItems
-        .map((item, index, array) => normalizePaper(item as ApiPaper, index, array.length))
-        .filter((paper): paper is Paper => Boolean(paper));
-
-      selectedPaperId = null;
-      sidebarOpen = false;
-
-      if (!papers.length) {
-        error = 'Es wurden keine Papers gefunden.';
-      }
-    } catch (err) {
-      error =
-        err instanceof Error
-          ? err.message
-          : 'Unbekannter Fehler beim Laden der Papers.';
-      papers = [];
-    } finally {
-      loading = false;
-    }
   }
 
-  // normalisiert rohes Paper-Objekt vom Backend in internes Paper-Format
-  function normalizePaper(raw: ApiPaper, index: number, total: number): Paper | null {
-    if (!raw || !raw.entry_id || !raw.title) {
-      return null;
-    }
+  function handleSubClusterClick(e: CustomEvent<{ id: string; name: string; color: string }>) {
+    if (view.level !== 'sub') return;
+    currentCategoryColor = e.detail.color;
+    view = {
+      level: 'papers',
+      categoryId: e.detail.id,
+      categoryName: e.detail.name,
+      parentName: view.parentName,
+    };
+    loadPapers(e.detail.id);
+  }
 
-    const summary = raw.summary ?? 'Keine Zusammenfassung vorhanden.';
-    const authors = formatAuthors(raw.authors);
-    const citations = deriveStringArray(raw.citations);
-    const category = (raw.category ?? (raw as { cluster?: string | null }).cluster) ?? null;
-    const { tsne1, tsne2 } = deriveTsne(raw.tsne, index, total);
-
-    return {
-      id: Number(raw.id ?? index),
-      entry_id: raw.entry_id,
-      title: raw.title,
-      authors,
-      summary,
-      published: raw.published,
-      category,
-      url: raw.url ?? null,
-      hash: raw.hash,
-      citations,
-      tsne1,
-      tsne2,
-      added: raw.added ?? new Date().toISOString(),
-      cluster: category ?? 'U',
+  function handlePaperSelected(e: CustomEvent<Paper>) {
+    if (view.level !== 'papers') return;
+    view = {
+      level: 'detail',
+      paper: e.detail,
+      categoryId: view.categoryId,
+      categoryName: view.categoryName,
+      parentName: view.parentName,
     };
   }
 
-  // formatiert Autorenliste als String
-  function formatAuthors(authors: ApiPaper['authors']): string {
-    if (!authors) return '';
-    if (Array.isArray(authors)) {
-      return authors.join(', ');
-    }
-    return authors;
-  }
-
-  // wandelt verschiedene Formate von Zitationsangaben in ein String-Array um
-  function deriveStringArray(value: unknown): string[] {
-    if (!value) return [];
-    if (Array.isArray(value)) {
-      return value
-        .map((item) => {
-          if (typeof item === 'string') return item;
-          if (typeof item === 'number') return item.toString();
-          if (item && typeof item === 'object' && 'entry_id' in item) {
-            const candidate = (item as { entry_id?: string }).entry_id;
-            return candidate ?? '';
-          }
-          return '';
-        })
-        .filter(Boolean);
-    }
-    if (typeof value === 'string') {
-      return value
-        .split(',')
-        .map((part) => part.trim())
-        .filter(Boolean);
-    }
-    if (typeof value === 'object') {
-      return Object.values(value as Record<string, unknown>)
-        .map((val) => {
-          if (typeof val === 'string') return val;
-          if (typeof val === 'number') return val.toString();
-          return '';
-        })
-        .filter(Boolean);
-    }
-    return [];
-  }
-
-  // holt tSNE Koordinaten aus verschiedenen möglichen Formaten
-  function deriveTsne(value: unknown, index: number, total: number) {
-    const fallback = circlePosition(index, total);
-    if (Array.isArray(value) && value.length >= 2) {
-      const [x, y] = value;
-      return {
-        tsne1: typeof x === 'number' ? x : Number(x) || fallback.tsne1,
-        tsne2: typeof y === 'number' ? y : Number(y) || fallback.tsne2,
-      };
-    }
-    if (value && typeof value === 'object') {
-      const obj = value as Record<string, unknown>;
-      const x = obj.x ?? obj.tsne1 ?? obj[0];
-      const y = obj.y ?? obj.tsne2 ?? obj[1];
-      return {
-        tsne1: typeof x === 'number' ? x : Number(x) || fallback.tsne1,
-        tsne2: typeof y === 'number' ? y : Number(y) || fallback.tsne2,
-      };
-    }
-    return fallback;
-  }
-
-  // fallback methode falls keine tSNE Koordinaten vorhanden sind - verteilt Punkte im Kreis
-  function circlePosition(index: number, total: number) {
-    const angle = (index / Math.max(total, 1)) * Math.PI * 2;
-    const radius = 10;
-    return {
-      tsne1: Math.cos(angle) * radius,
-      tsne2: Math.sin(angle) * radius,
+  function handleDetailBack() {
+    if (view.level !== 'detail') return;
+    view = {
+      level: 'papers',
+      categoryId: view.categoryId,
+      categoryName: view.categoryName,
+      parentName: view.parentName,
     };
+  }
+
+  function handleSidebarSelect(e: CustomEvent<Paper>) {
+    // In papers view: navigate to detail
+    if (view.level === 'papers') {
+      view = {
+        level: 'detail',
+        paper: e.detail,
+        categoryId: view.categoryId,
+        categoryName: view.categoryName,
+        parentName: view.parentName,
+      };
+    }
   }
 
   function handleToggleSidebar() {
     sidebarOpen = !sidebarOpen;
   }
 
-  //handling of paper selection from sidebar - update graph
-  function handleSelectPaper(event: CustomEvent<Paper>) {
-    const paper = event.detail;
-    selectedPaperId = paper.entry_id;
-    sidebarOpen = true;
-    console.log('selected paper from sidebar:', paper);
-
-  }
-
-  //handling for node selection from graph - update sidebar
-  function handleNodeSelected(event: CustomEvent<string>) {
-    selectedPaperId = event.detail;
-    sidebarOpen = true;
-    console.log('selected paper from graph:', event.detail);
-  }
-
-  //handling node deselection from graph - clear sidebar selection
   function handleNodeDeselected() {
     selectedPaperId = null;
+  }
+
+  // ─── data loading ─────────────────────────────────────────────────
+  async function loadPapers(categoryId: string) {
+    loading = true;
+    error = null;
+    papers = [];
+    try {
+      const url = `${API_BASE_URL}/papers?categories=${encodeURIComponent(categoryId)}&take=${PAPER_LIMIT}&skip=0&sort=citations`;
+      const response = await fetch(url);
+      if (!response.ok) throw new Error(`Backend ${response.status}`);
+
+      const payload = (await response.json()) as Partial<PapersResponse> | ApiPaper[];
+      const rawItems = Array.isArray(payload) ? payload : payload?.items ?? [];
+
+      papers = rawItems
+        .map((item, i, a) => normalizePaper(item as ApiPaper, i, a.length))
+        .filter((p): p is Paper => Boolean(p));
+
+      if (!papers.length) error = 'Keine Papers für diese Kategorie gefunden.';
+    } catch (err) {
+      error = err instanceof Error ? err.message : 'Fehler beim Laden.';
+      papers = [];
+    } finally {
+      loading = false;
+    }
+  }
+
+  // ─── paper normalisation (carried over) ───────────────────────────
+  function normalizePaper(raw: ApiPaper, index: number, total: number): Paper | null {
+    if (!raw?.entry_id || !raw?.title) return null;
+    return {
+      id: Number(raw.id ?? index),
+      entry_id: raw.entry_id,
+      title: raw.title,
+      authors: formatAuthors(raw.authors),
+      abstract: raw.abstract ?? '',
+      published: raw.published ?? null,
+      categories: raw.categories ?? null,
+      url: raw.url ?? null,
+      citations: deriveStringArray(raw.citations),
+      non_arxiv_citation_count: raw.non_arxiv_citation_count ?? 0,
+      non_arxiv_reference_count: raw.non_arxiv_reference_count ?? 0,
+      tsne1: 0,
+      tsne2: 0,
+      cluster: raw.categories ?? 'U',
+    };
+  }
+
+  function formatAuthors(a: ApiPaper['authors']): string {
+    if (!a) return '';
+    return Array.isArray(a) ? a.join(', ') : a;
+  }
+
+  function deriveStringArray(value: unknown): string[] {
+    if (!value) return [];
+    if (Array.isArray(value)) {
+      return value
+        .map(item => {
+          if (typeof item === 'string') return item;
+          if (typeof item === 'number') return item.toString();
+          if (item && typeof item === 'object' && 'entry_id' in item) return (item as any).entry_id ?? '';
+          return '';
+        })
+        .filter(Boolean);
+    }
+    if (typeof value === 'string') return value.split(',').map(s => s.trim()).filter(Boolean);
+    return [];
   }
 </script>
 
 <!-- main app container -->
 <div class="app-container">
-<!-- search component at top -->
-<Header />
+  <Header />
+
+  <!-- breadcrumb bar -->
+  <nav class="breadcrumbs">
+    {#each breadcrumbs as crumb, i}
+      {#if i > 0}<span class="sep">›</span>{/if}
+      {#if i < breadcrumbs.length - 1}
+        <button class="crumb" on:click={crumb.action}>{crumb.label}</button>
+      {:else}
+        <span class="crumb current">{crumb.label}</span>
+      {/if}
+    {/each}
+  </nav>
 
   <div class="main-content">
-  <!-- graph visualization component with selection binding -->
-
-    {#if loading}
-      <div class="status-card">
-        <p>Lade Papers...</p>
-      </div>
-    {:else if error}
-      <div class="status-card error">
-        <p>{error}</p>
-        <button on:click={loadPapers}>Erneut versuchen</button>
-      </div>
-    {:else}
-      <Graph
-        {papers}
-        {selectedPaperId}
-        on:nodeSelected={handleNodeSelected}
-        on:nodeDeselected={handleNodeDeselected}
+    <!-- ── TOP-LEVEL CLUSTERS ── -->
+    {#if view.level === 'top'}
+      <ClusterGraph
+        clusters={topClusters}
+        parentColor={null}
+        on:clusterClick={handleTopClusterClick}
       />
 
-     <!-- sidebar component for the paper list -->
-      <Sidebar
-        papers={papers}
-        isOpen={sidebarOpen}
-        {selectedPaperId}
-        on:toggle={handleToggleSidebar}
-        on:selectPaper={handleSelectPaper}
+    <!-- ── SUBCATEGORY CLUSTERS ── -->
+    {:else if view.level === 'sub'}
+      <ClusterGraph
+        clusters={getSubclusters(view.parentId)}
+        parentColor={CATEGORY_COLORS[view.parentId] ?? '#4a9eff'}
+        on:clusterClick={handleSubClusterClick}
+      />
+
+    <!-- ── PAPERS VIEW ── -->
+    {:else if view.level === 'papers'}
+      {#if loading}
+        <div class="status-card">
+          <p>Lade Papers für {view.categoryName}…</p>
+        </div>
+      {:else if error}
+        <div class="status-card error">
+          <p>{error}</p>
+          <button on:click={() => loadPapers(view.categoryId)}>Erneut versuchen</button>
+        </div>
+      {:else}
+        <Graph
+          {papers}
+          {selectedPaperId}
+          categoryColor={currentCategoryColor}
+          on:paperSelected={handlePaperSelected}
+          on:nodeDeselected={handleNodeDeselected}
+        />
+        <Sidebar
+          {papers}
+          isOpen={sidebarOpen}
+          {selectedPaperId}
+          on:toggle={handleToggleSidebar}
+          on:selectPaper={handleSidebarSelect}
+        />
+      {/if}
+
+    <!-- ── PAPER DETAIL VIEW ── -->
+    {:else if view.level === 'detail'}
+      <PaperDetailGraph
+        paper={view.paper}
+        apiBaseUrl={API_BASE_URL}
+        on:back={handleDetailBack}
       />
     {/if}
   </div>
@@ -234,13 +317,47 @@
     overflow: hidden;
   }
 
+  .breadcrumbs {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    padding: 6px 16px;
+    background: #252530;
+    border-bottom: 1px solid #333;
+    font-size: 13px;
+    flex-shrink: 0;
+  }
+
+  .sep {
+    color: #555;
+    margin: 0 2px;
+  }
+
+  .crumb {
+    background: none;
+    border: none;
+    color: #7aa8e8;
+    cursor: pointer;
+    padding: 2px 4px;
+    border-radius: 4px;
+    font-size: 13px;
+  }
+  .crumb:hover { background: rgba(74,158,255,0.15); }
+  .crumb.current {
+    color: #e0e6ed;
+    cursor: default;
+  }
+
   .main-content {
     flex: 1;
     position: relative;
     display: flex;
+    overflow: hidden;
   }
 
-  :global(.graph-container) {
+  :global(.graph-wrapper),
+  :global(.cluster-canvas),
+  :global(.detail-wrapper) {
     width: 100% !important;
     height: 100% !important;
   }
