@@ -97,6 +97,24 @@ services:
       interval: 30s
       timeout: 10s
       retries: 5
+
+  import:
+    build:
+      context: .
+      target: app
+    image: monaa-lisa-app:latest
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: postgresql+psycopg2://${POSTGRES_USER}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB}
+    volumes:
+      - ./MonaaLisa_dataset_full.jsonl:/app/MonaaLisa_dataset_full.jsonl:ro
+      - ./import_dataset.py:/app/import_dataset.py:ro
+    working_dir: /app
+    profiles:
+      - import
+    command: ["python", "import_dataset.py", "--file", "MonaaLisa_dataset_full.jsonl", "--batch-size", "5000"]
     
 volumes:
   pgdata:
