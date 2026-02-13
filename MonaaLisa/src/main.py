@@ -35,7 +35,6 @@ import sys
 logger = Logger("Main")
 
 load_dotenv()
-HASH_FILE = 'parsed_hashes.txt'
 
 semanticscholar_client = SemanticScholarAPI(os.environ['SEMANTIC_SCHOLAR_API_KEY'])
 arxiv_client = ArxivAPI()
@@ -60,21 +59,27 @@ Args:
 - None
 Returns: Set filled with all parsed/known papers (hashed)
 """
-def load_hashes():
-    if not os.path.exists(HASH_FILE):
+def load_known_entry_ids():
+    """Load known entry_ids from the database at startup."""
+    session = None
+    try:
+        from Database.db import SessionLocal
+        from Database.db_models import DBPaper
+        session = SessionLocal()
+        rows = session.query(DBPaper.entry_id).all()
+        return {r.entry_id for r in rows if r.entry_id}
+    except Exception as e:
+        logger.warning(f"Could not preload entry_ids: {e}")
         return set()
-    with open(HASH_FILE, "r") as f:
-        return set(line.strip() for line in f)
+    finally:
+        if session:
+            session.close()
 """
 25-May-2025 - Basti
-Abstract: Saves one hash string to the local parsed_hashes file
-Args:
-- hash_str: -> the hash of a peper
-Returns: None
+Abstract: No-op kept for compatibility (dedup now via entry_id in DB)
 """
 def save_hash(hash_str):
-    with open(HASH_FILE, "a") as f:
-        f.write(hash_str + "\n")
+    pass
 
 """
 13-August-2025 - Basti
@@ -83,7 +88,7 @@ Args:
 - worker_id -> ID of one of x workers that have been assigned
 Returns: None
 """
-def paper_worker(worker_id, known_hashes):
+def paper_worker(worker_id, known_ids):
     logger.info(f"Worker {worker_id} started")
     while True:
         paper = scheduler.paper_queue.get()
@@ -91,12 +96,12 @@ def paper_worker(worker_id, known_hashes):
             if paper is None:
                 return
             active_categories = get_semanticpaper_categories()
-            if getattr(paper, 'category', None) and paper.category not in active_categories:
+            if getattr(paper, 'categories', None) and paper.categories not in active_categories:
                 logger.warning(
-                    f"Worker {worker_id}: Category '{paper.category}' removed; skipping paper '{paper.title}'")
+                    f"Worker {worker_id}: Category '{paper.categories}' removed; skipping paper '{paper.title}'")
                 continue
             processor = PaperProcessor(paper, model, reducer)
-            if processor.prepare_paper(known_hashes):
+            if processor.prepare_paper(known_ids):
                 embedding = processor.create_structured_embedding()
                 if embedding is not None:
                     processor.paper.embedding = embedding
@@ -117,7 +122,7 @@ def paper_worker(worker_id, known_hashes):
                     to ensure that supervised UMAP has the correct label information
                     """
                     projection_labels = current_labels.copy()
-                    projection_labels[processor.paper.entry_id] = processor.paper.category
+                    projection_labels[processor.paper.entry_id] = processor.paper.categories
 
                     projection = processor.compute_projection_coordinates(
                         projection_embeddings,
@@ -142,10 +147,9 @@ def paper_worker(worker_id, known_hashes):
                         with embedding_cache_lock:
                             embedding_cache[processor.paper.entry_id] = processor.paper.embedding
                         with embedding_labels_lock:
-                            embedding_labels[processor.paper.entry_id] = processor.paper.category
+                            embedding_labels[processor.paper.entry_id] = processor.paper.categories
                         reducer.notify_dataset_change(embedding_cache, embedding_labels)
-                        save_hash(processor.paper.hash)
-                        known_hashes.add(processor.paper.hash)
+                        known_ids.add(processor.paper.entry_id)
                         backfill_pending_projections()
         except Exception:
             logger.error(f"Worker {worker_id}: Unhandled exception while processing paper")
@@ -164,8 +168,8 @@ def main(num_workers: int = 5):
     logger.set_level(log_level)
     logger.info(f"Initializing scheduler system (log level={log_level})...")
 
-    known_hashes = load_hashes()
-    logger.info(f"Loaded {len(known_hashes)} known hashes")
+    known_ids = load_known_entry_ids()
+    logger.info(f"Loaded {len(known_ids)} known entry_ids")
     try:
         db_base.metadata.create_all(bind=engine)
     except Exception as e:
@@ -191,7 +195,7 @@ def main(num_workers: int = 5):
     logger.info(f"Starting {num_workers} worker threads...")
     threads = []
     for i in range(num_workers):
-        t = threading.Thread(target=paper_worker, args=(i+1, known_hashes), name=f"Worker-{i+1}")
+        t = threading.Thread(target=paper_worker, args=(i+1, known_ids), name=f"Worker-{i+1}")
         t.start()
         threads.append(t)
 

@@ -64,7 +64,7 @@
     return dataSource.filter((p) => {
       const inTitle = normalize(p.title).includes(q);
       const inAuthors = normalize(p.authors).includes(q);
-      const inSummary = normalize(p.summary).includes(q);
+      const inSummary = normalize(p.abstract).includes(q);
       return inTitle || inAuthors || inSummary;
     });
   })();
@@ -192,16 +192,16 @@
           data-paper-id={paper.entry_id}
           on:click|stopPropagation={() => selectPaper(paper)}
         >
-          <div class="paper-cluster" style="background-color: {getClusterColor(paper.category, paper.cluster)}">
+          <div class="paper-cluster" style="background-color: {getClusterColor(paper.categories, paper.cluster)}">
             {paper.cluster}
           </div>
           <div class="paper-info">
             <h4>{paper.title}</h4>
             <p class="paper-authors">{paper.authors}</p>
             <p class="paper-summary">
-              {paper.summary.length > 100
-                ? `${paper.summary.substring(0, 100)}...`
-                : paper.summary}
+              {paper.abstract.length > 100
+                ? `${paper.abstract.substring(0, 100)}...`
+                : paper.abstract}
             </p>
             <div class="paper-meta">
               <button

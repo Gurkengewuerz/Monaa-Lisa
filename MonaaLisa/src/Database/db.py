@@ -83,11 +83,11 @@ Returns: Dict[str, str | None]
 def get_embedding_labels(limit: int | None = None) -> dict[str, str | None]:
     session = SessionLocal()
     try:
-        q = session.query(DBPaper.entry_id, DBPaper.category).filter(DBPaper.category.isnot(None))
+        q = session.query(DBPaper.entry_id, DBPaper.categories).filter(DBPaper.categories.isnot(None))
         if limit is not None:
             q = q.limit(limit)
         rows = q.all()
-        return {entry_id: category for entry_id, category in rows if entry_id}
+        return {entry_id: categories for entry_id, categories in rows if entry_id}
     except Exception as e:
         logger.error(f"Failed to load embedding labels: {e}")
         return {}
@@ -107,34 +107,28 @@ Annotation: Removed redundant parameters hash and date, these should come from t
 def save_paper_to_db(paper: Paper):
     session = SessionLocal()
 
-    # 1. Check if paper is already fully processed (by hash)
+    # 1. Check if paper already exists (by entry_id)
     if paper_exists(session, paper):
-        logger.info(f"Paper already exists in DB: {paper.title} (hash: {paper.hash})")
+        logger.info(f"Paper already exists in DB: {paper.title}")
         session.close()
         return True
 
     try:
         # 2. Check if paper exists as a Stub (by entry_id)
-        # We use the entry_id to check because stubs have the ID but no Hash
         existing_paper = session.query(DBPaper).filter_by(entry_id=paper.entry_id).first()
 
         if existing_paper:
             logger.info(f"Updating existing stub/paper: {paper.title}")
-            # Update fields of the existing stub
             existing_paper.title = paper.title
             existing_paper.authors = ", ".join(paper.authors)
-            existing_paper.summary = paper.abstract
+            existing_paper.abstract = paper.abstract
             existing_paper.published = paper.published
-            existing_paper.category = paper.category
+            existing_paper.categories = paper.categories
             existing_paper.tsne = json.dumps(paper.tsne) if paper.tsne else None
             existing_paper.url = paper.url
-            existing_paper.hash = paper.hash
-            # existing_paper.added remains as is (creation time of stub)
         else:
             # Insert new paper
             db_paper = paper.to_db_model()
-            logger.info("hash: " + paper.hash)
-            db_paper.hash = paper.hash
             session.add(db_paper)
 
         # Flush to ensure the paper (or update) is applied before we add relations
@@ -166,17 +160,11 @@ def save_paper_to_db(paper: Paper):
             if missing_ids:
                 logger.info(f"Creating {len(missing_ids)} stubs for missing relations...")
                 for mid in missing_ids:
-                    # Create Stub
-                    # Hash is None (Postgres allows multiple NULLs in unique columns)
-                    # Title indicates it's a placeholder
                     stub = DBPaper(
                         entry_id=mid,
-                        added=datetime.now(),
                         title="[STUB] Pending Fetch",
-                        hash=None
                     )
                     session.add(stub)
-                # Flush stubs so they are available for FK checks immediately
                 session.flush()
 
         # 4. Save Relations
@@ -300,7 +288,7 @@ Additionally:
 Checking by hash could be a way of checking for updates to a paper, but that is not implemented yet.
 """
 def paper_exists(session, paper: Paper):
-    return session.query(DBPaper).filter_by(hash=paper.hash).first() is not None
+    return session.query(DBPaper).filter_by(entry_id=paper.entry_id).first() is not None
 
 
 """ 28.09. Nico

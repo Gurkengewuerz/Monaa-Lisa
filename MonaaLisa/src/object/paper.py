@@ -31,13 +31,11 @@ class Paper:
     abstract: str
     published: datetime
     url: str
-    category: Optional[str] = None
-    hash: Optional[str] = None
+    categories: Optional[str] = None
     references: list[Reference | PaperReference] = field(default_factory=list)
     citations: list[Citation | PaperCitation] = field(default_factory=list)
     tsne: Optional[Dict] = None
     embedding: Optional[Embedding] = None
-    added: Optional[datetime] = None
     _grobid_xml: Optional[str] = None
     _paper_txt: Optional[str] = None
     _paper_logger = None
@@ -89,13 +87,11 @@ class Paper:
             entry_id=self.entry_id,
             title=self.title,
             authors=", ".join(self.authors),
-            summary=self.abstract,
+            abstract=self.abstract,
             published=self.published,
-            category=self.category,
+            categories=self.categories,
             tsne=self.tsne if self.tsne else None,
             url=self.url,
-            hash=self.hash,
-            added=self.added or datetime.now()
         )
 
 

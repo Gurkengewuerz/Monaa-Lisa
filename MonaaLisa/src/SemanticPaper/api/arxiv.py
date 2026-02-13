@@ -93,7 +93,7 @@ class ArxivAPI:
             if result:
                 paper = Paper.from_arxiv(result)
                 # TODO: Need to rework category assignment, since arxiv api returns multiple categories
-                paper.category = category
+                paper.categories = category
                 papers.append(paper)
             else:
                 papers.append(None)
@@ -114,7 +114,7 @@ class ArxivAPI:
             if result:
                 paper = Paper.from_arxiv(result)
                 # TODO: Need to rework category assignment, since arxiv api returns multiple categories
-                paper.category = result.primary_category
+                paper.categories = result.primary_category
                 papers.append(paper)
             else:
                 papers.append(None)
@@ -152,7 +152,7 @@ class ArxivAPI:
                     break
                 if result:
                     paper = Paper.from_arxiv(result)
-                    paper.category = category
+                    paper.categories = category
                     papers.append(paper)
 
             has_more = len(papers) == batch_size

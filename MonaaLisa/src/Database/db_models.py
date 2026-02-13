@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Integer, String, DateTime, Float, JSON, ForeignKey
+from sqlalchemy import Column, Integer, String, DateTime, Float, JSON, ForeignKey, Text
 from sqlalchemy.orm import declarative_base
 
 db_base = declarative_base()
@@ -25,16 +25,22 @@ Parameters:
 class DBPaper(db_base):
     __tablename__ = "paper"
     id = Column(Integer, primary_key=True, index=True)
-    entry_id = Column(String, unique=True, index=True)
-    title = Column(String)
-    authors = Column(String)
-    summary = Column(String)
-    published = Column(DateTime)
-    category = Column(String)
-    url = Column(String)
-    hash = Column(String, unique=True, index=True)
+    entry_id = Column(String, unique=True, index=True, nullable=False)
+    title = Column(String, nullable=False)
+    authors = Column(String, nullable=True)
+    abstract = Column(Text, nullable=True)
+    categories = Column(String, nullable=True)
+    published = Column(DateTime, nullable=True)
+    updated = Column(DateTime, nullable=True)
+    doi = Column(String, nullable=True)
+    journal_ref = Column(String, nullable=True)
+    license = Column(String, nullable=True)
+    url = Column(String, nullable=True)
+    s2_id = Column(String, nullable=True, unique=True, index=True)
+    non_arxiv_citation_count = Column(Integer, nullable=True)
+    non_arxiv_reference_count = Column(Integer, nullable=True)
+    # App-only fields (not in dataset, used by ML pipeline)
     tsne = Column(JSON, nullable=True)
-    added = Column(DateTime, nullable=False)
 
 """
 17-July-2025 - Lenio
@@ -150,7 +156,7 @@ Parameters:
 class DBPaperCitation(db_base):
     __tablename__ = "paper_citation"
     belonging_paper_entry_id = Column(String, ForeignKey("paper.entry_id"), primary_key=True)
-    cited_paper_entry_id = Column(String, ForeignKey("paper.entry_id"), primary_key=True)
+    cited_paper_entry_id = Column(String, primary_key=True)  # No FK – cited paper may not exist in DB
 
 """
 24-December-2025 - Lenio
@@ -162,5 +168,5 @@ Parameters:
 class DBPaperReference(db_base):
     __tablename__ = "paper_reference"
     belonging_paper_entry_id = Column(String, ForeignKey("paper.entry_id"), primary_key=True)
-    referenced_paper_entry_id = Column(String, ForeignKey("paper.entry_id"), primary_key=True)
+    referenced_paper_entry_id = Column(String, primary_key=True)  # No FK – referenced paper may not exist in DB
 

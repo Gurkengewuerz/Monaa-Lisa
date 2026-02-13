@@ -9,7 +9,7 @@ export class QueryPaperDto {
 
   @IsOptional()
   @IsString()
-  category?: string;
+  categories?: string;
 
   // Published-Zeitfenster (im Service in Date umwandeln)
   @IsOptional()
@@ -19,6 +19,11 @@ export class QueryPaperDto {
   @IsOptional()
   @IsISO8601()
   dateTo?: string;
+
+  // Sort order: 'published' (default) or 'citations' (most cited first)
+  @IsOptional()
+  @IsString()
+  sort?: string;
 
   // Pagination
   @IsOptional()

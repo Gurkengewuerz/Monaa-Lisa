@@ -49,6 +49,15 @@ export class PapersController {
     return this.papers.upsertByEntryId(dto);
   }
 
+  /**
+   * POST /papers/batch
+   * Batch-Fetch: holt mehrere Papers anhand einer Liste von `entry_id`s.
+   */
+  @Post('batch')
+  findBatch(@Body() body: { entryIds: string[] }) {
+    return this.papers.findByEntryIds(body.entryIds ?? []);
+  }
+
   // Nick - November 2025
   // Die Möglichkeiten mehrere Papers zu finden und anschließend im FE zu filtern soll gegeben sein
   /**

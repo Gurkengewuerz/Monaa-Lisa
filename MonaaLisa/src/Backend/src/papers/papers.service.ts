@@ -31,12 +31,17 @@ export class PapersService {
         entry_id: dto.entry_id,
         title: dto.title,
         authors: authorsToString(dto.authors) ?? null,
-        summary: dto.summary ?? null,
+        abstract: dto.abstract ?? null,
+        categories: dto.categories ?? null,
         published: dto.published ? new Date(dto.published) : null,
-        category: dto.category ?? null,
+        updated: dto.updated ? new Date(dto.updated) : null,
+        doi: dto.doi ?? null,
+        journal_ref: dto.journal_ref ?? null,
+        license: dto.license ?? null,
         url: dto.url ?? null,
-        hash: dto.hash ?? null,
-        added: new Date(),
+        s2_id: dto.s2_id ?? null,
+        non_arxiv_citation_count: dto.non_arxiv_citation_count ?? null,
+        non_arxiv_reference_count: dto.non_arxiv_reference_count ?? null,
       },
     });
   }
@@ -52,22 +57,33 @@ export class PapersService {
       update: {
         title: dto.title,
         authors: authorsToString(dto.authors) ?? null,
-        summary: dto.summary ?? null,
+        abstract: dto.abstract ?? null,
+        categories: dto.categories ?? null,
         published: dto.published ? new Date(dto.published) : null,
-        category: dto.category ?? null,
+        updated: dto.updated ? new Date(dto.updated) : null,
+        doi: dto.doi ?? null,
+        journal_ref: dto.journal_ref ?? null,
+        license: dto.license ?? null,
         url: dto.url ?? null,
-        hash: dto.hash ?? null,
+        s2_id: dto.s2_id ?? null,
+        non_arxiv_citation_count: dto.non_arxiv_citation_count ?? null,
+        non_arxiv_reference_count: dto.non_arxiv_reference_count ?? null,
       },
       create: {
         entry_id: dto.entry_id,
         title: dto.title,
         authors: authorsToString(dto.authors) ?? null,
-        summary: dto.summary ?? null,
+        abstract: dto.abstract ?? null,
+        categories: dto.categories ?? null,
         published: dto.published ? new Date(dto.published) : null,
-        category: dto.category ?? null,
+        updated: dto.updated ? new Date(dto.updated) : null,
+        doi: dto.doi ?? null,
+        journal_ref: dto.journal_ref ?? null,
+        license: dto.license ?? null,
         url: dto.url ?? null,
-        hash: dto.hash ?? null,
-        added: new Date(),
+        s2_id: dto.s2_id ?? null,
+        non_arxiv_citation_count: dto.non_arxiv_citation_count ?? null,
+        non_arxiv_reference_count: dto.non_arxiv_reference_count ?? null,
       },
     });
   }
@@ -82,6 +98,12 @@ export class PapersService {
 async findMany(q: QueryPaperDto) {
   const skip = toNumber(q.skip, 0);
   const take = toNumber(q.take, 20);
+
+  // ── sort=citations → raw SQL path (order by citation count DESC) ──
+  if (q.sort === 'citations' && q.categories && !q.search && !q.dateFrom && !q.dateTo) {
+    return this.findManyByCitationCount(q.categories, skip, take);
+  }
+
   const where: Prisma.PaperWhereInput = {};
 
   // Stub-Titel grundsätzlich ausschließen
@@ -94,11 +116,11 @@ async findMany(q: QueryPaperDto) {
     where.OR = [
       { title: { contains: searchTerm, mode: 'insensitive' } },
       { authors: { contains: searchTerm, mode: 'insensitive' } },
-      { summary: { contains: searchTerm, mode: 'insensitive' } },
+      { abstract: { contains: searchTerm, mode: 'insensitive' } },
     ];
   }
 
-  if (q.category) where.category = { equals: q.category };
+  if (q.categories) where.categories = { contains: q.categories };
 
   if (q.dateFrom || q.dateTo) {
     const publishedFilter: Prisma.DateTimeNullableFilter = {};
@@ -107,25 +129,70 @@ async findMany(q: QueryPaperDto) {
     where.published = publishedFilter;
   }
 
-  const [items, total] = await this.prisma.$transaction([
+  const [items, total] = await Promise.all([
     this.prisma.paper.findMany({
       where,
-      orderBy: [{ published: 'desc' }, { added: 'desc' }],
+      orderBy: [{ published: 'desc' }],
       skip,
       take,
     }),
     this.prisma.paper.count({ where }),
   ]);
 
-  return { items, total, skip, take };
+  const enrichedItems = await this.enrichWithCitations(items);
+  return { items: enrichedItems, total, skip, take };
 }
+
+  /**
+   * Optimised path: fetches papers for a category ordered by citation count.
+   * Uses raw SQL because Prisma cannot ORDER BY a count from a joined table.
+   */
+  private async findManyByCitationCount(category: string, skip: number, take: number) {
+    const papers: any[] = await this.prisma.$queryRaw`
+      SELECT p.*,
+             COALESCE(cc.cnt, 0) AS cit_count
+        FROM paper p
+        LEFT JOIN (
+          SELECT belonging_paper_entry_id, COUNT(*) AS cnt
+            FROM paper_citation
+           GROUP BY belonging_paper_entry_id
+        ) cc ON cc.belonging_paper_entry_id = p.entry_id
+       WHERE p.categories LIKE ${'%' + category + '%'}
+         AND LOWER(p.title) != '[stub] pending fetch'
+       ORDER BY cit_count DESC
+       OFFSET ${skip}
+        LIMIT ${take}
+    `;
+
+    const total: [{ count: bigint }] = await this.prisma.$queryRaw`
+      SELECT COUNT(*) as count FROM paper
+       WHERE categories LIKE ${'%' + category + '%'}
+         AND LOWER(title) != '[stub] pending fetch'
+    `;
+
+    // Raw query returns BigInt for count columns – convert to number
+    const items = papers.map(({ cit_count, ...rest }) => ({
+      ...rest,
+      id: Number(rest.id),
+      non_arxiv_citation_count: rest.non_arxiv_citation_count != null ? Number(rest.non_arxiv_citation_count) : null,
+      non_arxiv_reference_count: rest.non_arxiv_reference_count != null ? Number(rest.non_arxiv_reference_count) : null,
+    }));
+
+    const enrichedItems = await this.enrichWithCitations(items as any);
+    return { items: enrichedItems, total: Number(total[0].count), skip, take };
+  }
 
   /**
    * Holt ein Paper per `entry_id`.
    * Wirft, wenn es die ID nicht gibt → bewusst, damit der Caller entscheiden kann.
    */
   async findByEntryId(entry_id: string) {
-    return this.prisma.paper.findUniqueOrThrow({ where: { entry_id } });
+    const paper = await this.prisma.paper.findUniqueOrThrow({ where: { entry_id } });
+    const citations = await this.prisma.paperCitation.findMany({
+      where: { belonging_paper_entry_id: entry_id },
+      select: { cited_paper_entry_id: true },
+    });
+    return { ...paper, citations: citations.map(c => c.cited_paper_entry_id) };
   }
 
   /**
@@ -140,13 +207,57 @@ async findMany(q: QueryPaperDto) {
         title: dto.title,
         authors:
           dto.authors === undefined ? undefined : authorsToString(dto.authors),
-        summary: dto.summary,
+        abstract: dto.abstract,
+        categories: dto.categories,
         published: dto.published ? new Date(dto.published) : undefined,
-        category: dto.category,
+        updated: dto.updated ? new Date(dto.updated) : undefined,
+        doi: dto.doi,
+        journal_ref: dto.journal_ref,
+        license: dto.license,
         url: dto.url,
-        hash: dto.hash,
+        s2_id: dto.s2_id,
+        non_arxiv_citation_count: dto.non_arxiv_citation_count,
+        non_arxiv_reference_count: dto.non_arxiv_reference_count,
       },
     });
+  }
+
+  /**
+   * Batch-Fetch: holt mehrere Papers anhand einer Liste von `entry_id`s.
+   * Maximal 5000 Ergebnisse.
+   */
+  async findByEntryIds(entryIds: string[], take = 5000) {
+    const papers = await this.prisma.paper.findMany({
+      where: { entry_id: { in: entryIds } },
+      take,
+    });
+    return this.enrichWithCitations(papers);
+  }
+
+  /**
+   * Holt aus der paper_citation-Tabelle die cited_paper_entry_ids für
+   * jedes übergebene Paper und hängt sie als `citations: string[]` an.
+   */
+  private async enrichWithCitations<T extends { entry_id: string }>(papers: T[]): Promise<(T & { citations: string[] })[]> {
+    if (!papers.length) return [];
+
+    const entryIds = papers.map(p => p.entry_id);
+    const rows = await this.prisma.paperCitation.findMany({
+      where: { belonging_paper_entry_id: { in: entryIds } },
+      select: { belonging_paper_entry_id: true, cited_paper_entry_id: true },
+    });
+
+    const citationMap = new Map<string, string[]>();
+    for (const r of rows) {
+      const arr = citationMap.get(r.belonging_paper_entry_id);
+      if (arr) arr.push(r.cited_paper_entry_id);
+      else citationMap.set(r.belonging_paper_entry_id, [r.cited_paper_entry_id]);
+    }
+
+    return papers.map(p => ({
+      ...p,
+      citations: citationMap.get(p.entry_id) ?? [],
+    }));
   }
 
   /**
