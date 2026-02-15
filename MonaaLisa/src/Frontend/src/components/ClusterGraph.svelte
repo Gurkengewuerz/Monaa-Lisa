@@ -7,6 +7,7 @@
 <script lang="ts">
   import { onMount, createEventDispatcher } from 'svelte';
   import type { ClusterNode } from '$lib/types/paper';
+  import { EdgeAnimator } from './edgeAnimation';
 
   /** Array of clusters to visualise. */
   export let clusters: ClusterNode[] = [];
@@ -179,12 +180,18 @@
   let laid: LayoutCluster[] = [];
   let particles: Particle[] = [];
   let transform: Transform = { scale: 1, offsetX: 0, offsetY: 0 };
+  let edgeAnimator: EdgeAnimator | null = null;
 
   function rebuild(W: number, H: number) {
     laid = computeLayout();
     particles = generateParticles(laid);
     transform = getTransform(laid, W, H);
     buildGrid(laid, transform, W, H);
+    if (edgeAnimator) {
+      edgeAnimator.updateClusters(laid);
+    } else {
+      edgeAnimator = new EdgeAnimator(laid);
+    }
   }
 
   function draw() {
@@ -197,6 +204,10 @@
     ctx.fillStyle = '#1e1e27';
     ctx.fillRect(0, 0, W, H);
     if (!laid.length) return;
+
+    // draw edges
+    edgeAnimator?.update(Date.now());
+    edgeAnimator?.draw(ctx, transform);
 
     // ── Manhattan-Voronoi territory cells ──
     for (let gy = 0; gy < gridH; gy++) {
@@ -308,6 +319,14 @@
     const ro = new ResizeObserver(resize);
     ro.observe(canvasEl);
     resize();
+
+    // Animation loop for edges
+    const animate = () => {
+      draw();
+      requestAnimationFrame(animate);
+    };
+    requestAnimationFrame(animate);
+
     return () => ro.disconnect();
   });
 
