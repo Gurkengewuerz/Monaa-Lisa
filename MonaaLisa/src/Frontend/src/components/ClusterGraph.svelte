@@ -341,28 +341,54 @@
     });
 
     // ── labels ──
-    laid.forEach(c => {
-      const s = w2s(c.x, c.y);
-      const hov = hoveredCluster === c.id;
-      ctx.textAlign = 'center';
-      ctx.textBaseline = 'middle';
-      ctx.shadowColor = 'rgba(0,0,0,0.9)';
-      ctx.shadowBlur = 8;
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.shadowColor = 'rgba(0,0,0,0.9)';
+    ctx.shadowBlur = 8;
 
-      const showFull = hov || view.scale >= LABEL_FULL_SCALE;
+    const dimOthers = hoveredCluster !== null;
+
+    // draw non-hovered labels first (possibly dimmed)
+    ctx.globalAlpha = dimOthers ? 0.5 : 1.0;
+    for (const c of laid) {
+      if (c.id === hoveredCluster) continue;
+      const s = w2s(c.x, c.y);
+      const showFull = view.scale >= LABEL_FULL_SCALE;
       const label = showFull ? c.name : abbrevName(c.name);
 
-      ctx.font = `bold ${hov ? 21 : 18}px 'Segoe UI', system-ui, sans-serif`;
-      ctx.fillStyle = hov ? '#ffffff' : '#e0e0e0';
+      ctx.font = `bold ${18}px 'Segoe UI', system-ui, sans-serif`;
+      ctx.fillStyle = '#e0e0e0';
       ctx.fillText(label, s.x, s.y - 14);
 
       if (showFull) {
-        ctx.font = `${hov ? 15 : 13}px 'Segoe UI', system-ui, sans-serif`;
-        ctx.fillStyle = hov ? '#cccccc' : '#888888';
+        ctx.font = `13px 'Segoe UI', system-ui, sans-serif`;
+        ctx.fillStyle = '#888888';
         ctx.fillText(fmtCount(c.count) + ' papers', s.x, s.y + 14);
       }
-      ctx.shadowBlur = 0;
-    });
+    }
+
+    // reset alpha and draw hovered label last so it's on top
+    ctx.globalAlpha = 1.0;
+    if (hoveredCluster) {
+      const c = laid.find(x => x.id === hoveredCluster);
+      if (c) {
+        const s = w2s(c.x, c.y);
+        const showFull = view.scale >= LABEL_FULL_SCALE || true; // hover always shows full
+        const label = c.name;
+
+        ctx.font = `bold ${21}px 'Segoe UI', system-ui, sans-serif`;
+        ctx.fillStyle = '#ffffff';
+        ctx.fillText(label, s.x, s.y - 14);
+
+        if (showFull) {
+          ctx.font = `15px 'Segoe UI', system-ui, sans-serif`;
+          ctx.fillStyle = '#cccccc';
+          ctx.fillText(fmtCount(c.count) + ' papers', s.x, s.y + 14);
+        }
+      }
+    }
+
+    ctx.shadowBlur = 0;
   }
 
   function fmtCount(n: number): string {
