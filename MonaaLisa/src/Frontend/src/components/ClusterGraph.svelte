@@ -168,7 +168,7 @@
     } else {
       // Subcategory: tighter phyllotaxis with aspect correction
       const GA = Math.PI * (3 - Math.sqrt(5));
-      const BASE = clusters.length <= 6 ? 130 : clusters.length <= 12 ? 110 : 90;
+      const BASE = clusters.length <= 6 ? 150 : clusters.length <= 12 ? 110 : 90;
       return sorted.map((c, i) => {
         const r = BASE * Math.sqrt(i + 1);
         const theta = i * GA;
@@ -215,7 +215,7 @@
     const rng = () => { seed = (seed * 16807) % 2147483647; return (seed - 1) / 2147483646; };
     const ps: Particle[] = [];
     laid.forEach((c, ci) => {
-      const n = Math.max(100, Math.min(700, Math.sqrt(c.count) * 0.5));
+      const n = Math.max(100, Math.min(700, Math.sqrt(c.count) * 1.1));
       for (let i = 0; i < n; i++) {
         const a = rng() * Math.PI * 2;
         const r = Math.sqrt(rng()) * c.radius * 0.88;
@@ -319,7 +319,7 @@
       const s = w2s(c.x, c.y);
       const sr = c.radius * view.scale;
       const hov = hoveredCluster === c.id;
-      ctx.strokeStyle = c.color + (hov ? '40' : '18');
+      ctx.strokeStyle = c.color + (hov ? '65' : '18');
       ctx.lineWidth = hov ? 1.5 : 0.8;
       ctx.beginPath();
       ctx.arc(s.x, s.y, sr * 0.92, 0, Math.PI * 2);
