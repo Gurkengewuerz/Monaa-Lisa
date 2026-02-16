@@ -349,13 +349,18 @@
       ctx.shadowColor = 'rgba(0,0,0,0.9)';
       ctx.shadowBlur = 8;
 
+      const showFull = hov || view.scale >= LABEL_FULL_SCALE;
+      const label = showFull ? c.name : abbrevName(c.name);
+
       ctx.font = `bold ${hov ? 21 : 18}px 'Segoe UI', system-ui, sans-serif`;
       ctx.fillStyle = hov ? '#ffffff' : '#e0e0e0';
-      ctx.fillText(c.name, s.x, s.y - 14);
+      ctx.fillText(label, s.x, s.y - 14);
 
-      ctx.font = `${hov ? 15 : 13}px 'Segoe UI', system-ui, sans-serif`;
-      ctx.fillStyle = hov ? '#cccccc' : '#888888';
-      ctx.fillText(fmtCount(c.count) + ' papers', s.x, s.y + 14);
+      if (showFull) {
+        ctx.font = `${hov ? 15 : 13}px 'Segoe UI', system-ui, sans-serif`;
+        ctx.fillStyle = hov ? '#cccccc' : '#888888';
+        ctx.fillText(fmtCount(c.count) + ' papers', s.x, s.y + 14);
+      }
       ctx.shadowBlur = 0;
     });
   }
@@ -364,6 +369,21 @@
     if (n >= 1_000_000) return (n / 1_000_000).toFixed(1) + 'M';
     if (n >= 1_000) return Math.round(n / 1_000) + 'K';
     return String(n);
+  }
+
+  // label display: show abbreviation when zoomed out, full name when zoomed in
+  const LABEL_FULL_SCALE = 0.9; // >= show full name, < show abbreviation (tweakable)
+
+  function abbrevName(name: string): string {
+    if (!name) return '';
+    // normalize separators to spaces and split
+    const parts = name.replace(/[_-]+/g, ' ').trim().split(/\s+/);
+    if (parts.length > 1) {
+      // take first letter of up to 3 parts
+      return parts.slice(0, 3).map(p => p[0]?.toUpperCase() ?? '').join('');
+    }
+    // single word: take first 3 letters
+    return name.slice(0, 3).toUpperCase();
   }
 
   // ─── hit-testing (Euclidean) ──────────────────────────────────────
