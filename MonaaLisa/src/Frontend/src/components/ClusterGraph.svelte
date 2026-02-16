@@ -190,7 +190,7 @@
     const ys = laid.map(c => [c.y - c.radius - pad, c.y + c.radius + pad]).flat();
     const minX = Math.min(...xs), maxX = Math.max(...xs);
     const minY = Math.min(...ys), maxY = Math.max(...ys);
-    const scale = Math.min(W / (maxX - minX), H / (maxY - minY)) * 0.92;
+    const scale = Math.min(W / (maxX - minX), H / (maxY - minY)) * 1.1;
     return {
       scale,
       offsetX: W / 2 - ((minX + maxX) / 2) * scale,
