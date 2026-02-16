@@ -357,6 +357,7 @@
 
   :global(.graph-wrapper),
   :global(.cluster-canvas),
+  :global(.cluster-container),
   :global(.detail-wrapper) {
     width: 100% !important;
     height: 100% !important;
