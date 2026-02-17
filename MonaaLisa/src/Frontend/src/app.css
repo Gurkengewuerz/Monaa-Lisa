@@ -1,1 +1,52 @@
 @import "tailwindcss";
+
+/* ─── Monaa-Lisa Design System ─────────────────────────────────────── */
+:root {
+  /* Background */
+  --bg-primary: #0F1020;
+  --bg-secondary: #141530;
+  --bg-surface: rgba(20, 22, 50, 0.65);
+  --bg-surface-solid: #181a3a;
+  --bg-card: rgba(25, 27, 60, 0.55);
+
+  /* Accent gradients */
+  --accent-purple: #9333ea;
+  --accent-magenta: #e839a0;
+  --accent-cyan: #22d3ee;
+  --accent-blue: #4a6cf7;
+
+  /* Gradient presets */
+  --gradient-accent: linear-gradient(135deg, #9333ea, #e839a0, #22d3ee);
+  --gradient-header: linear-gradient(90deg, #9333ea 0%, #e839a0 50%, #22d3ee 100%);
+  --gradient-card: linear-gradient(135deg, rgba(147,51,234,0.15), rgba(232,57,160,0.10));
+  --gradient-glow: linear-gradient(135deg, rgba(147,51,234,0.35), rgba(34,211,238,0.25));
+
+  /* Text */
+  --text-primary: #f0f0f8;
+  --text-secondary: #a8a8c8;
+  --text-muted: #6b6b8d;
+
+  /* Borders */
+  --border-subtle: rgba(147, 51, 234, 0.18);
+  --border-glow: rgba(147, 51, 234, 0.4);
+
+  /* Glass */
+  --glass-bg: rgba(20, 22, 50, 0.55);
+  --glass-border: rgba(255, 255, 255, 0.08);
+  --glass-blur: 16px;
+
+  /* Shadows */
+  --shadow-glow-sm: 0 0 15px rgba(147, 51, 234, 0.2), 0 0 30px rgba(34, 211, 238, 0.1);
+  --shadow-glow-md: 0 0 20px rgba(147, 51, 234, 0.3), 0 0 60px rgba(34, 211, 238, 0.15);
+  --shadow-glow-lg: 0 4px 30px rgba(147, 51, 234, 0.4), 0 0 80px rgba(34, 211, 238, 0.2);
+
+  /* Transitions */
+  --transition-fast: 0.15s ease;
+  --transition-smooth: 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+
+  /* Radius */
+  --radius-sm: 8px;
+  --radius-md: 12px;
+  --radius-lg: 16px;
+  --radius-xl: 20px;
+}
