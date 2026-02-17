@@ -9,6 +9,7 @@
   import PaperDetailGraph from './PaperDetailGraph.svelte';
   import Header from './Header.svelte';
   import Sidebar from './Sidebar.svelte';
+  import MetricCards from './MetricCards.svelte';
   import type { ApiPaper, Paper, PapersResponse, ClusterNode, ViewState } from '$lib/types/paper';
   import { env as publicEnv } from '$env/dynamic/public';
   import clusterData from '../utils/arxiv_cluster_data.json';
@@ -28,6 +29,13 @@
 
   // colour of the current parent category (passed to subcategory + papers)
   let currentCategoryColor: string = '#4a9eff';
+
+  // reactive cluster count for metric cards
+  $: currentClusterCount = (() => {
+    if (view.level === 'top') return topClusters.length;
+    if (view.level === 'sub') return getSubclusters(view.parentId).length;
+    return 0;
+  })();
 
   // ─── top-level cluster data from static JSON ──────────────────────
   const CATEGORY_COLORS: Record<string, string> = {
@@ -238,6 +246,9 @@
 <div class="app-container">
   <Header />
 
+  <!-- metric cards row -->
+  <MetricCards {view} paperCount={papers.length} clusterCount={currentClusterCount} />
+
   <!-- breadcrumb bar -->
   <nav class="breadcrumbs">
     {#each breadcrumbs as crumb, i}
@@ -251,56 +262,64 @@
   </nav>
 
   <div class="main-content">
-    <!-- ── TOP-LEVEL CLUSTERS ── -->
-    {#if view.level === 'top'}
-      <ClusterGraph
-        clusters={topClusters}
-        parentColor={null}
-        on:clusterClick={handleTopClusterClick}
-      />
-
-    <!-- ── SUBCATEGORY CLUSTERS ── -->
-    {:else if view.level === 'sub'}
-      <ClusterGraph
-        clusters={getSubclusters(view.parentId)}
-        parentColor={CATEGORY_COLORS[view.parentId] ?? '#4a9eff'}
-        on:clusterClick={handleSubClusterClick}
-      />
-
-    <!-- ── PAPERS VIEW ── -->
-    {:else if view.level === 'papers'}
-      {#if loading}
-        <div class="status-card">
-          <p>Lade Papers für {view.categoryName}…</p>
-        </div>
-      {:else if error}
-        <div class="status-card error">
-          <p>{error}</p>
-          <button on:click={() => loadPapers(view.categoryId)}>Erneut versuchen</button>
-        </div>
-      {:else}
-        <Graph
-          {papers}
-          {selectedPaperId}
-          categoryColor={currentCategoryColor}
-          on:paperSelected={handlePaperSelected}
-          on:nodeDeselected={handleNodeDeselected}
+    <!-- ── graph panel (central area) ── -->
+    <div class="graph-panel">
+      <!-- ── TOP-LEVEL CLUSTERS ── -->
+      {#if view.level === 'top'}
+        <ClusterGraph
+          clusters={topClusters}
+          parentColor={null}
+          on:clusterClick={handleTopClusterClick}
         />
-        <Sidebar
-          {papers}
-          isOpen={sidebarOpen}
-          {selectedPaperId}
-          on:toggle={handleToggleSidebar}
-          on:selectPaper={handleSidebarSelect}
+
+      <!-- ── SUBCATEGORY CLUSTERS ── -->
+      {:else if view.level === 'sub'}
+        <ClusterGraph
+          clusters={getSubclusters(view.parentId)}
+          parentColor={CATEGORY_COLORS[view.parentId] ?? '#4a9eff'}
+          on:clusterClick={handleSubClusterClick}
+        />
+
+      <!-- ── PAPERS VIEW ── -->
+      {:else if view.level === 'papers'}
+        {#if loading}
+          <div class="status-card">
+            <div class="status-spinner"></div>
+            <p>Lade Papers für {view.categoryName}…</p>
+          </div>
+        {:else if error}
+          <div class="status-card error">
+            <p>{error}</p>
+            <button on:click={() => loadPapers(view.categoryId)}>Erneut versuchen</button>
+          </div>
+        {:else}
+          <Graph
+            {papers}
+            {selectedPaperId}
+            categoryColor={currentCategoryColor}
+            on:paperSelected={handlePaperSelected}
+            on:nodeDeselected={handleNodeDeselected}
+          />
+        {/if}
+
+      <!-- ── PAPER DETAIL VIEW ── -->
+      {:else if view.level === 'detail'}
+        <PaperDetailGraph
+          paper={view.paper}
+          apiBaseUrl={API_BASE_URL}
+          on:back={handleDetailBack}
         />
       {/if}
+    </div>
 
-    <!-- ── PAPER DETAIL VIEW ── -->
-    {:else if view.level === 'detail'}
-      <PaperDetailGraph
-        paper={view.paper}
-        apiBaseUrl={API_BASE_URL}
-        on:back={handleDetailBack}
+    <!-- ── right sidebar panel ── -->
+    {#if view.level === 'papers' && !loading && !error}
+      <Sidebar
+        {papers}
+        isOpen={sidebarOpen}
+        {selectedPaperId}
+        on:toggle={handleToggleSidebar}
+        on:selectPaper={handleSidebarSelect}
       />
     {/if}
   </div>
@@ -312,8 +331,8 @@
     height: 100vh;
     display: flex;
     flex-direction: column;
-    background-color: #1e1e27;
-    color: white;
+    background-color: var(--bg-primary, #0F1020);
+    color: var(--text-primary, #f0f0f8);
     overflow: hidden;
   }
 
@@ -321,30 +340,34 @@
     display: flex;
     align-items: center;
     gap: 4px;
-    padding: 6px 16px;
-    background: #252530;
-    border-bottom: 1px solid #333;
-    font-size: 13px;
+    padding: 5px 16px;
+    background: var(--bg-secondary, #141530);
+    border-bottom: 1px solid var(--glass-border, rgba(255,255,255,0.08));
+    font-size: 12px;
     flex-shrink: 0;
   }
 
   .sep {
-    color: #555;
+    color: var(--text-muted, #6b6b8d);
     margin: 0 2px;
   }
 
   .crumb {
     background: none;
     border: none;
-    color: #7aa8e8;
+    color: var(--accent-cyan, #22d3ee);
     cursor: pointer;
-    padding: 2px 4px;
-    border-radius: 4px;
-    font-size: 13px;
+    padding: 2px 6px;
+    border-radius: var(--radius-sm, 8px);
+    font-size: 12px;
+    transition: all var(--transition-fast, 0.15s ease);
   }
-  .crumb:hover { background: rgba(74,158,255,0.15); }
+  .crumb:hover {
+    background: rgba(34, 211, 238, 0.12);
+    color: #fff;
+  }
   .crumb.current {
-    color: #e0e6ed;
+    color: var(--text-primary, #f0f0f8);
     cursor: default;
   }
 
@@ -353,6 +376,17 @@
     position: relative;
     display: flex;
     overflow: hidden;
+  }
+
+  .graph-panel {
+    flex: 1;
+    position: relative;
+    display: flex;
+    overflow: hidden;
+    border-radius: var(--radius-md, 12px);
+    margin: 0 4px 4px 4px;
+    border: 1px solid var(--glass-border, rgba(255,255,255,0.08));
+    background: var(--bg-primary, #0F1020);
   }
 
   :global(.graph-wrapper),
@@ -365,30 +399,54 @@
 
   .status-card {
     margin: auto;
-    padding: 2rem;
-    border-radius: 1rem;
-    border: 1px solid #27313a;
-    background-color: #232b32;
-    color: #e0e6ed;
+    padding: 2rem 3rem;
+    border-radius: var(--radius-lg, 16px);
+    border: 1px solid var(--border-subtle, rgba(147,51,234,0.18));
+    background: var(--glass-bg, rgba(20, 22, 50, 0.55));
+    backdrop-filter: blur(var(--glass-blur, 16px));
+    color: var(--text-primary, #f0f0f8);
     text-align: center;
     display: flex;
     flex-direction: column;
+    align-items: center;
     gap: 1rem;
     min-width: 320px;
+    box-shadow: var(--shadow-glow-sm);
+  }
+
+  .status-spinner {
+    width: 28px;
+    height: 28px;
+    border: 3px solid rgba(147, 51, 234, 0.2);
+    border-top-color: var(--accent-cyan, #22d3ee);
+    border-radius: 50%;
+    animation: spin 0.8s linear infinite;
+  }
+
+  @keyframes spin {
+    to { transform: rotate(360deg); }
   }
 
   .status-card.error {
-    border-color: #f56565;
+    border-color: rgba(245, 101, 101, 0.4);
+    box-shadow: 0 0 20px rgba(245, 101, 101, 0.15);
   }
 
   .status-card button {
     align-self: center;
-    background: #4a9eff;
+    background: linear-gradient(135deg, var(--accent-purple), var(--accent-magenta));
     border: none;
     border-radius: 999px;
     color: white;
     cursor: pointer;
     padding: 0.5rem 1.5rem;
     font-weight: 600;
+    transition: all var(--transition-smooth);
+    box-shadow: 0 0 15px rgba(147, 51, 234, 0.3);
+  }
+
+  .status-card button:hover {
+    transform: translateY(-1px);
+    box-shadow: 0 0 25px rgba(147, 51, 234, 0.5);
   }
 </style>
