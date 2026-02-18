@@ -57,18 +57,24 @@
       ];
     }
     if (v.level === 'detail') {
-      const nonArxivTotal =
-        (v.paper.non_arxiv_citation_count ?? 0) + (v.paper.non_arxiv_reference_count ?? 0);
       const citStr = arxivCit !== undefined ? String(arxivCit) : '…';
       const refStr = arxivRef !== undefined ? String(arxivRef) : '…';
+      const nonArxivCit = v.paper.non_arxiv_citation_count ?? 0;
+      const nonArxivRef = v.paper.non_arxiv_reference_count ?? 0;
       return [
         { label: 'Category', value: v.parentName, icon: '◎', accent: 'purple' },
         { label: 'Subcategory', value: v.categoryName, icon: '⬡', accent: 'magenta' },
-        { label: 'Paper', value: truncate(v.paper.title, 22), icon: '◈', accent: 'cyan' },
         {
           label: 'Citations',
-          value: `${citStr} cit · ${refStr} ref`,
-          subValue: `${nonArxivTotal} non-arXiv`,
+          value: citStr,
+          subValue: nonArxivCit ? `+ ${nonArxivCit} non-arXiv` : undefined,
+          icon: '◈',
+          accent: 'cyan',
+        },
+        {
+          label: 'References',
+          value: refStr,
+          subValue: nonArxivRef ? `+ ${nonArxivRef} non-arXiv` : undefined,
           icon: '◉',
           accent: 'blue',
         },
@@ -77,9 +83,7 @@
     return [];
   }
 
-  function truncate(s: string, n: number): string {
-    return s.length > n ? s.slice(0, n) + '…' : s;
-  }
+
 </script>
 
 <div class="metric-row">

@@ -12,9 +12,11 @@
   import Sidebar from './Sidebar.svelte';
   import PaperSidebar from './PaperSidebar.svelte';
   import MetricCards from './MetricCards.svelte';
+  import Dashboard from './Dashboard.svelte';
   import type { ApiPaper, Paper, PapersResponse, ClusterNode, ViewState, PaperSession } from '$lib/types/paper';
   import { env as publicEnv } from '$env/dynamic/public';
   import clusterData from '../utils/arxiv_cluster_data.json';
+  import { SUBCATEGORY_TO_TOPLEVEL, getSubcategoryName, getTopLevelCategory } from '../utils/arxivTaxonomy';
 
   const API_BASE_URL = publicEnv.PUBLIC_API_BASE_URL || 'http://localhost:3000';
   const PAPER_LIMIT  = 5000;
@@ -24,6 +26,8 @@
 
   // ─── navigation state ─────────────────────────────────────────────
   let view: ViewState = { level: 'top' };
+  /** View to return to when pressing back from detail */
+  let previousView: ViewState = { level: 'top' };
 
   // paper data (only loaded at papers/detail level)
   let papers: Paper[] = [];
@@ -34,6 +38,20 @@
   let selectedPaperId: string | null = null;
   let loading = false;
   let error: string | null = null;
+
+  // ─── dashboard ────────────────────────────────────────────────────
+  let dashboardOpen = false;
+  let dashboardRef: Dashboard;
+  /** Incremented whenever favorites change forces re-evaluation of isFavorite */
+  let favoritesVersion = 0;
+
+  function openDashboard()   { dashboardOpen = true; }
+  function closeDashboard()  { dashboardOpen = false; }
+
+  function handleFavoritePaper(e: CustomEvent<Paper>) {
+    if (dashboardRef) dashboardRef.toggleFavorite(e.detail);
+    favoritesVersion += 1; // trigger reactive re-render
+  }
 
   // colour of the current parent category (passed to subcategory + papers)
   let currentCategoryColor: string = '#4a9eff';
@@ -85,8 +103,26 @@
     quantitative_biology:   'q-bio.',
     quantitative_finance:   'q-fin.',
     economics:              'econ.',
-    physics:                '',   // no single common prefix
+    physics:                'physics.',
   };
+
+  /**
+   * Given a paper's primary category (e.g. "cs.AI"), derive the full
+   * ViewState detail fields so breadcrumbs show the proper hierarchy.
+   */
+  function resolveDetailContext(paper: Paper): { categoryId: string; categoryName: string; parentName: string } {
+    const firstCat = (paper.categories ?? '').trim().split(/[\s,]+/)[0] ?? '';
+    if (!firstCat) return { categoryId: '', categoryName: '', parentName: '' };
+    // subcategory name e.g. "Artificial Intelligence"
+    const subName = getSubcategoryName(firstCat);
+    // top-level name e.g. "Computer Science"
+    const topName = getTopLevelCategory(firstCat);
+    return {
+      categoryId: firstCat,
+      categoryName: subName !== firstCat ? subName : firstCat,
+      parentName: topName !== 'Other' ? topName : '',
+    };
+  }
 
   // reactive cluster count for metric cards
   $: currentClusterCount = (() => {
@@ -134,13 +170,16 @@
 
     if (v.level === 'sub' || v.level === 'papers' || v.level === 'detail') {
       const pName = v.parentName;
+      if (!pName) return crumbs; // avoid empty/clickable-but-empty crumbs
       const pId = v.level === 'sub' ? v.parentId : '';
       crumbs.push({
         label: pName,
         action: () => {
           const pid = clusterData.find((c: any) => c.name === pName)?.id ?? '';
+          if (!pid) return; // guard: no matching cluster, don't crash
           view = { level: 'sub', parentName: pName, parentId: pid };
           papers = []; error = null;
+          loadSamplePapers('sub', pid);
         },
       });
     }
@@ -149,9 +188,11 @@
       const cId = v.categoryId;
       const cName = v.categoryName;
       const pName = v.parentName;
+      if (!cId && !cName) return crumbs; // guard: empty category context
       crumbs.push({
-        label: cName,
+        label: cName || cId,
         action: () => {
+          if (!cId) return;
           view = { level: 'papers', categoryId: cId, categoryName: cName, parentName: pName };
           loadPapers(cId);
         },
@@ -195,6 +236,7 @@
     const paper = e.detail;
     arxivCitationCount  = undefined;
     arxivReferenceCount = undefined;
+    previousView = view;
     addSession(paper);
     view = {
       level: 'detail',
@@ -203,43 +245,40 @@
       categoryName: view.categoryName,
       parentName: view.parentName,
     };
+    if (dashboardRef) dashboardRef.addToHistory(paper);
   }
 
   function handleDetailBack() {
     if (view.level !== 'detail') return;
     arxivCitationCount  = undefined;
     arxivReferenceCount = undefined;
-    view = {
-      level: 'papers',
-      categoryId: view.categoryId,
-      categoryName: view.categoryName,
-      parentName: view.parentName,
-    };
+    // Return to wherever we came from (papers, sub, or top)
+    view = previousView;
   }
 
   function handleSidebarSelect(e: CustomEvent<Paper>) {
-    // In papers view: navigate to detail
-    if (view.level === 'papers') {
-      const paper = e.detail;
-      arxivCitationCount  = undefined;
-      arxivReferenceCount = undefined;
-      addSession(paper);
-      view = {
-        level: 'detail',
-        paper,
-        categoryId: view.categoryId,
-        categoryName: view.categoryName,
-        parentName: view.parentName,
-      };
-    }
+    const paper = e.detail;
+    arxivCitationCount  = undefined;
+    arxivReferenceCount = undefined;
+    previousView = view;
+    addSession(paper);
+    // Always derive proper category hierarchy from the paper itself
+    const ctx = resolveDetailContext(paper);
+    const catId   = ctx.categoryId   || ((view.level === 'papers' || view.level === 'detail') ? view.categoryId   : '');
+    const catName = ctx.categoryName || ((view.level === 'papers' || view.level === 'detail') ? view.categoryName : '');
+    const parName = ctx.parentName   || ((view.level !== 'top') ? (view as any).parentName ?? '' : '');
+    view = { level: 'detail', paper, categoryId: catId, categoryName: catName, parentName: parName };
+    if (dashboardRef) dashboardRef.addToHistory(paper);
   }
 
-  /** Called when PaperSidebar emits navigate (double-click on a citation/reference) */
-  function handlePaperSidebarNavigate(e: CustomEvent<Paper>) {
+  /** Called when PaperDetailGraph emits navigate (click on a graph node) */
+  function handleGraphNavigate(e: CustomEvent<Paper>) {
     if (view.level !== 'detail') return;
     const paper = e.detail;
     arxivCitationCount  = undefined;
     arxivReferenceCount = undefined;
+    previousView = view;
+    addSession(paper);
     view = {
       level: 'detail',
       paper,
@@ -247,6 +286,24 @@
       categoryName: view.categoryName,
       parentName: view.parentName,
     };
+    if (dashboardRef) dashboardRef.addToHistory(paper);
+  }
+
+  /** Called when PaperSidebar emits navigate (click on a citation/reference) */
+  function handlePaperSidebarNavigate(e: CustomEvent<Paper>) {
+    if (view.level !== 'detail') return;
+    const paper = e.detail;
+    arxivCitationCount  = undefined;
+    arxivReferenceCount = undefined;
+    previousView = view;
+    view = {
+      level: 'detail',
+      paper,
+      categoryId: view.categoryId,
+      categoryName: view.categoryName,
+      parentName: view.parentName,
+    };
+    if (dashboardRef) dashboardRef.addToHistory(paper);
   }
 
   function handleToggleSidebar() {
@@ -268,31 +325,49 @@
 
   async function handleRestoreSession(e: CustomEvent<PaperSession>) {
     const session = e.detail;
-    // Fetch the full paper from the API
-    try {
-      const res = await fetch(
-        `${API_BASE_URL}/papers?search=${encodeURIComponent(session.mainPaper.entry_id)}&take=1`
-      );
-      if (!res.ok) throw new Error();
-      const payload = await res.json();
-      const rawItems: ApiPaper[] = Array.isArray(payload) ? payload : payload?.items ?? [];
-      const found = rawItems.find(p => p.entry_id === session.mainPaper.entry_id);
-      if (found) {
-        const paper = normalizePaper(found, 0, 1);
-        if (paper) {
-          arxivCitationCount  = undefined;
-          arxivReferenceCount = undefined;
-          // Navigate to the paper without knowing the category context – use 'Other'
-          if (view.level === 'papers') {
-            view = { level: 'detail', paper, categoryId: view.categoryId, categoryName: view.categoryName, parentName: view.parentName };
-          } else {
-            // Jump back to top and open the detail view without category context
-            view = { level: 'detail', paper, categoryId: '', categoryName: 'History', parentName: '' };
-          }
+    // Try to find the paper in the currently loaded set first (fast path)
+    let paper: Paper | null =
+      papers.find(p => p.entry_id === session.mainPaper.entry_id) ??
+      sidebarSamplePapers.find(p => p.entry_id === session.mainPaper.entry_id) ??
+      null;
+
+    if (!paper) {
+      // Try dedicated single-paper endpoint
+      try {
+        const res = await fetch(`${API_BASE_URL}/papers/${encodeURIComponent(session.mainPaper.entry_id)}`);
+        if (res.ok) {
+          const raw: ApiPaper = await res.json();
+          paper = normalizePaper(raw, 0, 1);
         }
-      }
-    } catch {
-      // ignore restoration errors
+      } catch { /* fall through */ }
+    }
+
+    if (!paper) {
+      // Fall back to title search
+      try {
+        const res = await fetch(
+          `${API_BASE_URL}/papers?search=${encodeURIComponent(session.mainPaper.title.slice(0, 80))}&take=10`
+        );
+        if (res.ok) {
+          const payload = await res.json();
+          const rawItems: ApiPaper[] = Array.isArray(payload) ? payload : payload?.items ?? [];
+          const found = rawItems.find(p => p.entry_id === session.mainPaper.entry_id);
+          if (found) paper = normalizePaper(found, 0, 1);
+        }
+      } catch { /* ignore */ }
+    }
+
+    if (paper) {
+      arxivCitationCount  = undefined;
+      arxivReferenceCount = undefined;
+      previousView = view;
+      // Always derive proper category hierarchy from the paper itself
+      const ctx = resolveDetailContext(paper);
+      const catId   = ctx.categoryId   || (view.level === 'papers' ? view.categoryId   : '');
+      const catName = ctx.categoryName || (view.level === 'papers' ? view.categoryName : '');
+      const parName = ctx.parentName   || (view.level === 'papers' ? view.parentName   : '');
+      view = { level: 'detail', paper, categoryId: catId, categoryName: catName, parentName: parName };
+      if (dashboardRef) dashboardRef.addToHistory(paper);
     }
   }
 
@@ -333,7 +408,7 @@
   async function loadSamplePapers(level: 'top' | 'sub', parentId?: string) {
     try {
       let categoryParam = '';
-      if (level === 'sub' && parentId) {
+      if (parentId) {
         const prefix = CLUSTER_CAT_PREFIX[parentId] ?? '';
         categoryParam = prefix ? `&categories=${encodeURIComponent(prefix)}` : '';
       }
@@ -393,14 +468,45 @@
     return [];
   }
 
-  // ─── load initial sample papers for top-level sidebar ────────────
+  // ─── load initial sample papers for top-level sidebar ────────────  // sidebar label: human-readable name for the current view level
+  $: sidebarLabel = (() => {
+    if (view.level === 'top')    return 'ArXiv';
+    if (view.level === 'sub')    return view.parentName;
+    if (view.level === 'papers') return view.categoryName;
+    if (view.level === 'detail') return view.categoryName || view.parentName || 'Paper';
+    return 'ArXiv';
+  })();
   onMount(() => {
-    loadSamplePapers('top');
+    // Don't load papers at top level by default
   });
 </script>
 
 <!-- main app container -->
 <div class="app-container">
+
+  <!-- Dashboard slide-in panel -->
+  <Dashboard
+    bind:this={dashboardRef}
+    isOpen={dashboardOpen}
+    on:close={closeDashboard}
+    on:navigate={(e) => {
+      // Navigate to a paper from the dashboard
+      const item = e.detail;
+      const paper: Paper = {
+        id: 0, entry_id: item.entry_id, title: item.title, authors: item.authors,
+        abstract: '', published: item.published, categories: item.categories,
+        url: null, citations: [], references: [],
+        non_arxiv_citation_count: 0, non_arxiv_reference_count: 0,
+        tsne1: 0, tsne2: 0, cluster: item.categories ?? 'U',
+      };
+      previousView = view;
+      const ctx = resolveDetailContext(paper);
+      view = { level: 'detail', paper,
+        categoryId: ctx.categoryId, categoryName: ctx.categoryName, parentName: ctx.parentName };
+      dashboardOpen = false;
+    }}
+  />
+
   <Header />
 
   <!-- metric cards row -->
@@ -414,6 +520,10 @@
 
   <!-- breadcrumb bar -->
   <nav class="breadcrumbs">
+    <button class="db-toggle-btn" on:click={openDashboard} title="Open Dashboard">
+      &#9776; Dashboard
+    </button>
+    <span class="crumb-sep-line"></span>
     {#each breadcrumbs as crumb, i}
       {#if i > 0}<span class="sep">›</span>{/if}
       {#if i < breadcrumbs.length - 1}
@@ -451,7 +561,7 @@
         {#if loading}
           <div class="status-card">
             <div class="status-spinner"></div>
-            <p>Lade Papers für {view.categoryName}…</p>
+            <p>Fetching Papers for {view.categoryName}…</p>
           </div>
         {:else if error}
           <div class="status-card error">
@@ -470,34 +580,41 @@
 
       <!-- ── PAPER DETAIL VIEW ── -->
       {:else if view.level === 'detail'}
+        {#key view.paper.entry_id}
         <PaperDetailGraph
           paper={view.paper}
           apiBaseUrl={API_BASE_URL}
           on:back={handleDetailBack}
           on:neighbourhoodLoaded={handleNeighbourhoodLoaded}
+          on:navigate={handleGraphNavigate}
         />
+        {/key}
       {/if}
     </div>
 
     <!-- ── right sidebar panel ── -->
     {#if view.level === 'detail'}
       <!-- Paper sidebar with citations, references, history -->
+      {#key view.paper.entry_id}
       <PaperSidebar
         paper={view.paper}
         apiBaseUrl={API_BASE_URL}
         isOpen={sidebarOpen}
-        {sessions}
+        isFavorite={favoritesVersion >= 0 && dashboardRef ? dashboardRef.isFavorite(view.paper.entry_id) : false}
         on:toggle={handleToggleSidebar}
         on:navigate={handlePaperSidebarNavigate}
-        on:deleteSession={handleDeleteSession}
-        on:restoreSession={handleRestoreSession}
+        on:favorite={handleFavoritePaper}
       />
+      {/key}
     {:else}
       <!-- Category sidebar with paper list -->
       <Sidebar
         papers={view.level === 'papers' ? papers : sidebarSamplePapers}
         isOpen={sidebarOpen}
         {selectedPaperId}
+        categoryFilter={view.level === 'papers' || view.level === 'detail' ? view.categoryId : view.level === 'sub' ? (CLUSTER_CAT_PREFIX[(view as any).parentId] ?? '') : ''}
+        categoryLabel={sidebarLabel}
+        apiBaseUrl={API_BASE_URL}
         on:toggle={handleToggleSidebar}
         on:selectPaper={handleSidebarSelect}
       />
@@ -525,6 +642,32 @@
     border-bottom: 1px solid var(--glass-border, rgba(255,255,255,0.08));
     font-size: 12px;
     flex-shrink: 0;
+  }
+
+  .db-toggle-btn {
+    background: none;
+    border: 1px solid rgba(255,255,255,0.10);
+    color: var(--text-secondary, #a8a8c8);
+    font-size: 11px;
+    padding: 3px 10px;
+    border-radius: var(--radius-sm, 8px);
+    cursor: pointer;
+    transition: all 0.15s ease;
+    flex-shrink: 0;
+    white-space: nowrap;
+  }
+  .db-toggle-btn:hover {
+    background: rgba(147,51,234,0.15);
+    color: var(--text-primary, #f0f0f8);
+    border-color: rgba(147,51,234,0.35);
+  }
+
+  .crumb-sep-line {
+    width: 1px;
+    height: 14px;
+    background: var(--glass-border, rgba(255,255,255,0.12));
+    flex-shrink: 0;
+    margin: 0 4px;
   }
 
   .sep {

@@ -11,6 +11,7 @@
   import GraphLib from 'graphology';
   import Sigma from 'sigma';
   import type { Paper } from '$lib/types/paper';
+  import { getSubcategoryName } from '../utils/arxivTaxonomy';
 
   /** The paper whose neighbourhood we are visualising. */
   export let paper: Paper;
@@ -28,16 +29,27 @@
   let viewMode: 'graph' | 'relation' = 'graph';
 
   // ─── info view ────────────────────────────────────────────────────
-  let infoOpen = false;
   let abstractExpanded = false;
+
+  /** Format categories string: "cs.AI math.LG" → "Artificial Intelligence (cs.AI) · Machine Learning (cs.LG)" */
+  function formatCategories(cats: string | null): string {
+    if (!cats) return '';
+    return cats.trim().split(/[\s,]+/)
+      .filter(Boolean)
+      .map(c => { const n = getSubcategoryName(c); return n !== c ? `${n} (${c})` : c; })
+      .join(' · ');
+  }
 
   // ─── filters ──────────────────────────────────────────────────────
   let showCitations = true;
   let showReferences = true;
   let showNonArxiv = true;
-  let filtersOpen = false;
 
-  const dispatch = createEventDispatcher();
+  const dispatch = createEventDispatcher<{
+    back: void;
+    'neighbourhoodLoaded': { citationCount: number; referenceCount: number };
+    navigate: Paper;
+  }>();
 
   // ─── colours ──────────────────────────────────────────────────────
   const COLOR_CENTER    = '#00ff88';
@@ -187,6 +199,16 @@
     rebuildRenderer();
   }
 
+  // when switching back to citation graph, rebuild sigma (container was hidden)
+  let prevViewMode: 'graph' | 'relation' = 'graph';
+  $: if (viewMode !== prevViewMode) {
+    prevViewMode = viewMode;
+    if (viewMode === 'graph' && fetchedData && !loading) {
+      // defer to next tick so the container is visible again
+      setTimeout(() => rebuildRenderer(), 0);
+    }
+  }
+
   // ─── lifecycle ────────────────────────────────────────────────────
   onMount(() => {
     fetchNeighbourhood()
@@ -241,86 +263,49 @@
       </button>
     </div>
 
-    <div class="top-actions">
-      <button class="icon-btn" class:active={filtersOpen} on:click={() => (filtersOpen = !filtersOpen)}>
-        ⚙ Filters
-      </button>
-      <button class="icon-btn" class:active={infoOpen}    on:click={() => (infoOpen = !infoOpen)}>
-        ℹ Info
-      </button>
-    </div>
+
   </div>
 
-  <!-- ── filter bar ── -->
-  {#if filtersOpen}
-    <div class="filter-bar">
-      <label class="filter-chip" class:active={showCitations}>
-        <input type="checkbox" bind:checked={showCitations} />
-        <span class="dot" style="background:{COLOR_CITATION}"></span>
-        Cites
-      </label>
-      <label class="filter-chip" class:active={showReferences}>
-        <input type="checkbox" bind:checked={showReferences} />
-        <span class="dot" style="background:{COLOR_REFERENCE}"></span>
-        Cited by
-      </label>
-      <label class="filter-chip" class:active={showNonArxiv}>
-        <input type="checkbox" bind:checked={showNonArxiv} />
-        <span class="dot" style="background:{COLOR_DUMMY}"></span>
-        Non-arXiv
-      </label>
-    </div>
-  {/if}
-
-  <!-- ── info panel ── -->
-  {#if infoOpen}
-    <div class="info-panel">
-      <h3 class="info-title">{paper.title}</h3>
-      <p class="info-meta">{paper.authors}</p>
-      <p class="info-meta">
-        {paper.published ? new Date(paper.published).toLocaleDateString('en-US', { year: 'numeric', month: 'long' }) : ''}
-        {#if paper.categories}&nbsp;·&nbsp;{paper.categories}{/if}
-      </p>
-      {#if paper.url}
-        <a class="info-link" href={paper.url} target="_blank" rel="noopener noreferrer">arXiv ↗</a>
-      {/if}
-      <div class="info-abstract">
-        <button class="abstract-toggle" on:click={() => (abstractExpanded = !abstractExpanded)}>
-          Abstract {abstractExpanded ? '▾' : '▸'}
-        </button>
-        {#if abstractExpanded}
-          <p class="abstract-text">{paper.abstract || 'No abstract available.'}</p>
-        {:else}
-          <p class="abstract-text muted">{abstractSnippet}</p>
-        {/if}
-      </div>
-      <div class="info-stats">
-        <span>Non-arXiv cit: {paper.non_arxiv_citation_count ?? 0}</span>
-        <span>Non-arXiv ref: {paper.non_arxiv_reference_count ?? 0}</span>
-      </div>
-    </div>
-  {/if}
-
   <!-- ── main view area ── -->
-  {#if viewMode === 'graph'}
-    <div class="legend">
-      <span class="legend-item"><span class="dot" style="background:{COLOR_CENTER}"></span> Selected</span>
-      <span class="legend-item"><span class="dot" style="background:{COLOR_CITATION}"></span> Cites</span>
-      <span class="legend-item"><span class="dot" style="background:{COLOR_REFERENCE}"></span> Cited by</span>
-      <span class="legend-item"><span class="dot" style="background:{COLOR_DUMMY}"></span> Non-arXiv</span>
-    </div>
 
+  <!-- Graph view elements: always in DOM so sigma container is preserved -->
+  <div class="legend" style="display:{viewMode === 'graph' ? 'flex' : 'none'}">
+    <span class="legend-item legend-static">
+      <span class="dot" style="background:{COLOR_CENTER}"></span> Selected
+    </span>
+    <button class="legend-item legend-toggle" class:muted={!showCitations}
+      on:click={() => { showCitations = !showCitations; }}
+      title="Click to show/hide citations">
+      <span class="dot" style="background:{COLOR_CITATION};opacity:{showCitations ? 1 : 0.3}"></span>
+      Cites
+    </button>
+    <button class="legend-item legend-toggle" class:muted={!showReferences}
+      on:click={() => { showReferences = !showReferences; }}
+      title="Click to show/hide cited-by">
+      <span class="dot" style="background:{COLOR_REFERENCE};opacity:{showReferences ? 1 : 0.3}"></span>
+      Cited by
+    </button>
+    <button class="legend-item legend-toggle" class:muted={!showNonArxiv}
+      on:click={() => { showNonArxiv = !showNonArxiv; }}
+      title="Click to show/hide non-arXiv nodes">
+      <span class="dot" style="background:{COLOR_DUMMY};opacity:{showNonArxiv ? 1 : 0.3}"></span>
+      Non-arXiv
+    </button>
+  </div>
+
+  {#if viewMode === 'graph'}
     {#if loading}
       <div class="overlay"><div class="spinner"></div><p>Loading citation network…</p></div>
     {:else if errorMsg}
       <div class="overlay error"><p>{errorMsg}</p></div>
     {/if}
+  {/if}
 
-    <div class="sigma-container" bind:this={container}></div>
+  <!-- sigma container: always rendered so Sigma keeps its WebGL context -->
+  <div class="sigma-container" style="display:{viewMode === 'graph' ? 'block' : 'none'}" bind:this={container}></div>
 
-  {:else}
+  {#if viewMode === 'relation'}
     <div class="relation-placeholder">
-      <div class="placeholder-icon">🔭</div>
       <h3>Relation View</h3>
       <p>This view will display the selected paper alongside 100 semantically related papers based on embedding similarity.</p>
       <p class="placeholder-hint">Coming soon.</p>
@@ -396,123 +381,7 @@
     color: var(--text-secondary, #a8a8c8);
   }
 
-  .top-actions {
-    margin-left: auto;
-    display: flex;
-    gap: 6px;
-  }
-
-  .icon-btn {
-    background: var(--glass-bg, rgba(20, 22, 50, 0.55));
-    border: 1px solid var(--glass-border, rgba(255,255,255,0.08));
-    color: var(--text-muted, #6b6b8d);
-    border-radius: var(--radius-sm, 8px);
-    padding: 5px 12px;
-    cursor: pointer;
-    font-size: 12px;
-    transition: all var(--transition-fast, 0.15s ease);
-  }
-  .icon-btn:hover, .icon-btn.active {
-    background: rgba(147, 51, 234, 0.18);
-    color: var(--text-primary, #f0f0f8);
-    border-color: rgba(147, 51, 234, 0.35);
-  }
-
-  /* ── filter bar ── */
-  .filter-bar {
-    display: flex;
-    gap: 8px;
-    padding: 8px 14px;
-    background: var(--bg-secondary, #141530);
-    border-bottom: 1px solid var(--glass-border, rgba(255,255,255,0.06));
-    flex-shrink: 0;
-    flex-wrap: wrap;
-  }
-
-  .filter-chip {
-    display: flex;
-    align-items: center;
-    gap: 5px;
-    padding: 4px 10px;
-    border-radius: 999px;
-    border: 1px solid var(--glass-border, rgba(255,255,255,0.10));
-    background: rgba(255,255,255,0.04);
-    color: var(--text-muted, #6b6b8d);
-    cursor: pointer;
-    font-size: 12px;
-    transition: all var(--transition-fast, 0.15s ease);
-    user-select: none;
-  }
-  .filter-chip input { display: none; }
-  .filter-chip.active {
-    border-color: rgba(147,51,234,0.35);
-    background: rgba(147,51,234,0.12);
-    color: var(--text-primary, #f0f0f8);
-  }
-
-  /* ── info panel ── */
-  .info-panel {
-    padding: 12px 16px;
-    background: var(--bg-secondary, #141530);
-    border-bottom: 1px solid var(--glass-border, rgba(255,255,255,0.08));
-    flex-shrink: 0;
-    max-height: 45vh;
-    overflow-y: auto;
-  }
-
-  .info-title {
-    margin: 0 0 6px;
-    font-size: 15px;
-    color: var(--text-primary, #f0f0f8);
-    line-height: 1.4;
-    font-weight: 600;
-  }
-
-  .info-meta {
-    margin: 2px 0;
-    font-size: 12px;
-    color: var(--text-muted, #6b6b8d);
-  }
-
-  .info-link {
-    display: inline-block;
-    margin: 4px 0;
-    font-size: 12px;
-    color: var(--accent-cyan, #22d3ee);
-    text-decoration: none;
-  }
-  .info-link:hover { text-decoration: underline; }
-
-  .info-abstract { margin: 8px 0 0; }
-
-  .abstract-toggle {
-    background: none;
-    border: none;
-    color: var(--accent-purple, #9333ea);
-    cursor: pointer;
-    font-size: 12px;
-    padding: 0;
-    margin-bottom: 4px;
-    font-weight: 500;
-  }
-
-  .abstract-text {
-    margin: 4px 0;
-    font-size: 12px;
-    color: var(--text-secondary, #a8a8c8);
-    line-height: 1.5;
-  }
-  .abstract-text.muted { color: var(--text-muted, #6b6b8d); }
-
-  .info-stats {
-    display: flex;
-    gap: 14px;
-    margin-top: 8px;
-    font-size: 11px;
-    color: var(--accent-cyan, #22d3ee);
-    opacity: 0.75;
-    flex-wrap: wrap;
-  }
+  .top-actions { display: none; }
 
   .sigma-container {
     flex: 1;
@@ -532,10 +401,26 @@
     gap: 14px;
     font-size: 12px;
     color: var(--text-secondary, #a8a8c8);
-    pointer-events: none;
+    pointer-events: auto;
     backdrop-filter: blur(var(--glass-blur, 16px));
   }
   .legend-item { display: flex; align-items: center; gap: 5px; }
+  .legend-static { cursor: default; user-select: none; }
+  .legend-toggle {
+    background: none;
+    border: none;
+    color: var(--text-secondary, #a8a8c8);
+    cursor: pointer;
+    font-size: 12px;
+    padding: 0;
+    display: flex;
+    align-items: center;
+    gap: 5px;
+    transition: color 0.15s ease;
+    border-radius: 4px;
+  }
+  .legend-toggle:hover { color: var(--text-primary, #f0f0f8); }
+  .legend-toggle.muted  { color: var(--text-muted, #6b6b8d); }
   .dot {
     width: 10px;
     height: 10px;
