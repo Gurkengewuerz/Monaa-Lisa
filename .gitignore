@@ -191,6 +191,5 @@ semantic_api_key.txt
 MonaaLisa_dataset_full.jsonl
 
 # Data directory (dataset downloads, ML models)
-data/
 *.pkl
 *.jsonl
