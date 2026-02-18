@@ -26,11 +26,14 @@ services:
         condition: service_healthy
     environment:
       DATABASE_URL: postgresql+psycopg2://${POSTGRES_USER}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB}
+      PYTHONPATH: /app/MonaaLisa/src
       SEMANTIC_SCHOLAR_API_KEY: ${SEMANTIC_SCHOLAR_API_KEY:-}
+      DATA_DIR: /app/data
     volumes:
       - ./MonaaLisa/src:/app/MonaaLisa/src
       - python_cache:/root/.cache/pip
-    command: ["/bin/sh", "-c", "export PYTHONPATH=/app/MonaaLisa/src && python MonaaLisa/src/Database/db.py && python MonaaLisa/src/main.py"]
+      - app_data:/app/data
+    command: ["/bin/sh", "-c", "python MonaaLisa/src/Database/db.py && python MonaaLisa/src/main.py"]
 
   backend:
     image: node:20
@@ -52,24 +55,6 @@ services:
     stdin_open: true
     tty: true
 
-  playground:
-    build:
-      context: .
-      target: app
-    image: monaa-lisa-app:latest
-    depends_on:
-      db:
-        condition: service_healthy
-    environment:
-      DATABASE_URL: postgresql+psycopg2://${POSTGRES_USER}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB}
-      PYTHONPATH: /app/MonaaLisa/src
-      SEMANTIC_SCHOLAR_API_KEY: ${SEMANTIC_SCHOLAR_API_KEY:-}
-    volumes:
-      - ./MonaaLisa/src:/app/MonaaLisa/src
-    working_dir: /app
-    profiles:
-      - playground
-    command: [ "python", "MonaaLisa/src/playground/playground_manager.py" ]
 
   frontend:
     build:
@@ -85,18 +70,6 @@ services:
       - /app/node_modules
     environment:
       VITE_API_URL: "http://backend:3000"
-
-  grobid:
-    image: lfoppiano/grobid:latest-develop
-    ports:
-      - "8070:8070"
-    depends_on:
-      - app
-    healthcheck:
-      test: [ "CMD", "curl", "-f", "http://localhost:8070/api/isalive" ]
-      interval: 30s
-      timeout: 10s
-      retries: 5
 
   import:
     build:
@@ -120,3 +93,4 @@ volumes:
   pgdata:
   python_cache:
   backend_node_modules:
+  app_data:
