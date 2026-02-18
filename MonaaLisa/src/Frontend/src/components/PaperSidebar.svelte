@@ -650,7 +650,7 @@
     transform: translateY(-50%) scale(1.05);
   }
   .sidebar-toggle.open {
-    right: 385px;
+    right: calc(var(--sidebar-width, 385px) - 5px);
     border-radius: 0 50% 50% 0;
   }
   .toggle-icon { font-size: 16px; font-weight: bold; }
@@ -660,7 +660,8 @@
     position: absolute;
     right: -400px;
     top: 0;
-    width: 385px;
+    --sidebar-width: 385px;
+    width: var(--sidebar-width);
     height: 100%;
     background: var(--bg-secondary, #141530);
     border-left: 1px solid var(--glass-border, rgba(255,255,255,0.08));
