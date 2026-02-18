@@ -2,7 +2,7 @@
   <div class="header-accent-line"></div>
   <div class="header-inner">
     <span class="header-logo">M-L</span>
-    <h1 class="header-title">Monaa-Lisa <span class="header-divider">—</span> <span class="header-subtitle">Academic Paper Visualization</span></h1>
+    <h1 class="header-title">Monaa-Lisa <span class="header-divider">-</span> <span class="header-subtitle">Academic Paper Visualization</span></h1>
   </div>
 </div>
 
