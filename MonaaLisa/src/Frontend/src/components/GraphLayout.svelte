@@ -4,24 +4,32 @@
     top → subcategory → papers → paper detail
 -->
 <script lang="ts">
+  import { onMount } from 'svelte';
   import ClusterGraph from './ClusterGraph.svelte';
   import Graph from './Graph.svelte';
   import PaperDetailGraph from './PaperDetailGraph.svelte';
   import Header from './Header.svelte';
   import Sidebar from './Sidebar.svelte';
+  import PaperSidebar from './PaperSidebar.svelte';
   import MetricCards from './MetricCards.svelte';
-  import type { ApiPaper, Paper, PapersResponse, ClusterNode, ViewState } from '$lib/types/paper';
+  import type { ApiPaper, Paper, PapersResponse, ClusterNode, ViewState, PaperSession } from '$lib/types/paper';
   import { env as publicEnv } from '$env/dynamic/public';
   import clusterData from '../utils/arxiv_cluster_data.json';
 
   const API_BASE_URL = publicEnv.PUBLIC_API_BASE_URL || 'http://localhost:3000';
-  const PAPER_LIMIT = 5000;
+  const PAPER_LIMIT  = 5000;
+  const SIDEBAR_SAMPLE = 50;   // papers shown in sidebar at cluster levels
+  const MAX_HISTORY  = 5;
+  const HISTORY_KEY  = 'monaalisa_paper_sessions_v1';
 
   // ─── navigation state ─────────────────────────────────────────────
   let view: ViewState = { level: 'top' };
 
   // paper data (only loaded at papers/detail level)
   let papers: Paper[] = [];
+  // sample papers for sidebar in cluster views (top / sub)
+  let sidebarSamplePapers: Paper[] = [];
+
   let sidebarOpen = false;
   let selectedPaperId: string | null = null;
   let loading = false;
@@ -29,6 +37,56 @@
 
   // colour of the current parent category (passed to subcategory + papers)
   let currentCategoryColor: string = '#4a9eff';
+
+  // ─── arXiv neighbourhood counts (from PaperDetailGraph) ──────────
+  let arxivCitationCount: number | undefined = undefined;
+  let arxivReferenceCount: number | undefined = undefined;
+
+  // ─── paper browsing history (localStorage) ────────────────────────
+  let sessions: PaperSession[] = loadSessions();
+
+  function loadSessions(): PaperSession[] {
+    try {
+      const raw = typeof localStorage !== 'undefined' ? localStorage.getItem(HISTORY_KEY) : null;
+      return raw ? JSON.parse(raw) : [];
+    } catch { return []; }
+  }
+
+  function saveSessions(list: PaperSession[]) {
+    try {
+      if (typeof localStorage !== 'undefined') {
+        localStorage.setItem(HISTORY_KEY, JSON.stringify(list));
+      }
+    } catch {}
+  }
+
+  function addSession(paper: Paper) {
+    const newSession: PaperSession = {
+      id: `${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+      mainPaper: { entry_id: paper.entry_id, title: paper.title, authors: paper.authors },
+      startedAt: Date.now(),
+    };
+    sessions = [newSession, ...sessions.filter(s => s.mainPaper.entry_id !== paper.entry_id)].slice(0, MAX_HISTORY);
+    saveSessions(sessions);
+    return newSession.id;
+  }
+
+  function deleteSessionById(sessionId: string) {
+    sessions = sessions.filter(s => s.id !== sessionId);
+    saveSessions(sessions);
+  }
+
+  // ─── category prefix for sub-level sidebar loading ────────────────
+  const CLUSTER_CAT_PREFIX: Record<string, string> = {
+    computer_science:       'cs.',
+    mathematics:            'math.',
+    statistics:             'stat.',
+    electrical_engineering: 'eess.',
+    quantitative_biology:   'q-bio.',
+    quantitative_finance:   'q-fin.',
+    economics:              'econ.',
+    physics:                '',   // no single common prefix
+  };
 
   // reactive cluster count for metric cards
   $: currentClusterCount = (() => {
@@ -101,7 +159,7 @@
     }
 
     if (v.level === 'detail') {
-      crumbs.push({ label: truncate(v.paper.title, 35), action: () => {} });
+      crumbs.push({ label: v.paper.title, action: () => {} });
     }
 
     return crumbs;
@@ -117,6 +175,7 @@
     view = { level: 'sub', parentName: e.detail.name, parentId: e.detail.id };
     papers = [];
     error = null;
+    loadSamplePapers('sub', e.detail.id);
   }
 
   function handleSubClusterClick(e: CustomEvent<{ id: string; name: string; color: string }>) {
@@ -133,9 +192,13 @@
 
   function handlePaperSelected(e: CustomEvent<Paper>) {
     if (view.level !== 'papers') return;
+    const paper = e.detail;
+    arxivCitationCount  = undefined;
+    arxivReferenceCount = undefined;
+    addSession(paper);
     view = {
       level: 'detail',
-      paper: e.detail,
+      paper,
       categoryId: view.categoryId,
       categoryName: view.categoryName,
       parentName: view.parentName,
@@ -144,6 +207,8 @@
 
   function handleDetailBack() {
     if (view.level !== 'detail') return;
+    arxivCitationCount  = undefined;
+    arxivReferenceCount = undefined;
     view = {
       level: 'papers',
       categoryId: view.categoryId,
@@ -155,14 +220,33 @@
   function handleSidebarSelect(e: CustomEvent<Paper>) {
     // In papers view: navigate to detail
     if (view.level === 'papers') {
+      const paper = e.detail;
+      arxivCitationCount  = undefined;
+      arxivReferenceCount = undefined;
+      addSession(paper);
       view = {
         level: 'detail',
-        paper: e.detail,
+        paper,
         categoryId: view.categoryId,
         categoryName: view.categoryName,
         parentName: view.parentName,
       };
     }
+  }
+
+  /** Called when PaperSidebar emits navigate (double-click on a citation/reference) */
+  function handlePaperSidebarNavigate(e: CustomEvent<Paper>) {
+    if (view.level !== 'detail') return;
+    const paper = e.detail;
+    arxivCitationCount  = undefined;
+    arxivReferenceCount = undefined;
+    view = {
+      level: 'detail',
+      paper,
+      categoryId: view.categoryId,
+      categoryName: view.categoryName,
+      parentName: view.parentName,
+    };
   }
 
   function handleToggleSidebar() {
@@ -171,6 +255,45 @@
 
   function handleNodeDeselected() {
     selectedPaperId = null;
+  }
+
+  function handleNeighbourhoodLoaded(e: CustomEvent<{ citationCount: number; referenceCount: number }>) {
+    arxivCitationCount  = e.detail.citationCount;
+    arxivReferenceCount = e.detail.referenceCount;
+  }
+
+  function handleDeleteSession(e: CustomEvent<string>) {
+    deleteSessionById(e.detail);
+  }
+
+  async function handleRestoreSession(e: CustomEvent<PaperSession>) {
+    const session = e.detail;
+    // Fetch the full paper from the API
+    try {
+      const res = await fetch(
+        `${API_BASE_URL}/papers?search=${encodeURIComponent(session.mainPaper.entry_id)}&take=1`
+      );
+      if (!res.ok) throw new Error();
+      const payload = await res.json();
+      const rawItems: ApiPaper[] = Array.isArray(payload) ? payload : payload?.items ?? [];
+      const found = rawItems.find(p => p.entry_id === session.mainPaper.entry_id);
+      if (found) {
+        const paper = normalizePaper(found, 0, 1);
+        if (paper) {
+          arxivCitationCount  = undefined;
+          arxivReferenceCount = undefined;
+          // Navigate to the paper without knowing the category context – use 'Other'
+          if (view.level === 'papers') {
+            view = { level: 'detail', paper, categoryId: view.categoryId, categoryName: view.categoryName, parentName: view.parentName };
+          } else {
+            // Jump back to top and open the detail view without category context
+            view = { level: 'detail', paper, categoryId: '', categoryName: 'History', parentName: '' };
+          }
+        }
+      }
+    } catch {
+      // ignore restoration errors
+    }
   }
 
   // ─── data loading ─────────────────────────────────────────────────
@@ -190,12 +313,40 @@
         .map((item, i, a) => normalizePaper(item as ApiPaper, i, a.length))
         .filter((p): p is Paper => Boolean(p));
 
+      // sidebar shows all the loaded papers in papers-level view
+      sidebarSamplePapers = papers;
+
       if (!papers.length) error = 'Keine Papers für diese Kategorie gefunden.';
     } catch (err) {
       error = err instanceof Error ? err.message : 'Fehler beim Laden.';
       papers = [];
     } finally {
       loading = false;
+    }
+  }
+
+  /**
+   * Load a sample of papers for the sidebar in top / sub cluster views.
+   * @param level  'top' or 'sub'
+   * @param parentId  cluster id (for sub level); unused at top level
+   */
+  async function loadSamplePapers(level: 'top' | 'sub', parentId?: string) {
+    try {
+      let categoryParam = '';
+      if (level === 'sub' && parentId) {
+        const prefix = CLUSTER_CAT_PREFIX[parentId] ?? '';
+        categoryParam = prefix ? `&categories=${encodeURIComponent(prefix)}` : '';
+      }
+      const url = `${API_BASE_URL}/papers?take=${SIDEBAR_SAMPLE}&skip=0&sort=citations${categoryParam}`;
+      const res = await fetch(url);
+      if (!res.ok) return;
+      const payload = (await res.json()) as Partial<PapersResponse> | ApiPaper[];
+      const rawItems = Array.isArray(payload) ? payload : payload?.items ?? [];
+      sidebarSamplePapers = rawItems
+        .map((item, i, a) => normalizePaper(item as ApiPaper, i, a.length))
+        .filter((p): p is Paper => Boolean(p));
+    } catch {
+      sidebarSamplePapers = [];
     }
   }
 
@@ -212,6 +363,7 @@
       categories: raw.categories ?? null,
       url: raw.url ?? null,
       citations: deriveStringArray(raw.citations),
+      references: deriveStringArray(raw.references),
       non_arxiv_citation_count: raw.non_arxiv_citation_count ?? 0,
       non_arxiv_reference_count: raw.non_arxiv_reference_count ?? 0,
       tsne1: 0,
@@ -240,6 +392,11 @@
     if (typeof value === 'string') return value.split(',').map(s => s.trim()).filter(Boolean);
     return [];
   }
+
+  // ─── load initial sample papers for top-level sidebar ────────────
+  onMount(() => {
+    loadSamplePapers('top');
+  });
 </script>
 
 <!-- main app container -->
@@ -247,7 +404,13 @@
   <Header />
 
   <!-- metric cards row -->
-  <MetricCards {view} paperCount={papers.length} clusterCount={currentClusterCount} />
+  <MetricCards
+    {view}
+    paperCount={papers.length}
+    clusterCount={currentClusterCount}
+    {arxivCitationCount}
+    {arxivReferenceCount}
+  />
 
   <!-- breadcrumb bar -->
   <nav class="breadcrumbs">
@@ -256,7 +419,10 @@
       {#if i < breadcrumbs.length - 1}
         <button class="crumb" on:click={crumb.action}>{crumb.label}</button>
       {:else}
-        <span class="crumb current">{crumb.label}</span>
+        <!-- Last crumb: full paper title (truncated to keep breadcrumb manageable) -->
+        <span class="crumb current" title={crumb.label}>
+          {crumb.label.length > 80 ? crumb.label.slice(0, 80) + '…' : crumb.label}
+        </span>
       {/if}
     {/each}
   </nav>
@@ -308,14 +474,28 @@
           paper={view.paper}
           apiBaseUrl={API_BASE_URL}
           on:back={handleDetailBack}
+          on:neighbourhoodLoaded={handleNeighbourhoodLoaded}
         />
       {/if}
     </div>
 
     <!-- ── right sidebar panel ── -->
-    {#if view.level === 'papers' && !loading && !error}
+    {#if view.level === 'detail'}
+      <!-- Paper sidebar with citations, references, history -->
+      <PaperSidebar
+        paper={view.paper}
+        apiBaseUrl={API_BASE_URL}
+        isOpen={sidebarOpen}
+        {sessions}
+        on:toggle={handleToggleSidebar}
+        on:navigate={handlePaperSidebarNavigate}
+        on:deleteSession={handleDeleteSession}
+        on:restoreSession={handleRestoreSession}
+      />
+    {:else}
+      <!-- Category sidebar with paper list -->
       <Sidebar
-        {papers}
+        papers={view.level === 'papers' ? papers : sidebarSamplePapers}
         isOpen={sidebarOpen}
         {selectedPaperId}
         on:toggle={handleToggleSidebar}

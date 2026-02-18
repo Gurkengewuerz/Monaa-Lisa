@@ -399,6 +399,9 @@
 
   // label display: show abbreviation when zoomed out, full name when zoomed in
   const LABEL_FULL_SCALE = 0.9; // >= show full name, < show abbreviation (tweakable)
+  // zoom limits
+  const MIN_SCALE = 0.18; // how far out the user can zoom
+  const MAX_SCALE = 20;
 
   function abbrevName(name: string): string {
     if (!name) return '';
@@ -510,7 +513,7 @@
     const mx = e.clientX - rect.left;
     const my = e.clientY - rect.top;
     const factor = e.deltaY > 0 ? 0.9 : 1.1;
-    const newScale = Math.max(0.1, Math.min(view.scale * factor, 20));
+    const newScale = Math.max(MIN_SCALE, Math.min(view.scale * factor, MAX_SCALE));
     const ratio = newScale / view.scale;
     view = {
       scale:   newScale,

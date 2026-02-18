@@ -10,17 +10,28 @@
   export let view: ViewState;
   export let paperCount: number = 0;
   export let clusterCount: number = 0;
+  /** arXiv citations count – provided after PaperDetailGraph fetches neighbourhood */
+  export let arxivCitationCount: number | undefined = undefined;
+  /** arXiv references (cited-by) count – provided after PaperDetailGraph fetches */
+  export let arxivReferenceCount: number | undefined = undefined;
 
   interface Card {
     label: string;
     value: string;
+    subValue?: string;
     icon: string;
     accent: string; /* gradient class */
   }
 
-  $: cards = buildCards(view, paperCount, clusterCount);
+  $: cards = buildCards(view, paperCount, clusterCount, arxivCitationCount, arxivReferenceCount);
 
-  function buildCards(v: ViewState, pCount: number, cCount: number): Card[] {
+  function buildCards(
+    v: ViewState,
+    pCount: number,
+    cCount: number,
+    arxivCit?: number,
+    arxivRef?: number,
+  ): Card[] {
     if (v.level === 'top') {
       return [
         { label: 'View', value: 'All Categories', icon: '◎', accent: 'purple' },
@@ -46,11 +57,21 @@
       ];
     }
     if (v.level === 'detail') {
+      const nonArxivTotal =
+        (v.paper.non_arxiv_citation_count ?? 0) + (v.paper.non_arxiv_reference_count ?? 0);
+      const citStr = arxivCit !== undefined ? String(arxivCit) : '…';
+      const refStr = arxivRef !== undefined ? String(arxivRef) : '…';
       return [
         { label: 'Category', value: v.parentName, icon: '◎', accent: 'purple' },
         { label: 'Subcategory', value: v.categoryName, icon: '⬡', accent: 'magenta' },
-        { label: 'Paper', value: truncate(v.paper.title, 20), icon: '◈', accent: 'cyan' },
-        { label: 'Citations', value: String(v.paper.citations.length), icon: '◉', accent: 'blue' },
+        { label: 'Paper', value: truncate(v.paper.title, 22), icon: '◈', accent: 'cyan' },
+        {
+          label: 'Citations',
+          value: `${citStr} cit · ${refStr} ref`,
+          subValue: `${nonArxivTotal} non-arXiv`,
+          icon: '◉',
+          accent: 'blue',
+        },
       ];
     }
     return [];
@@ -71,6 +92,9 @@
           <span class="card-label">{card.label}</span>
         </div>
         <div class="card-value" title={card.value}>{card.value}</div>
+        {#if card.subValue}
+          <div class="card-sub-value">{card.subValue}</div>
+        {/if}
       </div>
     </div>
   {/each}
@@ -175,6 +199,15 @@
     overflow: hidden;
     text-overflow: ellipsis;
     line-height: 1.3;
+  }
+
+  .card-sub-value {
+    font-size: 10px;
+    color: var(--text-muted, #6b6b8d);
+    margin-top: 2px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
   }
 
   @media (max-width: 768px) {

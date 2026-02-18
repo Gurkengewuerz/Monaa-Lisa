@@ -140,15 +140,21 @@
   //badges next to the papers in the sidebar
   //colors by cluster identifiers (falls back to grey when missing)
   //todo: remove when backend provides cluster colors or make dynamic
-  /*const clusterColors: Record<string, string> = {
-    A: '#CC6666',
-    B: '#66B2B2',
-    C: '#9966CC',
-    D: '#CC66B2',
-    E: '#6699CC',
-    F: '#FF4500',
-    G: '#00CED1',
-  };*/
+
+  /** Extract the first (primary) category from a space/comma-separated categories string */
+  function getFirstCategory(categories: string | null | undefined): string {
+    if (!categories) return 'N/A';
+    // categories may be "cs.AI cs.LG math.OC" (space-sep) or "cs.AI,cs.LG" (comma-sep)
+    return categories.trim().split(/[\s,]+/)[0] ?? categories;
+  }
+
+  /** Short badge label: show the part after the last dot (e.g. "AI") or the full code if short */
+  function badgeLabel(categories: string | null | undefined): string {
+    const cat = getFirstCategory(categories);
+    const parts = cat.split('.');
+    if (parts.length > 1) return parts[parts.length - 1].toUpperCase().slice(0, 4);
+    return cat.slice(0, 5).toUpperCase();
+  }
 </script>
 
 <!-- sidebar toggle button -->
@@ -192,8 +198,12 @@
           data-paper-id={paper.entry_id}
           on:click|stopPropagation={() => selectPaper(paper)}
         >
-          <div class="paper-cluster" style="background-color: {getClusterColor(paper.categories, paper.cluster)}">
-            {paper.cluster}
+          <div 
+            class="paper-cluster" 
+            style="background-color: {getClusterColor(paper.categories, paper.cluster)}"
+            title={paper.categories ?? ''}
+          >
+            {badgeLabel(paper.categories)}
           </div>
           <div class="paper-info">
             <h4>{paper.title}</h4>
@@ -242,46 +252,49 @@
     right: -5px;
     top: 50%;
     transform: translateY(-50%);
-    background-color: #4a9eff;
+    background: linear-gradient(135deg, var(--accent-purple, #9333ea), var(--accent-magenta, #e839a0));
     border: none;
     border-radius: 50% 0 0 50%;
-    width: 40px;
-    height: 60px;
+    width: 36px;
+    height: 56px;
     color: white;
     cursor: pointer;
     z-index: 200;
-    transition: all 0.3s ease;
+    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
     display: flex;
     align-items: center;
     justify-content: center;
+    box-shadow: 0 0 15px rgba(147, 51, 234, 0.3);
   }
 
   .sidebar-toggle:hover {
-    background-color: #357abd;
+    box-shadow: 0 0 25px rgba(147, 51, 234, 0.5), 0 0 50px rgba(34, 211, 238, 0.2);
+    transform: translateY(-50%) scale(1.05);
   }
 
   .sidebar-toggle.open {
-    right: 350px;
+    right: 360px;
     border-radius: 0 50% 50% 0;
   }
 
   .toggle-icon {
-    font-size: 18px;
+    font-size: 16px;
     font-weight: bold;
   }
 
   .sidebar {
     position: absolute;
-    right: -370px;
+    right: -380px;
     top: 0;
     width: 370px;
     height: 100%;
-    background-color: #2a2a35;
-    border-left: 1px solid #3a3a45;
-    transition: right 0.3s ease;
+    background: var(--bg-secondary, #141530);
+    border-left: 1px solid var(--glass-border, rgba(255,255,255,0.08));
+    transition: right 0.3s cubic-bezier(0.4, 0, 0.2, 1);
     z-index: 150;
     display: flex;
     flex-direction: column;
+    backdrop-filter: blur(20px);
   }
 
   .sidebar.open {
@@ -289,35 +302,41 @@
   }
 
   .sidebar-header {
-    padding: 1rem;
-    border-bottom: 1px solid #3a3a45;
+    padding: 14px 16px;
+    border-bottom: 1px solid var(--glass-border, rgba(255,255,255,0.08));
     display: flex;
     justify-content: space-between;
     align-items: center;
+    background: linear-gradient(180deg, rgba(147,51,234,0.06), transparent);
   }
 
   .sidebar-header h3 {
     margin: 0;
-    color: white;
-    font-size: 18px;
+    color: var(--text-primary, #f0f0f8);
+    font-size: 16px;
+    font-weight: 600;
+    letter-spacing: 0.3px;
   }
 
   .close-btn {
     background: none;
     border: none;
-    color: #999;
-    font-size: 24px;
+    color: var(--text-muted, #6b6b8d);
+    font-size: 22px;
     cursor: pointer;
     padding: 0;
-    width: 30px;
-    height: 30px;
+    width: 28px;
+    height: 28px;
     display: flex;
     align-items: center;
     justify-content: center;
+    border-radius: var(--radius-sm, 8px);
+    transition: all var(--transition-fast, 0.15s ease);
   }
 
   .close-btn:hover {
-    color: white;
+    color: var(--text-primary, #f0f0f8);
+    background: rgba(147, 51, 234, 0.15);
   }
 
   .sidebar-tools {
@@ -325,8 +344,8 @@
     align-items: center;
     gap: 0.5rem;
     padding: 0.5rem 0.75rem;
-    border-bottom: 1px solid #3a3a45;
-    flex-wrap: nowrap; /* Prevents the button from wrapping underneath the search bar */
+    border-bottom: 1px solid var(--glass-border, rgba(255,255,255,0.08));
+    flex-wrap: nowrap;
   }
 
   .search {
@@ -336,13 +355,24 @@
 
   .search input {
     width: 100%;
-    max-width: 200px; /* Limits the search bar width to prevent it from getting too big */
-    padding: 0.5rem 2rem 0.5rem 0.5rem;
-    border: 1px solid #3a3a45;
-    border-radius: 4px;
-    background: #1f1f29;
-    color: #e6e6e6;
+    max-width: 200px;
+    padding: 0.45rem 2rem 0.45rem 0.6rem;
+    border: 1px solid var(--border-subtle, rgba(147,51,234,0.18));
+    border-radius: var(--radius-sm, 8px);
+    background: rgba(15, 16, 32, 0.6);
+    color: var(--text-primary, #f0f0f8);
     outline: none;
+    font-size: 13px;
+    transition: border-color var(--transition-fast, 0.15s ease);
+  }
+
+  .search input:focus {
+    border-color: rgba(147, 51, 234, 0.45);
+    box-shadow: 0 0 10px rgba(147, 51, 234, 0.15);
+  }
+
+  .search input::placeholder {
+    color: var(--text-muted, #6b6b8d);
   }
 
   .search .clear {
@@ -352,25 +382,33 @@
     transform: translateY(-50%);
     background: none;
     border: none;
-    color: #bbb;
+    color: var(--text-muted, #6b6b8d);
     cursor: pointer;
     padding: 0 6px;
     height: 100%;
+    transition: color var(--transition-fast, 0.15s ease);
+  }
+
+  .search .clear:hover {
+    color: var(--accent-magenta, #e839a0);
   }
 
   .show-all {
-    flex-shrink: 0; /* Prevents the button from shrinking and getting cut off */
-    background: #44495d;
-    color: #e6e6e6;
-    border: 1px solid #3a3a45;
-    border-radius: 4px;
-    padding: 0.45rem 0.6rem;
+    flex-shrink: 0;
+    background: rgba(147, 51, 234, 0.12);
+    color: var(--text-primary, #f0f0f8);
+    border: 1px solid var(--border-subtle, rgba(147,51,234,0.18));
+    border-radius: var(--radius-sm, 8px);
+    padding: 0.4rem 0.6rem;
     cursor: pointer;
     white-space: nowrap;
+    font-size: 12px;
+    transition: all var(--transition-fast, 0.15s ease);
   }
 
   .show-all:hover {
-    background: #50566e;
+    background: rgba(147, 51, 234, 0.22);
+    border-color: rgba(147, 51, 234, 0.35);
   }
 
   .sidebar-content {
@@ -380,40 +418,43 @@
   }
 
   .empty {
-    color: #bbb;
-    padding: 1rem;
-    font-size: 14px;
+    color: var(--text-muted, #6b6b8d);
+    padding: 1.5rem;
+    font-size: 13px;
+    text-align: center;
   }
 
   .paper-item {
-    padding: 1rem;
-    border-bottom: 1px solid #3a3a45;
+    padding: 12px 14px;
+    border-bottom: 1px solid var(--glass-border, rgba(255,255,255,0.06));
     cursor: pointer;
-    transition: background-color 0.2s;
+    transition: all var(--transition-fast, 0.15s ease);
     display: flex;
     gap: 0.75rem;
   }
 
   .paper-item:hover {
-    background-color: #3a3a45;
+    background: rgba(147, 51, 234, 0.08);
   }
 
   .paper-item.selected {
-    background-color: #4a9eff20;
-    border-left: 3px solid #4a9eff;
+    background: rgba(147, 51, 234, 0.12);
+    border-left: 3px solid var(--accent-purple, #9333ea);
+    box-shadow: inset 4px 0 15px rgba(147, 51, 234, 0.1);
   }
 
   .paper-cluster {
-    width: 30px;
-    height: 30px;
+    width: 28px;
+    height: 28px;
     border-radius: 50%;
     display: flex;
     align-items: center;
     justify-content: center;
     color: white;
     font-weight: bold;
-    font-size: 12px;
+    font-size: 11px;
     flex-shrink: 0;
+    box-shadow: 0 0 8px rgba(0,0,0,0.3);
   }
 
   .paper-info {
@@ -422,24 +463,25 @@
   }
 
   .paper-info h4 {
-    margin: 0 0 0.5rem 0;
-    font-size: 14px;
-    color: white;
+    margin: 0 0 0.4rem 0;
+    font-size: 13px;
+    color: var(--text-primary, #f0f0f8);
     line-height: 1.3;
     word-wrap: break-word;
+    font-weight: 500;
   }
 
   .paper-authors {
-    margin: 0 0 0.5rem 0;
-    font-size: 12px;
-    color: #999;
+    margin: 0 0 0.4rem 0;
+    font-size: 11px;
+    color: var(--text-muted, #6b6b8d);
     font-style: italic;
   }
 
   .paper-summary {
-    margin: 0 0 0.5rem 0;
-    font-size: 12px;
-    color: #ccc;
+    margin: 0 0 0.4rem 0;
+    font-size: 11px;
+    color: var(--text-secondary, #a8a8c8);
     line-height: 1.4;
   }
 
@@ -447,45 +489,51 @@
     display: flex;
     justify-content: space-between;
     font-size: 11px;
-    color: #999;
+    color: var(--text-muted, #6b6b8d);
   }
 
   .citations {
     cursor: pointer;
-    color: #4a9eff;
+    color: var(--accent-cyan, #22d3ee);
     background: none;
     border: none;
     padding: 0;
-    text-decoration: underline;
+    font-size: 11px;
+    transition: color var(--transition-fast, 0.15s ease);
+  }
+
+  .citations:hover {
+    color: var(--accent-magenta, #e839a0);
   }
 
   .cited-papers {
     margin-top: 0.5rem;
     padding-left: 0.75rem;
-    border-left: 2px solid #4a9eff;
+    border-left: 2px solid var(--accent-purple, #9333ea);
   }
 
   .cited-paper-item {
-    padding: 0.5rem;
-    background-color: #3a3a45;
+    padding: 0.4rem 0.5rem;
+    background: rgba(147, 51, 234, 0.08);
     margin-bottom: 0.25rem;
-    border-radius: 4px;
+    border-radius: var(--radius-sm, 8px);
     cursor: pointer;
+    transition: all var(--transition-fast, 0.15s ease);
   }
 
   .cited-paper-item:hover {
-    background-color: #4a4a55;
+    background: rgba(147, 51, 234, 0.16);
   }
 
   .cited-paper-item h5 {
     margin: 0 0 0.15rem 0;
-    font-size: 12px;
-    color: white;
+    font-size: 11px;
+    color: var(--text-primary, #f0f0f8);
   }
 
   .cited-paper-item p {
     margin: 0;
     font-size: 10px;
-    color: #ccc;
+    color: var(--text-secondary, #a8a8c8);
   }
 </style>
