@@ -1,374 +1,175 @@
-import queue
+"""
+Abstract: Entry point of the SemanticPaper application (refactored).
 
-from object.paper import Paper
-from object.citation import Citation
-from object.paper_citation import PaperCitation
-from object.paper_reference import PaperReference
-from object.reference import Reference
+New flow:
+    1. First run  → download dataset + models from Google Drive → import into DB
+    2. Every run  → ensure pre-trained models (PCA + UMAP) are present
+    3. Load the EmbeddingPipeline (768→128→2D)
+    4. Run an immediate incremental update (arXiv gap-fill)
+    5. Schedule monthly incremental updates and bi-weekly uncaught-paper retries
+    6. Wait for shutdown signal
+"""
+
+import os
+import sys
+import signal
+import faulthandler
+import time
+from datetime import datetime
+
+from apscheduler.schedulers.background import BackgroundScheduler
+from dotenv import load_dotenv
+
+from config import cfg
+from util.logger import Logger
+from Database.db import is_database_empty, engine
+from Database.db_models import db_base
 from SemanticPaper.api.semantic_scholar import SemanticScholarAPI
 from SemanticPaper.api.arxiv import ArxivAPI
-from SemanticPaper.machine_learning.mapper import Mapper
-from SemanticPaper.machine_learning.processor import PaperProcessor
-from SemanticPaper.machine_learning.reducer import UMAPReducer
-from SemanticPaper.scheduler import Scheduler
-from util.logger import Logger
-from Database.db import (
-    save_paper_to_db,
-    save_paper_relation,
-    get_all_embeddings,
-    get_embedding_labels,
-    engine,
-    update_paper_projection,
-    get_entry_ids_missing_projection,
+from SemanticPaper.data.downloader import (
+    ensure_all_downloaded,
+    ensure_models_exist,
+    get_dataset_path,
+    cleanup_dataset,
 )
-from Database.db_models import db_base
-from dotenv import load_dotenv
-from config import cfg
-from SemanticPaper.machine_learning.model import Model
-from SemanticPaper.config.category_loader import get_semanticpaper_categories
-import threading
-import faulthandler
-import os
-import signal
-import sys
+from SemanticPaper.data.importer import run_import
+from SemanticPaper.pipeline.embedding_pipeline import EmbeddingPipeline
+from SemanticPaper.pipeline.incremental import (
+    run_incremental_update,
+    retry_uncaught_papers,
+)
 
 logger = Logger("Main")
 
 load_dotenv()
 
-semanticscholar_client = SemanticScholarAPI(os.environ['SEMANTIC_SCHOLAR_API_KEY'])
-arxiv_client = ArxivAPI()
-model = Model(arxiv_client)
-scheduler = Scheduler(arxiv_client)
-reducer = UMAPReducer()
-# Initialize the embedding cache, which will store embeddings of papers to avoid fetching them from the db everytime
-embedding_cache = {}
-embedding_cache_lock = threading.Lock()
-embedding_labels: dict[str, str | None] = {}
-embedding_labels_lock = threading.Lock()
-pending_projection_ids: set[str] = set()
-pending_projection_lock = threading.Lock()
 try:
     faulthandler.enable()
 except Exception:
     pass
-"""
-25-May-2025 - Basti
-Abstract: Loads the local parsed_hashes file
-Args:
-- None
-Returns: Set filled with all parsed/known papers (hashed)
-"""
-def load_known_entry_ids():
-    """Load known entry_ids from the database at startup."""
-    session = None
-    try:
-        from Database.db import SessionLocal
-        from Database.db_models import DBPaper
-        session = SessionLocal()
-        rows = session.query(DBPaper.entry_id).all()
-        return {r.entry_id for r in rows if r.entry_id}
-    except Exception as e:
-        logger.warning(f"Could not preload entry_ids: {e}")
-        return set()
-    finally:
-        if session:
-            session.close()
-"""
-25-May-2025 - Basti
-Abstract: No-op kept for compatibility (dedup now via entry_id in DB)
-"""
-def save_hash(hash_str):
-    pass
 
-"""
-13-August-2025 - Basti
-Abstract: Helper Function for the Entry() Method
-Args:
-- worker_id -> ID of one of x workers that have been assigned
-Returns: None
-"""
-def paper_worker(worker_id, known_ids):
-    logger.info(f"Worker {worker_id} started")
-    while True:
-        paper = scheduler.paper_queue.get()
-        try:
-            if paper is None:
-                return
-            active_categories = get_semanticpaper_categories()
-            if getattr(paper, 'categories', None) and paper.categories not in active_categories:
-                logger.warning(
-                    f"Worker {worker_id}: Category '{paper.categories}' removed; skipping paper '{paper.title}'")
-                continue
-            processor = PaperProcessor(paper, model, reducer)
-            if processor.prepare_paper(known_ids):
-                embedding = processor.create_structured_embedding()
-                if embedding is not None:
-                    processor.paper.embedding = embedding
-                    extract_citations(processor.paper, worker_id)
-                    extract_references(processor.paper, worker_id)
-                    mapper = Mapper(processor.paper)
-                    # Prepare embeddings snapshot for projection and mapping
 
-                    with embedding_cache_lock:
-                        current_embeddings = embedding_cache.copy()
-                    with embedding_labels_lock:
-                        current_labels = embedding_labels.copy()
-                    projection_embeddings = current_embeddings.copy()
-                    projection_embeddings[processor.paper.entry_id] = embedding
-
-                    """ - Basti - 19-December-2025
-                    with projection_labels, we add the current paper's category
-                    to ensure that supervised UMAP has the correct label information
-                    """
-                    projection_labels = current_labels.copy()
-                    projection_labels[processor.paper.entry_id] = processor.paper.categories
-
-                    projection = processor.compute_projection_coordinates(
-                        projection_embeddings,
-                        projection_labels
-                    )
-                    if projection is not None:
-                        # save the projection to the paper in the db
-                        processor.paper.tsne = {"x": projection[0], "y": projection[1], "method": "umap"}
-                    else:
-                        processor.paper.tsne = None
-
-                    relations = mapper.map_paper(current_embeddings)
-                    logger.info(f"Found {len(relations)} relations for {paper.title}")
-                    if save_paper_to_db(processor.paper):
-                        if processor.paper.tsne is None:
-                            mark_projection_pending(processor.paper.entry_id)
-                        for relation in relations:
-                            logger.info(
-                                f"Similar paper: {relation.source_id} with similarity score: {relation.confidence}")
-                            save_paper_relation(relation)
-                        # Save the embedding to the cache
-                        with embedding_cache_lock:
-                            embedding_cache[processor.paper.entry_id] = processor.paper.embedding
-                        with embedding_labels_lock:
-                            embedding_labels[processor.paper.entry_id] = processor.paper.categories
-                        reducer.notify_dataset_change(embedding_cache, embedding_labels)
-                        known_ids.add(processor.paper.entry_id)
-                        backfill_pending_projections()
-        except Exception:
-            logger.error(f"Worker {worker_id}: Unhandled exception while processing paper")
-        finally:
-            scheduler.paper_queue.task_done()
-
-"""
-13-August-2025 - Basti
-Abstract: Entry Point of SemanticPaper
-Args:
-- num_workers: Amount of workers to be used to fetch papers (they do not calculate their embeddings!)
-Returns: None
-"""
-def main(num_workers: int = 5):
+def main():
     log_level = cfg.get("semanticpaper", "log_level", os.getenv("LOG_LEVEL", "DEBUG"))
     logger.set_level(log_level)
-    logger.info(f"Initializing scheduler system (log level={log_level})...")
+    logger.info(f"SemanticPaper starting (log level={log_level})...")
 
-    known_ids = load_known_entry_ids()
-    logger.info(f"Loaded {len(known_ids)} known entry_ids")
+    # ---- 1. Database Check (WAIT for Prisma) ----
+    # WICHTIG: Wir erstellen keine Tabellen mehr selbst!
+    # Wir warten stattdessen kurz, bis die DB erreichbar ist.
+    logger.info("Checking database connection...")
+    
+    # Einfacher Retry-Loop, falls der DB-Container noch nicht bereit ist
+    for i in range(10):
+        try:
+            with engine.connect() as connection:
+                logger.info("Database connection established.")
+                break
+        except Exception as e:
+            logger.warning(f"Database not ready yet, retrying in 2s... ({e})")
+            time.sleep(2)
+    else:
+        logger.error("Could not connect to database after 20s. Exiting.")
+        sys.exit(1)
+
+    # ---- 2. First-run: download & import ----
+    first_run = is_database_empty()
+    if first_run:
+        logger.info("First run detected – database is empty.")
+        logger.info("Downloading dataset and pre-trained models from Google Drive...")
+
+        if not ensure_all_downloaded():
+            logger.error("Failed to download required files. Exiting.")
+            sys.exit(1)
+
+        dataset_path = get_dataset_path()
+        batch_size = cfg.get_int("semanticpaper", "import_batch_size", int(os.getenv("IMPORT_BATCH_SIZE", "5000")))
+        logger.info(f"Importing dataset from {dataset_path} ...")
+
+        if not run_import(dataset_path, batch_size):
+            logger.error("Dataset import failed. Exiting.")
+            sys.exit(1)
+
+        logger.info("Dataset imported successfully. Cleaning up raw file...")
+        cleanup_dataset()
+    else:
+        logger.info("Existing data found in database.")
+        logger.info("Ensuring pre-trained models are available...")
+        if not ensure_models_exist():
+            logger.error("Failed to ensure ML models are present. Exiting.")
+            sys.exit(1)
+
+    # ---- 3. Load the embedding pipeline ----
+    logger.info("Loading EmbeddingPipeline (PCA + UMAP)...")
     try:
-        db_base.metadata.create_all(bind=engine)
-    except Exception as e:
-        logger.warning(f"Failed to pre-create tables: {e}")
-    logger.info("Loading existing embeddings into cache...")
-    with embedding_cache_lock:
-        embedding_cache.update(get_all_embeddings())
-    with embedding_labels_lock:
-        embedding_labels.update(get_embedding_labels())
-    reducer.bootstrap(embedding_cache, embedding_labels)
-    missing_ids = get_entry_ids_missing_projection()
-    if missing_ids:
-        with pending_projection_lock:
-            pending_projection_ids.update(missing_ids)
-        backfill_pending_projections()
-    logger.info(f"Loaded {len(embedding_cache)} embeddings into cache.")
-    logger.info("Starting scheduler...")
-    scheduler.start_scheduler()
-    if not scheduler.is_running():
-        logger.error("Scheduler failed to start, exiting.")
-        return
+        pipeline = EmbeddingPipeline()
+    except FileNotFoundError as e:
+        logger.error(f"Cannot load pipeline models: {e}")
+        sys.exit(1)
+    logger.info("EmbeddingPipeline ready.")
 
-    logger.info(f"Starting {num_workers} worker threads...")
-    threads = []
-    for i in range(num_workers):
-        t = threading.Thread(target=paper_worker, args=(i+1, known_ids), name=f"Worker-{i+1}")
-        t.start()
-        threads.append(t)
+    # ---- 4. Initialise API clients ----
+    api_key = os.environ.get("SEMANTIC_SCHOLAR_API_KEY", "")
+    s2_client = SemanticScholarAPI(api_key if api_key else None)
+    arxiv_client = ArxivAPI()
 
+    # ---- 5. Schedule periodic tasks ----
+    update_interval_days = cfg.get_int(
+        "semanticpaper", "incremental_update_interval_days",
+        int(os.getenv("INCREMENTAL_UPDATE_INTERVAL_DAYS", "30"))
+    )
+    uncaught_interval_days = cfg.get_int(
+        "semanticpaper", "uncaught_retry_interval_days",
+        int(os.getenv("UNCAUGHT_RETRY_INTERVAL_DAYS", "14"))
+    )
 
+    scheduler = BackgroundScheduler()
 
-    """Graceful shutdown helper - Basti - 13. August 2025"""
+    # Run incremental update immediately, then on schedule
+    scheduler.add_job(
+        run_incremental_update,
+        "interval",
+        days=update_interval_days,
+        next_run_time=datetime.now(),
+        args=[arxiv_client, s2_client, pipeline],
+        id="incremental_update",
+        max_instances=1,
+    )
+    logger.info(f"Scheduled incremental update: every {update_interval_days} days")
+
+    # Uncaught paper retry
+    scheduler.add_job(
+        retry_uncaught_papers,
+        "interval",
+        days=uncaught_interval_days,
+        args=[s2_client, pipeline],
+        id="uncaught_retry",
+        max_instances=1,
+    )
+    logger.info(f"Scheduled uncaught paper retry: every {uncaught_interval_days} days")
+
+    scheduler.start()
+    logger.info("Scheduler started. System is running.")
+
+    # ---- 6. Wait for shutdown ----
     def shutdown(signum, frame):
-        logger.info("Shutdown signal received, stopping workers...")
-        for _ in threads:
-            scheduler.paper_queue.put(None)
-        for t in threads:
-            t.join()
-        logger.info("All workers stopped, exiting.")
+        logger.info("Shutdown signal received...")
+        scheduler.shutdown(wait=False)
+        logger.info("Scheduler stopped. Exiting.")
         sys.exit(0)
 
     signal.signal(signal.SIGINT, shutdown)
     signal.signal(signal.SIGTERM, shutdown)
 
-    logger.info("System running. Press Ctrl+C to stop.")
-    signal.pause()
+    logger.info("Press Ctrl+C to stop.")
+    try:
+        signal.pause()
+    except AttributeError:
+        # signal.pause() not available on Windows
+        import time
+        while True:
+            time.sleep(60)
 
-
-"""
-What does these new functions do?
-14-Dec-2025 - Basti
-
--> UMAP needs to "warm up" with some data, so if I would run a cold start
-with UMAP, a lot of the papers would get NULL Values in the db -> useless
-These methods help to keep track of which papers need to be backfilled later
-"""
-
-
-"""
-14-Dec-2025 - Basti
-Abstract: Marks a paper's projection as pending (to be backfilled later)
-Args:
-- entry_id: -> the entry_id of the paper
-Returns: None
-"""
-def mark_projection_pending(entry_id: str):
-    with pending_projection_lock:
-        pending_projection_ids.add(entry_id)
-
-"""
-14 -Dec-2025 - Basti
-Abstract: Retrieves the list of entry_ids pending projection
-Args:
-- None
-Returns: List of entry_ids
-"""
-def get_pending_projection_ids() -> list[str]:
-    with pending_projection_lock:
-        return list(pending_projection_ids)
-
-"""
-14-Dec-2025 - Basti
-Abstract: Clears an entry_id from the pending projection set
-Args:
-- entry_id: -> the entry_id of the paper
-Returns: None
-"""
-def clear_pending_projection(entry_id: str):
-    with pending_projection_lock:
-        pending_projection_ids.discard(entry_id)
-
-"""
-14-Dec-2025 - Basti
-Abstract: Backfills all pending projections using the current reducer and embedding cache
-Args:
-- None
-Returns: None
-"""
-def backfill_pending_projections():
-    pending_ids = get_pending_projection_ids()
-    if not pending_ids or not reducer.has_model():
-        return
-    with embedding_cache_lock:
-        embeddings_snapshot = embedding_cache.copy()
-    with embedding_labels_lock:
-        labels_snapshot = embedding_labels.copy()
-    for entry_id in pending_ids:
-        embedding = embeddings_snapshot.get(entry_id)
-        if embedding is None:
-            continue
-        coords = reducer.transform(embedding, embeddings_snapshot, labels_snapshot)
-        if coords is None:
-            continue
-        projection = {"x": float(coords[0]), "y": float(coords[1]), "method": "umap"}
-        if update_paper_projection(entry_id, projection):
-            clear_pending_projection(entry_id)
-
-
-"""
-27-December-2025 - Lenio
-Abstract: 
-    Extracts citations for a given paper and appends them to the paper's citations list
-Args:
-    - paper: Paper -> The paper object for which to extract citations
-    - worker_id: int -> The ID of the worker processing this paper
-Returns: None
-"""
-def extract_citations(paper: Paper, worker_id: int):
-    citations_on_arxiv, citations_not_present = semanticscholar_client.fetch_citations(paper, arxiv_client)
-    logger.info(
-        f"Worker {worker_id}: Found {len(citations_on_arxiv)} references on arXiv and "
-        f"{len(citations_not_present)} not present."
-    )
-    for citation in citations_on_arxiv:
-        try:
-            if not citation:
-                continue
-            citation_obj = PaperCitation(paper.entry_id, citation.entry_id)
-            try:
-                scheduler.paper_queue.put_nowait(citation)
-            except queue.Full:
-                logger.warning(f"Worker {worker_id}: Queue full, dropping citation {citation.entry_id}")
-            paper.citations.append(citation_obj)
-        except Exception as e:
-            logger.error(f"Worker {worker_id}: Error processing citation: {e}")
-
-    for citation in citations_not_present:
-        try:
-            if not citation:
-                continue
-            citation_obj = Citation(paper.entry_id, citation)
-            paper.citations.append(citation_obj)
-        except Exception as e:
-            logger.error(f"Worker {worker_id}: Error processing non-arxiv citation: {e}")
-    logger.info(f"Appended {len(paper.citations)} citations for paper {paper.title}")
-
-
-"""
-27-December-2025 - Lenio
-Abstract:
-    Extracts references for a given paper and appends them to the paper's references list
-Args:
-    - paper: Paper -> The paper object for which to extract references
-    - worker_id: int -> The ID of the worker processing this paper
-Returns: None
-"""
-def extract_references(paper: Paper, worker_id: int):
-    references_on_arxiv, references_not_present = semanticscholar_client.fetch_references(paper, arxiv_client)
-    logger.info(
-        f"Worker {worker_id}: Found {len(references_on_arxiv)} references on arXiv and "
-        f"{len(references_not_present)} not present."
-    )
-
-    for reference in references_on_arxiv:
-        try:
-            if not reference:
-                continue
-            reference_obj = PaperReference(paper.entry_id, reference.entry_id)
-            logger.info("Reference on arXiv: " + str(reference.title))
-            try:
-                scheduler.paper_queue.put_nowait(reference)
-            except queue.Full:
-                logger.warning(f"Worker {worker_id}: Queue full, dropping reference {reference.entry_id}")
-            paper.references.append(reference_obj)
-        except Exception as e:
-            logger.error(f"Worker {worker_id}: Error processing reference: {e}")
-
-    for reference in references_not_present:
-        try:
-            if not reference:
-                continue
-            reference_obj = Reference(paper.entry_id, reference)
-            logger.info("Reference not on arXiv: " + str(reference.title))
-            paper.references.append(reference_obj)
-        except Exception as e:
-            logger.error(f"Worker {worker_id}: Error processing non-arxiv reference: {e}")
-
-    logger.info(f"Appended {len(paper.references)} references for paper {paper.title}")
 
 if __name__ == "__main__":
-    workers = cfg.get_int("semanticpaper", "num_workers", int(os.getenv("NUM_WORKERS", str(5))))
-    main(workers)
+    main()

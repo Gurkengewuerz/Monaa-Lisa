@@ -7,10 +7,12 @@
 generator client {
   provider = "prisma-client-js"
   //output   = "../generated/prisma"
+  previewFeatures = ["postgresqlExtensions"]
 }
 
 datasource db {
   provider = "postgresql"
+  extensions = [pgvector(map: "vector")]
 }
 
 model Paper {
@@ -29,6 +31,7 @@ model Paper {
   s2_id                     String?   @unique
   non_arxiv_citation_count  Int?
   non_arxiv_reference_count Int?
+  related_arxiv_ids         Json?
   // App-only fields (not in dataset, used by ML pipeline)
   tsne                      Json?
 
@@ -67,7 +70,6 @@ model PaperCitation {
   cited_paper_entry_id     String
 
   @@id([belonging_paper_entry_id, cited_paper_entry_id])
-  @@index([belonging_paper_entry_id])
   @@index([cited_paper_entry_id])
   @@map("paper_citation")
 }
@@ -81,11 +83,12 @@ model PaperReference {
 }
 
 model Embedding {
-  id                       Int    @id @default(autoincrement())
-  belonging_paper_entry_id String @unique
-  content                  Json
+  id                       Int                    @id @default(autoincrement())
+  belonging_paper_entry_id String                 @unique
+  content                  Unsupported("vector")
 
   @@map("embedding")
+  // CREATE INDEX ON "embedding" USING hnsw (content vector_cosine_ops);
 }
 
 model ProgramRun {
@@ -108,4 +111,21 @@ model HistoricalCompletion {
   oldest_paper_date      DateTime?
 
   @@map("historical_completion")
+}
+
+model UncaughtPaper {
+  id           Int       @id @default(autoincrement())
+  entry_id     String    @unique
+  title        String?
+  authors      String?
+  abstract     String?
+  categories   String?
+  published    DateTime?
+  url          String?
+  retry_count  Int       @default(0)
+  max_retries  Int       @default(4)
+  last_checked DateTime?
+  created_at   DateTime  @default(now())
+
+  @@map("uncaught_paper")
 }

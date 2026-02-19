@@ -1,5 +1,6 @@
-from sqlalchemy import Column, Integer, String, DateTime, Float, JSON, ForeignKey, Text
+from sqlalchemy import Column, Integer, String, DateTime, Float, JSON, ForeignKey, Text, func
 from sqlalchemy.orm import declarative_base
+from pgvector.sqlalchemy import Vector
 
 db_base = declarative_base()
 
@@ -39,6 +40,7 @@ class DBPaper(db_base):
     s2_id = Column(String, nullable=True, unique=True, index=True)
     non_arxiv_citation_count = Column(Integer, nullable=True)
     non_arxiv_reference_count = Column(Integer, nullable=True)
+    related_arxiv_ids = Column(JSON, nullable=True)
     # App-only fields (not in dataset, used by ML pipeline)
     tsne = Column(JSON, nullable=True)
 
@@ -86,7 +88,7 @@ class DBEmbedding(db_base):
     __tablename__ = "embedding"
     id = Column(Integer, primary_key=True, autoincrement=True)
     belonging_paper_entry_id = Column(String, ForeignKey("paper.entry_id"), index=True, unique=True, nullable=False)
-    content = Column(JSON, nullable=False)
+    content = Column(Vector(128), nullable=False)
 
 
 """
@@ -170,3 +172,35 @@ class DBPaperReference(db_base):
     belonging_paper_entry_id = Column(String, ForeignKey("paper.entry_id"), primary_key=True)
     referenced_paper_entry_id = Column(String, primary_key=True)  # No FK – referenced paper may not exist in DB
 
+
+"""
+Abstract: Holds papers that are too new for SemanticScholar (no embeddings yet).
+    These papers are retried periodically. After max_retries failed attempts
+    the entry is dropped.
+Parameters:
+- entry_id: The arXiv entry_id of the paper.
+- title: Title of the paper.
+- authors: Comma-separated string of authors.
+- abstract: Abstract of the paper.
+- categories: arXiv category string.
+- published: Publication datetime.
+- url: PDF URL.
+- retry_count: Number of times we tried SemanticScholar without success.
+- max_retries: After this many failures the paper is dropped.
+- last_checked: Timestamp of the most recent retry attempt.
+- created_at: When the paper was first added to the uncaught table.
+"""
+class DBUncaughtPaper(db_base):
+    __tablename__ = "uncaught_paper"
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    entry_id = Column(String, unique=True, index=True, nullable=False)
+    title = Column(String, nullable=True)
+    authors = Column(String, nullable=True)
+    abstract = Column(Text, nullable=True)
+    categories = Column(String, nullable=True)
+    published = Column(DateTime, nullable=True)
+    url = Column(String, nullable=True)
+    retry_count = Column(Integer, default=0, nullable=False)
+    max_retries = Column(Integer, default=4, nullable=False)
+    last_checked = Column(DateTime, nullable=True)
+    created_at = Column(DateTime, nullable=False, server_default=func.now())
