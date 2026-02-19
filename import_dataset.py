@@ -252,7 +252,7 @@ def flush_embeddings(conn, rows: list[tuple]):
             cur.copy_from(buf, "_tmp_embedding", columns=EMBEDDING_COLS)
             cur.execute("""
                 INSERT INTO embedding (belonging_paper_entry_id, content)
-                SELECT belonging_paper_entry_id, content::json FROM _tmp_embedding
+                SELECT belonging_paper_entry_id, content::vector FROM _tmp_embedding
                 ON CONFLICT (belonging_paper_entry_id) DO UPDATE SET
                     content = EXCLUDED.content;
             """)
@@ -266,7 +266,7 @@ def flush_embeddings(conn, rows: list[tuple]):
                 with conn.cursor() as cur:
                     cur.execute("""
                         INSERT INTO embedding (belonging_paper_entry_id, content)
-                        VALUES (%s, %s::json)
+                        VALUES (%s, %s::vector)
                         ON CONFLICT (belonging_paper_entry_id) DO UPDATE SET content = EXCLUDED.content;
                     """, row)
                 conn.commit()

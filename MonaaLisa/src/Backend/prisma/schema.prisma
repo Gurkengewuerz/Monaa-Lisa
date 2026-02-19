@@ -83,9 +83,9 @@ model PaperReference {
 }
 
 model Embedding {
-  id                       Int    @id @default(autoincrement())
-  belonging_paper_entry_id String @unique
-  content                  Json
+  id                       Int                    @id @default(autoincrement())
+  belonging_paper_entry_id String                 @unique
+  content                  Unsupported("vector")
 
   @@map("embedding")
   // CREATE INDEX ON "embedding" USING hnsw (content vector_cosine_ops);

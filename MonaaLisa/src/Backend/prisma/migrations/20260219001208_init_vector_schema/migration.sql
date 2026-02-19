@@ -71,7 +71,7 @@ CREATE TABLE "paper_reference" (
 CREATE TABLE "embedding" (
     "id" SERIAL NOT NULL,
     "belonging_paper_entry_id" TEXT NOT NULL,
-    "content" JSON NOT NULL,
+    "content" vector(128) NOT NULL,
 
     CONSTRAINT "embedding_pkey" PRIMARY KEY ("id")
 );
@@ -135,6 +135,9 @@ CREATE INDEX "paper_citation_cited_paper_entry_id_idx" ON "paper_citation"("cite
 
 -- CreateIndex
 CREATE UNIQUE INDEX "embedding_belonging_paper_entry_id_key" ON "embedding"("belonging_paper_entry_id");
+
+-- CreateVectorIndex
+CREATE INDEX "embedding_content_idx" ON "embedding" USING hnsw ("content" vector_cosine_ops);
 
 -- CreateIndex
 CREATE UNIQUE INDEX "uncaught_paper_entry_id_key" ON "uncaught_paper"("entry_id");

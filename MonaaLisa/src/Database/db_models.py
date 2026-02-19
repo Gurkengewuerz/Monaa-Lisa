@@ -1,5 +1,6 @@
 from sqlalchemy import Column, Integer, String, DateTime, Float, JSON, ForeignKey, Text, func
 from sqlalchemy.orm import declarative_base
+from pgvector.sqlalchemy import Vector
 
 db_base = declarative_base()
 
@@ -87,7 +88,7 @@ class DBEmbedding(db_base):
     __tablename__ = "embedding"
     id = Column(Integer, primary_key=True, autoincrement=True)
     belonging_paper_entry_id = Column(String, ForeignKey("paper.entry_id"), index=True, unique=True, nullable=False)
-    content = Column(JSON, nullable=False)
+    content = Column(Vector(128), nullable=False)
 
 
 """
