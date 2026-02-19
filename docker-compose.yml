@@ -1,17 +1,17 @@
 services:
   db:
-    image: postgres:15
+    image: pgvector/pgvector:pg16
     restart: unless-stopped
     environment:
-      POSTGRES_USER: ${POSTGRES_USER}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
-      POSTGRES_DB: ${POSTGRES_DB}
+      POSTGRES_USER: ${POSTGRES_USER-monaa}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD-sicherespasswort}
+      POSTGRES_DB: ${POSTGRES_DB-monaa_lisa_db}
     ports:
       - "5432:5432"
     volumes:
       - pgdata:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready"]
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-monaa} -d ${POSTGRES_DB:-monaa_lisa_db}"]
       interval: 10s
       timeout: 5s
       retries: 5
@@ -24,13 +24,18 @@ services:
     depends_on:
       db:
         condition: service_healthy
+      backend:
+        condition: service_healthy
     environment:
-      DATABASE_URL: postgresql+psycopg2://${POSTGRES_USER}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB}
+      DATABASE_URL: postgresql+psycopg2://${POSTGRES_USER-monaa}:${POSTGRES_PASSWORD-sicherespasswort}@db:5432/${POSTGRES_DB-monaa_lisa_db}
+      PYTHONPATH: /app/MonaaLisa/src
       SEMANTIC_SCHOLAR_API_KEY: ${SEMANTIC_SCHOLAR_API_KEY:-}
+      DATA_DIR: /app/data
     volumes:
       - ./MonaaLisa/src:/app/MonaaLisa/src
       - python_cache:/root/.cache/pip
-    command: ["/bin/sh", "-c", "export PYTHONPATH=/app/MonaaLisa/src && python MonaaLisa/src/Database/db.py && python MonaaLisa/src/main.py"]
+      - app_data:/app/data
+    command: ["/bin/sh", "-c", "python MonaaLisa/src/Database/db.py && python MonaaLisa/src/main.py"]
 
   backend:
     image: node:20
@@ -46,30 +51,20 @@ services:
     volumes:
       - ./MonaaLisa/src/Backend:/app
       - backend_node_modules:/app/node_modules
-    command: ["sh", "-c", "npm install && npx prisma generate && npx prisma db push && npm run build && npm run start:prod"]
+    command: ["sh", "-c", "npm install && npx prisma generate && npx prisma migrate deploy && npm run build && npm run start:prod"]
     ports:
       - "3000:3000"
     stdin_open: true
     tty: true
+    healthcheck:
+      # Prüft, ob der Server auf Port 3000 antwortet via wget
+      test: ["CMD-SHELL", "wget --no-verbose --tries=1 --spider http://localhost:3000 || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      # WICHTIG: Gib ihm Zeit für npm install & migration, bevor der erste Check zählt
+      start_period: 90s
 
-  playground:
-    build:
-      context: .
-      target: app
-    image: monaa-lisa-app:latest
-    depends_on:
-      db:
-        condition: service_healthy
-    environment:
-      DATABASE_URL: postgresql+psycopg2://${POSTGRES_USER}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB}
-      PYTHONPATH: /app/MonaaLisa/src
-      SEMANTIC_SCHOLAR_API_KEY: ${SEMANTIC_SCHOLAR_API_KEY:-}
-    volumes:
-      - ./MonaaLisa/src:/app/MonaaLisa/src
-    working_dir: /app
-    profiles:
-      - playground
-    command: [ "python", "MonaaLisa/src/playground/playground_manager.py" ]
 
   frontend:
     build:
@@ -85,18 +80,6 @@ services:
       - /app/node_modules
     environment:
       VITE_API_URL: "http://backend:3000"
-
-  grobid:
-    image: lfoppiano/grobid:latest-develop
-    ports:
-      - "8070:8070"
-    depends_on:
-      - app
-    healthcheck:
-      test: [ "CMD", "curl", "-f", "http://localhost:8070/api/isalive" ]
-      interval: 30s
-      timeout: 10s
-      retries: 5
 
   import:
     build:
@@ -120,3 +103,4 @@ volumes:
   pgdata:
   python_cache:
   backend_node_modules:
+  app_data:
