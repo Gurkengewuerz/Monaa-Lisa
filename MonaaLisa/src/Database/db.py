@@ -512,9 +512,15 @@ def mark_category_historically_completed(program_run_id, category, oldest_seen_d
         session.close()
 
 if __name__ == "__main__":
-    logger.info("Creating database tables...")
-    db_base.metadata.create_all(bind=engine)
-    logger.info("Tables created successfully!")
+    # Tabellen werden nur noch über Prisma gebaut nicht mehr über SQLAlchemy, daher ist dieser Schritt hier nicht mehr nötig.
+    #logger.info("Creating database tables...")
+    #db_base.metadata.create_all(bind=engine)
+    #logger.info("Tables created successfully!")
+    try:
+        with engine.connect() as conn:
+            logger.info("Connection to database successful.")
+    except Exception as e:
+        logger.error(f"Connection failed: {e}")
 
 
 # ---------------------------------------------------------------------------
