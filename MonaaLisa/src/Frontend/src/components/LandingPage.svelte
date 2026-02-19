@@ -2,7 +2,7 @@
   import { createEventDispatcher } from 'svelte';
   import { fade } from 'svelte/transition';
   import { spring } from 'svelte/motion';
-  import arxivLogo from '../assets/arxiv_logo.png';
+  import techlistImg from '../assets/techlist.png';
   import monaaLisaLogo from '../assets/monaa_lisa_logo.png';
   import mlbg from '../assets/mlbg.png';
   import webmVideo from '../assets/ML_LOOP_main.webm';
@@ -13,7 +13,7 @@
   let scrollY = 0;
   let innerHeight = 1000;
 
-  // aScroll progress: 0 to 1
+  // aScroll progress: 0 to 2 (since scroll track is 900vh)
   $: rawProgress = innerHeight ? scrollY / (innerHeight * 4) : 0;
 
   const smoothProgress = spring(0, {
@@ -41,19 +41,14 @@
   // Scale: 3000 -> 1 exponentially
   $: titleScale = 3000 * Math.pow(1 / 3000, zoomT);
   
-  // OPTIMIZATION: Use SVG ViewBox instead of CSS transform: scale()
-  // This prevents the browser from creating a massive texture layer (3000x screen size).
+  // OPTIMIZATION: Use SVG transform instead of CSS transform on HTML elements
+  // This prevents the browser from creating a massive texture layer while avoiding Chrome viewBox bugs.
   
   // ADJUSTMENT: Center point for the zoom (0-100)
   // We keep the camera centered in the middle of our viewport (50x25)
   // And instead, moving the TEXT below to align the letter with this center.
   const focusX = 50; 
   const focusY = 25;
-
-  $: vbW = 100 / titleScale;
-  $: vbH = 50 / titleScale;
-  $: vbX = focusX - vbW / 2;
-  $: vbY = focusY - vbH / 2;
 
   // Title X Position: 
   // 50 = Center
@@ -82,6 +77,38 @@
 
   // 6. Arxiv Logo
   $: arxivOpacity = Math.min(1, Math.max(0, (progress - 0.8) * 10));
+
+  // 7. Fade out previous section
+  $: previousSectionOpacity = Math.max(0, 1 - (progress - 1.0) * 5);
+
+  // 8. New Section Animations
+  // Node 1 forms in the middle (scale 0 to 1)
+  $: node1Scale = Math.min(1, Math.max(0, (progress - 1.2) * 10));
+  
+  // Node 1 moves to the left (X translation)
+  // Starts at 0, moves to -15vw
+  $: node1X = Math.min(1, Math.max(0, (progress - 1.3) * 10)) * -15;
+  
+  // Text 1 "Search a Paper" appears
+  $: text1Opacity = Math.min(1, Math.max(0, (progress - 1.35) * 10));
+
+  // Edge 1 forms (height 0 to 100px)
+  $: edge1Height = Math.min(1, Math.max(0, (progress - 1.4) * 10)) * 100;
+
+  // Node 2 forms and text "Find its References and Citations" appears
+  $: node2Opacity = Math.min(1, Math.max(0, (progress - 1.5) * 10));
+
+  // Edge 2 forms (height 0 to 100px)
+  $: edge2Height = Math.min(1, Math.max(0, (progress - 1.6) * 10)) * 100;
+
+  // Node 3 forms and text "Find thematically similar paper" appears
+  $: node3Opacity = Math.min(1, Math.max(0, (progress - 1.7) * 10));
+
+  // Edge 3 forms (height 0 to 100px)
+  $: edge3Height = Math.min(1, Math.max(0, (progress - 1.8) * 10)) * 100;
+
+  // Big text appears
+  $: finalProjectOpacity = Math.min(1, Math.max(0, (progress - 1.9) * 10));
 
   export function reset() {
     window.scrollTo({ top: 0, behavior: 'instant' });
@@ -135,39 +162,77 @@
       <!-- Second Section (Zoomed out view) -->
       <!-- 
         We use an SVG mask to create the "Hole" effect.
-        The SVG scales via viewBox (zooming camera in/out) instead of CSS transform.
-        This provides performance optimization for the 3000x zoom.
+        The SVG scales via transform instead of viewBox to fix Chrome bugs.
       -->
       <div class="second-section">
-           <svg class="overlay-svg" viewBox="{vbX} {vbY} {vbW} {vbH}" preserveAspectRatio="xMidYMid slice">
+           <svg class="overlay-svg" viewBox="0 0 100 50" preserveAspectRatio="xMidYMid slice">
               <defs>
                  <mask id="text-mask" maskUnits="userSpaceOnUse" maskContentUnits="userSpaceOnUse" x="-500" y="-500" width="1000" height="1000">
                     <!-- Infinite White Rect (The Mask) -->
                     <rect x="-500" y="-500" width="1000" height="1000" fill="white" />
-                    <text x="{titleX}" y="{titleYAbs}" text-anchor="middle" dominant-baseline="middle" font-size="12" font-weight="900" fill="black">Monaa-Lisa</text>
+                    <g transform="translate({focusX}, {focusY}) scale({titleScale}) translate(-{focusX}, -{focusY})">
+                        <text x="{titleX}" y="{titleYAbs}" text-anchor="middle" dominant-baseline="middle" font-size="12" font-weight="900" fill="black">Monaa-Lisa</text>
+                    </g>
                  </mask>
               </defs>
               <!-- The Solid Background with Hole (Infinite Rect) -->
               <rect x="-500" y="-500" width="1000" height="1000" fill="#1a1f2c" mask="url(#text-mask)" />
               
               <!-- The White Text Fill -->
-              <text x="{titleX}" y="{titleYAbs}" text-anchor="middle" dominant-baseline="middle" font-size="12" font-weight="900" fill="white" opacity={titleOpacity}>Monaa-Lisa</text>
+              <g transform="translate({focusX}, {focusY}) scale({titleScale}) translate(-{focusX}, -{focusY})">
+                  <text x="{titleX}" y="{titleYAbs}" text-anchor="middle" dominant-baseline="middle" font-size="12" font-weight="900" fill="white" opacity={titleOpacity}>Monaa-Lisa</text>
+              </g>
            </svg>
       </div>
       
       <!-- Subtitle is separate, fades in at the end -->
-      <div class="subtitle-container" style="opacity: {subtitleOpacity}">
+      <div class="subtitle-container" style="opacity: {subtitleOpacity * previousSectionOpacity}">
           <h2 class="sub-title">A tool to visualize academic papers, their relations and citations</h2>
       </div>
 
-      <div class="utilizing-container" style="opacity: {utilizingOpacity}">
+      <div class="utilizing-container" style="opacity: {utilizingOpacity * previousSectionOpacity}">
           <h2 class="sub-title">utilizing</h2>
       </div>
 
-      <div class="arxiv-container" style="opacity: {arxivOpacity}; pointer-events: {arxivOpacity > 0.1 ? 'auto' : 'none'}">
-          <a href="https://arxiv.org/" target="_blank" rel="noopener noreferrer">
-            <img src={arxivLogo} alt="arXiv" class="arxiv-logo" />
-          </a>
+      <div class="techlist-container" style="opacity: {arxivOpacity * previousSectionOpacity}; pointer-events: {arxivOpacity > 0.1 ? 'auto' : 'none'}">
+          <div class="techlist-gradient left"></div>
+          <div class="techlist-scroll">
+              <img src={techlistImg} alt="Tech List" class="techlist-img" />
+              <img src={techlistImg} alt="Tech List" class="techlist-img" />
+              <img src={techlistImg} alt="Tech List" class="techlist-img" />
+              <img src={techlistImg} alt="Tech List" class="techlist-img" />
+          </div>
+          <div class="techlist-gradient right"></div>
+      </div>
+
+      <!-- New Section: Program Explanation -->
+      <div class="program-explanation-section" style="pointer-events: {progress > 1.1 ? 'auto' : 'none'}">
+          <div class="node-container" style="transform: translateY(-150px)">
+              <div class="node-row">
+                  <div class="node" style="transform: translateX({node1X}vw) scale({node1Scale})"></div>
+                  <div class="node-text" style="opacity: {text1Opacity}; transform: translateX(calc({node1X}vw + 20px))">Search a Paper</div>
+              </div>
+              
+              <div class="edge" style="height: {edge1Height}px; transform: translateX({node1X}vw)"></div>
+              
+              <div class="node-row" style="opacity: {node2Opacity}">
+                  <div class="node" style="transform: translateX({node1X}vw)"></div>
+                  <div class="node-text" style="transform: translateX(calc({node1X}vw + 20px))">Find its References and Citations</div>
+              </div>
+              
+              <div class="edge" style="height: {edge2Height}px; transform: translateX({node1X}vw)"></div>
+              
+              <div class="node-row" style="opacity: {node3Opacity}">
+                  <div class="node" style="transform: translateX({node1X}vw)"></div>
+                  <div class="node-text" style="transform: translateX(calc({node1X}vw + 20px))">Find thematically similar paper</div>
+              </div>
+              
+              <div class="edge" style="height: {edge3Height}px; transform: translateX({node1X}vw)"></div>
+              
+              <div class="final-project-text" style="opacity: {finalProjectOpacity}">
+                  a software project by name,name,name,name
+              </div>
+          </div>
       </div>
   </div>
   
@@ -186,7 +251,7 @@
   }
 
   .scroll-track {
-    height: 500vh;
+    height: 900vh;
   }
 
   .sticky-wrapper {
@@ -354,24 +419,115 @@
     pointer-events: none;
   }
 
-  .arxiv-container {
+  .techlist-container {
     position: absolute;
     z-index: 40;
     top: 65%;
     width: 100%;
+    height: 150px;
+    display: flex;
+    align-items: center;
+    overflow: hidden;
+  }
+
+  .techlist-scroll {
+    display: flex;
+    width: max-content;
+    animation: scroll-left 90s linear infinite;
+  }
+
+  .techlist-img {
+    height: 100px;
+    object-fit: contain;
+    filter: invert(0); /* Assuming techlist.png is black on transparent, like arxiv_logo.png */
+  }
+
+  @keyframes scroll-left {
+    0% { transform: translateX(0); }
+    100% { transform: translateX(-50%); }
+  }
+
+  .techlist-gradient {
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    width: 400px;
+    z-index: 2;
+    pointer-events: none;
+  }
+
+  .techlist-gradient.left {
+    left: 0;
+    background: linear-gradient(to right, #1a1f2c, transparent);
+  }
+
+  .techlist-gradient.right {
+    right: 0;
+    background: linear-gradient(to left, #1a1f2c, transparent);
+  }
+
+  .program-explanation-section {
+    position: absolute;
+    z-index: 50;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
     display: flex;
     justify-content: center;
     align-items: center;
   }
 
-  .arxiv-logo {
-    height: 150px;
-    filter: invert(1);
-    transition: transform 0.3s ease;
+  .node-container {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    position: relative;
   }
 
-  .arxiv-logo:hover {
-    transform: scale(1.1);
+  .node-row {
+    display: flex;
+    align-items: center;
+    position: relative;
+    height: 40px;
+  }
+
+  .node {
+    width: 20px;
+    height: 20px;
+    background-color: white;
+    border-radius: 50%;
+    box-shadow: 0 0 15px rgba(255, 255, 255, 0.8);
+    position: absolute;
+    left: -10px; /* Center the node on the vertical axis */
+  }
+
+  .node-text {
+    position: absolute;
+    left: 0;
+    white-space: nowrap;
+    font-size: 1.5rem;
+    font-weight: 300;
+    letter-spacing: 2px;
+    text-shadow: 0 0 10px rgba(0,0,0,0.8);
+  }
+
+  .edge {
+    width: 2px;
+    background-color: rgba(255, 255, 255, 0.5);
+    margin: 10px 0;
+    /* The edge should grow downwards, so we align it to the top */
+    transform-origin: top center;
+  }
+
+  .final-project-text {
+    margin-top: 30px;
+    font-size: 2.5rem;
+    font-weight: 700;
+    text-align: center;
+    text-transform: uppercase;
+    letter-spacing: 5px;
+    text-shadow: 0 0 20px rgba(255, 255, 255, 0.3);
   }
 
   .sub-title {
