@@ -14,6 +14,7 @@ import os
 import sys
 import signal
 import faulthandler
+import time
 from datetime import datetime
 
 from apscheduler.schedulers.background import BackgroundScheduler
@@ -53,12 +54,22 @@ def main():
     logger.set_level(log_level)
     logger.info(f"SemanticPaper starting (log level={log_level})...")
 
-    # ---- 1. Ensure DB tables exist ----
-    try:
-        db_base.metadata.create_all(bind=engine)
-        logger.info("Database tables ensured.")
-    except Exception as e:
-        logger.error(f"Failed to create database tables: {e}")
+    # ---- 1. Database Check (WAIT for Prisma) ----
+    # WICHTIG: Wir erstellen keine Tabellen mehr selbst!
+    # Wir warten stattdessen kurz, bis die DB erreichbar ist.
+    logger.info("Checking database connection...")
+    
+    # Einfacher Retry-Loop, falls der DB-Container noch nicht bereit ist
+    for i in range(10):
+        try:
+            with engine.connect() as connection:
+                logger.info("Database connection established.")
+                break
+        except Exception as e:
+            logger.warning(f"Database not ready yet, retrying in 2s... ({e})")
+            time.sleep(2)
+    else:
+        logger.error("Could not connect to database after 20s. Exiting.")
         sys.exit(1)
 
     # ---- 2. First-run: download & import ----

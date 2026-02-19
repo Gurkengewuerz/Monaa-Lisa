@@ -139,9 +139,6 @@ CREATE UNIQUE INDEX "embedding_belonging_paper_entry_id_key" ON "embedding"("bel
 -- CreateIndex
 CREATE UNIQUE INDEX "uncaught_paper_entry_id_key" ON "uncaught_paper"("entry_id");
 
--- HNSW-Index für Cosine-Similarity (perfekt für Paper-Suche)
-CREATE INDEX "embedding_content_hnsw_idx" ON "embedding" USING hnsw (content vector_cosine_ops);
-
 -- Damit findest du schnell alle Relationen, die AUF ein Paper zeigen
 CREATE INDEX "paper_relation_target_id_idx" ON "paper_relation" ("target_id");
 

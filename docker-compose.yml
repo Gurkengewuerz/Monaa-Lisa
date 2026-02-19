@@ -24,6 +24,8 @@ services:
     depends_on:
       db:
         condition: service_healthy
+      backend:
+        condition: service_healthy
     environment:
       DATABASE_URL: postgresql+psycopg2://${POSTGRES_USER-monaa}:${POSTGRES_PASSWORD-sicherespasswort}@db:5432/${POSTGRES_DB-monaa_lisa_db}
       PYTHONPATH: /app/MonaaLisa/src
@@ -54,6 +56,14 @@ services:
       - "3000:3000"
     stdin_open: true
     tty: true
+    healthcheck:
+      # Prüft, ob der Server auf Port 3000 antwortet via wget
+      test: ["CMD-SHELL", "wget --no-verbose --tries=1 --spider http://localhost:3000 || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      # WICHTIG: Gib ihm Zeit für npm install & migration, bevor der erste Check zählt
+      start_period: 30s
 
 
   frontend:
