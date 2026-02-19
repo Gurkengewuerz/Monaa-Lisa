@@ -1,229 +1,349 @@
 <script lang="ts">
-  import { createEventDispatcher, tick } from 'svelte';
-  import type { Paper } from '$lib/types/paper';
-  import { getClusterColor } from '../utils/clusterColors';
+  import { createEventDispatcher, tick } from "svelte";
+  import type { Paper } from "$lib/types/paper";
+  import { getClusterColor } from "../utils/clusterColors";
+  import { getSubcategoryName } from "../utils/arxivTaxonomy";
 
-  /**
-   * array of papers to display.
-   * passed from the parent.
-   * @type {Paper[]}
-   */
   export let papers: Paper[] = [];
-
-  /**
-   * control for sidebar visibility.
-   * @type {boolean}
-   */
   export let isOpen: boolean = false;
-
-  /**
-   * currently selected paper id.
-   * @type {string | null}
-   */
   export let selectedPaperId: string | null = null;
+  /** When true, citations/references can be expanded (paper-detail view only) */
+  export let allowExpand: boolean = false;
+  /** Category ID prefix used to scope backend search, e.g. "cs.AI" */
+  export let categoryFilter: string = "";
+  /** Human-readable label shown in the sidebar header, e.g. "Computer Science" */
+  export let categoryLabel: string = "ArXiv";
+  /** Backend API base URL */
+  export let apiBaseUrl: string = "http://localhost:3000";
 
   const dispatch = createEventDispatcher();
 
-  $: dataSource = papers;
+  // ─── backend search state ─────────────────────────────────────────
+  let searchResults: Paper[] | null = null;
+  let searchLoading = false;
+  let searchError: string | null = null;
+  let searchTotal = 0;
 
-  // UI state
-  let query = '';
-  let focusSelected = false; // if true, only the selected paper is shown
-  let expandedCitations = new Set<string>();
-  let localSelected: Paper | null = null; // local selected for immediate display
+  // ─── advanced search form ─────────────────────────────────────────
+  const TODAY = new Date().toISOString().slice(0, 10);
+  interface AdvFilter { dateFrom: string; dateTo: string; authorQuery: string; sort: "published" | "citations"; }
+  let adv: AdvFilter = { dateFrom: "", dateTo: "", authorQuery: "", sort: "published" };
+  let advError: string | null = null;
+  let advancedOpen = false;
 
-  // *** BULLETPROOF REACTIVE - WAITS FOR DATA ***
-  $: {
-    if (selectedPaperId && dataSource && dataSource.length > 0) {
-      const foundPaper = dataSource.find((p) => p.entry_id === selectedPaperId);
-      
-      localSelected = foundPaper || null;
-      focusSelected = true;
-      isOpen = true; // FORCE OPEN SIDEBAR
-      
-      tick().then(() => {
-        const el = document.querySelector(`[data-paper-id="${selectedPaperId}"]`) as HTMLElement | null;
-        if (el) {
-          el.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
-        }
-      });
-    } else {
-      localSelected = null;
-      focusSelected = false;
+  function validateAdv(): boolean {
+    advError = null;
+    if (adv.dateFrom && adv.dateTo && adv.dateFrom > adv.dateTo) { advError = "Start date must be before end date."; return false; }
+    if (adv.dateFrom && adv.dateFrom > TODAY) { advError = "Start date cannot be in the future."; return false; }
+    if (adv.dateTo && adv.dateTo > TODAY) { advError = "End date cannot be in the future."; return false; }
+    return true;
+  }
+
+  function resetAdv() { adv = { dateFrom: "", dateTo: "", authorQuery: "", sort: "published" }; advError = null; }
+
+  // ─── search debounce ──────────────────────────────────────────────
+  let searchTimer: ReturnType<typeof setTimeout> | null = null;
+  let query = "";
+
+  async function runSearch() {
+    if (!validateAdv()) return;
+    const trimmed = query.trim();
+    const hasAdv = !!(adv.dateFrom || adv.dateTo || adv.authorQuery.trim());
+    if (!trimmed && !hasAdv) { searchResults = null; searchError = null; return; }
+
+    searchLoading = true; searchError = null;
+    try {
+      const params = new URLSearchParams();
+      const safeCat = (categoryFilter || "").replace(/[^a-zA-Z0-9._-]/g, "");
+      if (safeCat) params.set("categories", safeCat);
+      let searchTerm = trimmed;
+      if (adv.authorQuery.trim()) searchTerm = searchTerm ? `${searchTerm} ${adv.authorQuery.trim()}` : adv.authorQuery.trim();
+      if (searchTerm) params.set("search", searchTerm.slice(0, 200));
+      if (adv.dateFrom) params.set("dateFrom", adv.dateFrom);
+      if (adv.dateTo) params.set("dateTo", adv.dateTo);
+      params.set("sort", adv.sort);
+      params.set("take", "100");
+      params.set("skip", "0");
+
+      const res = await fetch(`${apiBaseUrl}/papers?${params.toString()}`);
+      if (!res.ok) throw new Error(`Server error ${res.status}`);
+      const payload = await res.json();
+      const items: any[] = Array.isArray(payload) ? payload : (payload?.items ?? []);
+      searchTotal = Array.isArray(payload) ? items.length : (payload?.total ?? items.length);
+      searchResults = items.map((raw: any) => ({
+        id: Number(raw.id ?? 0),
+        entry_id: raw.entry_id,
+        title: raw.title ?? raw.entry_id,
+        authors: Array.isArray(raw.authors) ? raw.authors.join(", ") : (raw.authors ?? ""),
+        abstract: raw.abstract ?? "",
+        published: raw.published ?? null,
+        categories: raw.categories ?? null,
+        url: raw.url ?? null,
+        citations: Array.isArray(raw.citations) ? raw.citations : [],
+        references: [],
+        non_arxiv_citation_count: Number(raw.non_arxiv_citation_count ?? 0),
+        non_arxiv_reference_count: Number(raw.non_arxiv_reference_count ?? 0),
+        tsne1: 0, tsne2: 0,
+        cluster: raw.categories ?? "U",
+      }));
+    } catch (e) {
+      searchError = e instanceof Error ? e.message : "Search failed.";
+      searchResults = null;
+    } finally {
+      searchLoading = false;
     }
   }
 
-  // Search/filter
-  function normalize(s: string | undefined | null) {
-    return (s ?? '').toLowerCase();
-  }
-
-  $: filteredList = (() => {
-    const q = normalize(query).trim();
-    if (!q) return dataSource;
-    return dataSource.filter((p) => {
-      const inTitle = normalize(p.title).includes(q);
-      const inAuthors = normalize(p.authors).includes(q);
-      const inSummary = normalize(p.abstract).includes(q);
-      return inTitle || inAuthors || inSummary;
-    });
-  })();
-
-  function sortSelectedFirst(list: Paper[]) {
-    if (!localSelected) return list;
-    const selId = localSelected.entry_id;
-    return list.slice().sort((a, b) => {
-      if (a.entry_id === selId && b.entry_id !== selId) return -1;
-      if (b.entry_id === selId && a.entry_id !== selId) return 1;
-      return 0;
-    });
-  }
-
-  // Displayed list:
-  // - If focusing selected, show only that one (on any selection)
-  // - Else show filtered list, with selected (if any) at top
-  $: displayedPapers =
-    focusSelected && localSelected ? [localSelected] : sortSelectedFirst(filteredList);
-
-  // Handlers
-  function onSearchInput(e: Event) {
-    const val = (e.currentTarget as HTMLInputElement).value;
-    query = val;
-    if (val.trim()) {
-      // Searching shows relevant papers; do not force single-selected view
-      focusSelected = false;
+  function onQueryInput(e: Event) {
+    query = (e.currentTarget as HTMLInputElement).value;
+    if (searchTimer) clearTimeout(searchTimer);
+    if (!query.trim() && !adv.dateFrom && !adv.dateTo && !adv.authorQuery.trim()) {
+      searchResults = null; searchError = null; return;
     }
+    searchTimer = setTimeout(runSearch, 400);
   }
 
   function clearSearch() {
-    query = '';
+    query = ""; searchResults = null; searchError = null; advError = null;
+    if (searchTimer) clearTimeout(searchTimer);
   }
 
-  function showAll() {
-    focusSelected = false;
-    localSelected = null;
-  }
+  // ─── display list ─────────────────────────────────────────────────
+  $: dataSource = searchResults !== null ? searchResults : papers;
 
-  function toggleSidebar() {
-    dispatch('toggle');
-  }
+  let focusSelected = false;
+  let localSelected: Paper | null = null;
+  let expandedCitations = new Set<string>();
+  let expandedReferences = new Set<string>();
 
-  function toggleCitations(paperEntryId: string) {
-    if (expandedCitations.has(paperEntryId)) {
-      expandedCitations.delete(paperEntryId);
-    } else {
-      expandedCitations.add(paperEntryId);
+  $: {
+    if (selectedPaperId && dataSource && dataSource.length > 0) {
+      const found = dataSource.find(p => p.entry_id === selectedPaperId);
+      localSelected = found || null;
+      focusSelected = !!found;
+      if (found) {
+        isOpen = true;
+        tick().then(() => {
+          const el = document.querySelector(`[data-paper-id="${selectedPaperId}"]`) as HTMLElement | null;
+          if (el) el.scrollIntoView({ behavior: "smooth", block: "nearest" });
+        });
+      }
+    } else if (!selectedPaperId) {
+      localSelected = null; focusSelected = false;
     }
-    expandedCitations = new Set(expandedCitations); // trigger reactivity
   }
 
-  function selectPaper(paper: Paper) {
-    // Selecting a paper focuses it and collapses view to that paper
-    localSelected = paper;
-    focusSelected = true;
-    query = '';
-    dispatch('selectPaper', paper);
-    // Scroll to the selected paper
+  $: displayedPapers = focusSelected && localSelected
+    ? [localSelected, ...dataSource.filter(p => p.entry_id !== localSelected?.entry_id)]
+    : dataSource;
+
+  function showAll() { focusSelected = false; localSelected = null; }
+  function toggleSidebar() { dispatch("toggle"); }
+
+  function toggleCitations(id: string) {
+    if (expandedCitations.has(id)) expandedCitations.delete(id); else expandedCitations.add(id);
+    expandedCitations = new Set(expandedCitations);
+  }
+  function toggleReferences(id: string) {
+    if (expandedReferences.has(id)) expandedReferences.delete(id); else expandedReferences.add(id);
+    expandedReferences = new Set(expandedReferences);
+  }
+
+  function selectPaper(p: Paper) {
+    localSelected = p; focusSelected = true; query = "";
+    dispatch("selectPaper", p);
     tick().then(() => {
-      const el = document.querySelector(
-        `[data-paper-id="${paper.entry_id}"]`
-      ) as HTMLElement | null;
-      if (el) el.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+      const el = document.querySelector(`[data-paper-id="${p.entry_id}"]`) as HTMLElement | null;
+      if (el) el.scrollIntoView({ behavior: "smooth", block: "nearest" });
     });
   }
 
   function selectCitedPaper(citedId: string) {
-    const target = dataSource.find((p) => p.entry_id === citedId);
+    const target = dataSource.find(p => p.entry_id === citedId);
     if (target) selectPaper(target);
   }
 
-  //badges next to the papers in the sidebar
-  //colors by cluster identifiers (falls back to grey when missing)
-  //todo: remove when backend provides cluster colors or make dynamic
-  /*const clusterColors: Record<string, string> = {
-    A: '#CC6666',
-    B: '#66B2B2',
-    C: '#9966CC',
-    D: '#CC66B2',
-    E: '#6699CC',
-    F: '#FF4500',
-    G: '#00CED1',
-  };*/
+  function getFirstCategory(cats: string | null | undefined): string {
+    if (!cats) return "N/A";
+    return cats.trim().split(/[\s,]+/)[0] ?? cats;
+  }
+
+  function badgeLabel(cats: string | null | undefined): string {
+    const cat = getFirstCategory(cats);
+    const parts = cat.split(".");
+    if (parts.length > 1) return parts[parts.length - 1].toUpperCase().slice(0, 4);
+    return cat.slice(0, 5).toUpperCase();
+  }
+
+  /** Full names for tooltip, one per line: "Artificial Intelligence (cs.AI)\nMachine Learning (cs.LG)" */
+  function categoryTooltip(cats: string | null | undefined): string {
+    if (!cats) return '';
+    const all = cats.trim().split(/[\s,]+/).filter(Boolean);
+    return all.map(cat => {
+      const fullName = getSubcategoryName(cat);
+      return (fullName && fullName !== cat) ? `${fullName} (${cat})` : cat;
+    }).join('\n');
+  }
+
+  /** Full human-readable name for the primary category */
+  function categoryFullName(cats: string | null | undefined): string {
+    const cat = getFirstCategory(cats);
+    const fullName = getSubcategoryName(cat);
+    return fullName && fullName !== cat ? fullName : cat;
+  }
+
+  /**
+   * In cluster/category views, trim extremely long author lists to the first 3 + "et al."
+   * In detail/expand mode we show them all.
+   */
+  function displayAuthors(authors: string, limit = 3): string {
+    if (!authors) return '';
+    const parts = authors.split(',').map(s => s.trim()).filter(Boolean);
+    if (parts.length <= limit) return authors;
+    return parts.slice(0, limit).join(', ') + ` et al. (${parts.length})`;
+  }
 </script>
 
-<!-- sidebar toggle button -->
 <button class="sidebar-toggle" class:open={isOpen} on:click={toggleSidebar}>
-  <span class="toggle-icon">{isOpen ? '→' : '←'}</span>
+  <span class="toggle-icon">{isOpen ? "\u2192" : "\u2190"}</span>
 </button>
 
-<!-- expandable sidebar -->
 <div class="sidebar" class:open={isOpen}>
   <div class="sidebar-header">
-    <h3>Academic Papers</h3>
-    <button class="close-btn" on:click={toggleSidebar}>×</button>
+    <div class="header-text">
+      <span class="header-sup">Academic Papers</span>
+      <span class="header-cat">{categoryLabel}</span>
+    </div>
+    <button class="close-btn" on:click={toggleSidebar}>x</button>
   </div>
 
   <div class="sidebar-tools">
-    <div class="search">
-      <input
-        type="text"
-        placeholder="Search title or authors..."
-        value={query}
-        on:input={onSearchInput}
-      />
-      {#if query}
-        <button class="clear" on:click={clearSearch}>✕</button>
-      {/if}
+    <div class="search-row">
+      <div class="search">
+        <input type="text" placeholder="Search title, authors..." value={query} on:input={onQueryInput} />
+        {#if query}<button class="clear" on:click={clearSearch}>X</button>{/if}
+      </div>
+      <button class="adv-btn" class:active={advancedOpen} on:click={() => (advancedOpen = !advancedOpen)} title="Advanced search">
+        + Filter
+      </button>
     </div>
 
-    {#if focusSelected || query}
-      <button class="show-all" on:click={showAll}>Show all</button>
+    {#if advancedOpen}
+      <div class="adv-panel">
+        <div class="adv-row">
+          <label class="adv-label">Author</label>
+          <input class="adv-input" type="text" placeholder="Author name" maxlength="100" bind:value={adv.authorQuery}
+            on:input={() => { if (searchTimer) clearTimeout(searchTimer); searchTimer = setTimeout(runSearch, 500); }} />
+        </div>
+        <div class="adv-row">
+          <label class="adv-label">From</label>
+          <input class="adv-input" type="date" max={TODAY} bind:value={adv.dateFrom}
+            on:change={() => { validateAdv(); if (!advError) runSearch(); }} />
+        </div>
+        <div class="adv-row">
+          <label class="adv-label">To</label>
+          <input class="adv-input" type="date" max={TODAY} bind:value={adv.dateTo}
+            on:change={() => { validateAdv(); if (!advError) runSearch(); }} />
+        </div>
+        <div class="adv-row">
+          <label class="adv-label">Sort by</label>
+          <select class="adv-select" bind:value={adv.sort} on:change={() => runSearch()}>
+            <option value="published">Published date</option>
+            <option value="citations">Most cited</option>
+          </select>
+        </div>
+        {#if advError}<p class="adv-error">{advError}</p>{/if}
+        <div class="adv-footer">
+          <button class="adv-reset" on:click={() => { resetAdv(); clearSearch(); }}>Reset</button>
+          {#if searchTotal > 0}<span class="adv-count">{searchTotal} result{searchTotal !== 1 ? "s" : ""}</span>{/if}
+        </div>
+      </div>
     {/if}
+
+    {#if focusSelected}<button class="show-all" on:click={showAll}>Show all</button>{/if}
   </div>
-  
-  <div class="sidebar-content" on:click={() => dispatch('deselect')}>
-    {#if displayedPapers.length === 0}
-      <div class="empty">No papers found.</div>
+
+  <div class="sidebar-content">
+    {#if searchLoading}
+      <div class="search-status"><div class="mini-spinner"></div><span>Searching...</span></div>
+    {:else if searchError}
+      <div class="search-status error">{searchError}</div>
+    {:else if displayedPapers.length === 0}
+      <div class="empty">{searchResults !== null ? "No results found." : "No papers found."}</div>
     {:else}
+      {#if searchResults !== null}
+        <div class="results-info">{searchResults.length} result{searchResults.length !== 1 ? "s" : ""}{categoryFilter ? ` in ${categoryFilter}` : ""}</div>
+      {/if}
       {#each displayedPapers as paper (paper.entry_id)}
-        <div 
-          class="paper-item" 
-          class:selected={selectedPaperId === paper.entry_id}
-          data-paper-id={paper.entry_id}
-          on:click|stopPropagation={() => selectPaper(paper)}
-        >
-          <div class="paper-cluster" style="background-color: {getClusterColor(paper.categories, paper.cluster)}">
-            {paper.cluster}
+        <!-- svelte-ignore a11y-click-events-have-key-events -->
+        <!-- svelte-ignore a11y-no-static-element-interactions -->
+        <div class="paper-item" class:selected={selectedPaperId === paper.entry_id}
+          data-paper-id={paper.entry_id} on:click|stopPropagation={() => selectPaper(paper)}>
+          <div class="paper-cluster"
+            style="background-color: {getClusterColor(paper.categories, paper.cluster)}"
+            title={categoryTooltip(paper.categories)}>
+            {badgeLabel(paper.categories)}
           </div>
           <div class="paper-info">
+            <p class="paper-category">{categoryFullName(paper.categories)}</p>
             <h4>{paper.title}</h4>
-            <p class="paper-authors">{paper.authors}</p>
+            <p class="paper-authors">{allowExpand ? paper.authors : displayAuthors(paper.authors)}</p>
             <p class="paper-summary">
-              {paper.abstract.length > 100
-                ? `${paper.abstract.substring(0, 100)}...`
-                : paper.abstract}
+              {paper.abstract.length > (allowExpand ? 100 : 160) ? paper.abstract.substring(0, allowExpand ? 100 : 160) + "..." : paper.abstract}
             </p>
             <div class="paper-meta">
-              <button
-                class="citations"
-                on:click|stopPropagation={() => toggleCitations(paper.entry_id)}
-              >
-                Citations ({paper.citations?.length ?? 0}) {expandedCitations.has(paper.entry_id) ? '▾' : '▸'}
-              </button>
-              <span class="date">{paper.published ? new Date(paper.published).getFullYear() : '—'}</span>
+              {#if allowExpand}
+                <div class="meta-actions">
+                  <button class="expand-btn citations-btn" on:click|stopPropagation={() => toggleCitations(paper.entry_id)}>
+                    Citations ({paper.citations?.length ?? 0}){paper.non_arxiv_citation_count ? ` +${paper.non_arxiv_citation_count} ext.` : ""} {expandedCitations.has(paper.entry_id) ? "\u25be" : "\u25b8"}
+                  </button>
+                  <button class="expand-btn references-btn" on:click|stopPropagation={() => toggleReferences(paper.entry_id)}>
+                    References ({paper.references?.length ?? 0}){paper.non_arxiv_reference_count ? ` +${paper.non_arxiv_reference_count} ext.` : ""} {expandedReferences.has(paper.entry_id) ? "\u25be" : "\u25b8"}
+                  </button>
+                </div>
+              {:else}
+                <span class="meta-counts">
+                  {#if paper.non_arxiv_citation_count || paper.non_arxiv_reference_count || paper.citations?.length || paper.references?.length}
+                    <span class="arxiv-count">{paper.citations?.length ?? 0} Citations</span>
+                    &nbsp;&middot;&nbsp;
+                    <span class="arxiv-count">{paper.references?.length ?? 0} References</span>
+                    {#if (paper.non_arxiv_citation_count ?? 0) + (paper.non_arxiv_reference_count ?? 0) > 0}
+                      &nbsp;&middot;&nbsp;
+                      <span class="non-arxiv-count">{(paper.non_arxiv_citation_count ?? 0) + (paper.non_arxiv_reference_count ?? 0)} Non-arXiv</span>
+                    {/if}
+                  {:else}
+                    No citation data
+                  {/if}
+                </span>
+              {/if}
+              <span class="date">{paper.published ? new Date(paper.published).getFullYear() : "\u2014"}</span>
             </div>
 
-            {#if expandedCitations.has(paper.entry_id) && (paper.citations?.length ?? 0) > 0}
-              <div class="cited-papers">
+            {#if allowExpand && expandedCitations.has(paper.entry_id) && (paper.citations?.length ?? 0) > 0}
+              <div class="connected-papers citation-papers">
                 {#each paper.citations as citedId}
-                  {@const citedPaper = dataSource.find((p) => p.entry_id === citedId)}
+                  {@const citedPaper = dataSource.find(p => p.entry_id === citedId)}
                   {#if citedPaper}
-                    <div 
-                      class="cited-paper-item" 
-                      on:click|stopPropagation={() => selectCitedPaper(citedId)}
-                    >
+                    <!-- svelte-ignore a11y-click-events-have-key-events -->
+                    <!-- svelte-ignore a11y-no-static-element-interactions -->
+                    <div class="connected-item" on:click|stopPropagation={() => selectCitedPaper(citedId)}>
                       <h5>{citedPaper.title}</h5>
                       <p>{citedPaper.authors}</p>
+                    </div>
+                  {/if}
+                {/each}
+              </div>
+            {/if}
+            {#if allowExpand && expandedReferences.has(paper.entry_id) && (paper.references?.length ?? 0) > 0}
+              <div class="connected-papers reference-papers">
+                {#each paper.references as refId}
+                  {@const refPaper = dataSource.find(p => p.entry_id === refId)}
+                  {#if refPaper}
+                    <!-- svelte-ignore a11y-click-events-have-key-events -->
+                    <!-- svelte-ignore a11y-no-static-element-interactions -->
+                    <div class="connected-item ref-item" on:click|stopPropagation={() => selectPaper(refPaper)}>
+                      <h5>{refPaper.title}</h5>
+                      <p>{refPaper.authors}</p>
                     </div>
                   {/if}
                 {/each}
@@ -238,254 +358,147 @@
 
 <style>
   .sidebar-toggle {
-    position: absolute;
-    right: -5px;
-    top: 50%;
+    position: absolute; right: -5px; top: 50%;
     transform: translateY(-50%);
-    background-color: #4a9eff;
-    border: none;
-    border-radius: 50% 0 0 50%;
-    width: 40px;
-    height: 60px;
-    color: white;
-    cursor: pointer;
-    z-index: 200;
-    transition: all 0.3s ease;
-    display: flex;
-    align-items: center;
-    justify-content: center;
+    background: linear-gradient(135deg, var(--accent-purple, #9333ea), var(--accent-magenta, #e839a0));
+    border: none; border-radius: 50% 0 0 50%;
+    width: 36px; height: 56px; color: white;
+    cursor: pointer; z-index: 200;
+    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    display: flex; align-items: center; justify-content: center;
+    box-shadow: 0 0 15px rgba(147, 51, 234, 0.3);
   }
-
-  .sidebar-toggle:hover {
-    background-color: #357abd;
-  }
-
-  .sidebar-toggle.open {
-    right: 350px;
-    border-radius: 0 50% 50% 0;
-  }
-
-  .toggle-icon {
-    font-size: 18px;
-    font-weight: bold;
-  }
+  .sidebar-toggle:hover { box-shadow: 0 0 25px rgba(147,51,234,0.5); transform: translateY(-50%) scale(1.05); }
+  .sidebar-toggle.open { right: 370px; border-radius: 0 50% 50% 0; }
+  .toggle-icon { font-size: 16px; font-weight: bold; }
 
   .sidebar {
-    position: absolute;
-    right: -370px;
-    top: 0;
-    width: 370px;
-    height: 100%;
-    background-color: #2a2a35;
-    border-left: 1px solid #3a3a45;
-    transition: right 0.3s ease;
-    z-index: 150;
-    display: flex;
-    flex-direction: column;
+    position: absolute; right: -380px; top: 0;
+    width: 370px; height: 100%;
+    background: var(--bg-secondary, #141530);
+    border-left: 1px solid var(--glass-border, rgba(255,255,255,0.08));
+    transition: right 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    z-index: 150; display: flex; flex-direction: column;
   }
-
-  .sidebar.open {
-    right: 0;
-  }
+  .sidebar.open { right: 0; }
 
   .sidebar-header {
-    padding: 1rem;
-    border-bottom: 1px solid #3a3a45;
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-  }
-
-  .sidebar-header h3 {
-    margin: 0;
-    color: white;
-    font-size: 18px;
-  }
-
-  .close-btn {
-    background: none;
-    border: none;
-    color: #999;
-    font-size: 24px;
-    cursor: pointer;
-    padding: 0;
-    width: 30px;
-    height: 30px;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-  }
-
-  .close-btn:hover {
-    color: white;
-  }
-
-  .sidebar-tools {
-    display: flex;
-    align-items: center;
-    gap: 0.5rem;
-    padding: 0.5rem 0.75rem;
-    border-bottom: 1px solid #3a3a45;
-    flex-wrap: nowrap; /* Prevents the button from wrapping underneath the search bar */
-  }
-
-  .search {
-    flex: 1;
-    position: relative;
-  }
-
-  .search input {
-    width: 100%;
-    max-width: 200px; /* Limits the search bar width to prevent it from getting too big */
-    padding: 0.5rem 2rem 0.5rem 0.5rem;
-    border: 1px solid #3a3a45;
-    border-radius: 4px;
-    background: #1f1f29;
-    color: #e6e6e6;
-    outline: none;
-  }
-
-  .search .clear {
-    position: absolute;
-    right: 4px;
-    top: 50%;
-    transform: translateY(-50%);
-    background: none;
-    border: none;
-    color: #bbb;
-    cursor: pointer;
-    padding: 0 6px;
-    height: 100%;
-  }
-
-  .show-all {
-    flex-shrink: 0; /* Prevents the button from shrinking and getting cut off */
-    background: #44495d;
-    color: #e6e6e6;
-    border: 1px solid #3a3a45;
-    border-radius: 4px;
-    padding: 0.45rem 0.6rem;
-    cursor: pointer;
-    white-space: nowrap;
-  }
-
-  .show-all:hover {
-    background: #50566e;
-  }
-
-  .sidebar-content {
-    flex: 1;
-    overflow-y: auto;
-    padding: 0;
-  }
-
-  .empty {
-    color: #bbb;
-    padding: 1rem;
-    font-size: 14px;
-  }
-
-  .paper-item {
-    padding: 1rem;
-    border-bottom: 1px solid #3a3a45;
-    cursor: pointer;
-    transition: background-color 0.2s;
-    display: flex;
-    gap: 0.75rem;
-  }
-
-  .paper-item:hover {
-    background-color: #3a3a45;
-  }
-
-  .paper-item.selected {
-    background-color: #4a9eff20;
-    border-left: 3px solid #4a9eff;
-  }
-
-  .paper-cluster {
-    width: 30px;
-    height: 30px;
-    border-radius: 50%;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    color: white;
-    font-weight: bold;
-    font-size: 12px;
+    padding: 14px 16px;
+    border-bottom: 1px solid var(--glass-border, rgba(255,255,255,0.08));
+    display: flex; justify-content: space-between; align-items: center;
+    background: linear-gradient(180deg, rgba(147,51,234,0.06), transparent);
     flex-shrink: 0;
   }
+  .sidebar-header h3 { margin: 0; color: var(--text-primary, #f0f0f8); font-size: 15px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .header-text { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 1px; overflow: hidden; }
+  .header-sup { font-size: 10px; font-weight: 400; color: var(--text-muted, #6b6b8d); text-transform: uppercase; letter-spacing: 0.8px; }
+  .header-cat { font-size: 13px; font-weight: 600; color: var(--accent-cyan, #22d3ee); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .close-btn {
+    background: none; border: none; color: var(--text-muted, #6b6b8d);
+    font-size: 22px; cursor: pointer; padding: 0;
+    width: 28px; height: 28px; display: flex; align-items: center; justify-content: center;
+    border-radius: 8px; transition: all 0.15s ease;
+  }
+  .close-btn:hover { color: var(--text-primary, #f0f0f8); background: rgba(147,51,234,0.15); }
 
-  .paper-info {
-    flex: 1;
-    min-width: 0;
+  .sidebar-tools { padding: 8px 10px; border-bottom: 1px solid var(--glass-border, rgba(255,255,255,0.08)); flex-shrink: 0; }
+  .search-row { display: flex; gap: 6px; align-items: center; }
+  .search { flex: 1; position: relative; }
+  .search input {
+    width: 100%; padding: 0.45rem 2.2rem 0.45rem 0.7rem;
+    border: 1px solid var(--border-subtle, rgba(147,51,234,0.18));
+    border-radius: 8px; background: rgba(15,16,32,0.6);
+    color: var(--text-primary, #f0f0f8); outline: none; font-size: 13px;
+    box-sizing: border-box; transition: border-color 0.15s ease;
+  }
+  .search input:focus { border-color: rgba(147,51,234,0.45); }
+  .search input::placeholder { color: var(--text-muted, #6b6b8d); }
+  .search .clear {
+    position: absolute; right: 6px; top: 50%; transform: translateY(-50%);
+    background: none; border: none; color: var(--text-muted, #6b6b8d);
+    cursor: pointer; padding: 0 4px; transition: color 0.15s ease;
+  }
+  .search .clear:hover { color: var(--accent-magenta, #e839a0); }
+
+  .adv-btn {
+    flex-shrink: 0; background: rgba(147,51,234,0.1);
+    border: 1px solid rgba(147,51,234,0.2); color: var(--text-secondary, #a8a8c8);
+    border-radius: 8px; padding: 0.42rem 0.7rem;
+    cursor: pointer; font-size: 12px; white-space: nowrap; transition: all 0.15s ease;
+  }
+  .adv-btn:hover, .adv-btn.active { background: rgba(147,51,234,0.22); border-color: rgba(147,51,234,0.4); color: var(--text-primary, #f0f0f8); }
+
+  .adv-panel { margin-top: 8px; padding: 8px 10px; background: rgba(0,0,0,0.2); border: 1px solid var(--glass-border, rgba(255,255,255,0.07)); border-radius: 8px; }
+  .adv-row { display: flex; align-items: center; gap: 8px; margin-bottom: 6px; }
+  .adv-label { font-size: 11px; color: var(--text-muted, #6b6b8d); min-width: 50px; flex-shrink: 0; }
+  .adv-input, .adv-select {
+    flex: 1; min-width: 0; background: rgba(15,16,32,0.6);
+    border: 1px solid rgba(147,51,234,0.2); border-radius: 6px;
+    color: var(--text-primary, #f0f0f8); padding: 4px 8px; font-size: 12px; outline: none;
+  }
+  .adv-input:focus, .adv-select:focus { border-color: rgba(147,51,234,0.5); }
+  .adv-input::-webkit-calendar-picker-indicator { filter: invert(0.6); }
+  .adv-select option { background: #141530; }
+  .adv-error { margin: 4px 0; font-size: 11px; color: #f56565; padding: 4px 6px; background: rgba(245,101,101,0.1); border-radius: 4px; }
+  .adv-footer { display: flex; align-items: center; gap: 8px; margin-top: 6px; }
+  .adv-reset { background: rgba(245,101,101,0.1); border: 1px solid rgba(245,101,101,0.25); color: #fca5a5; border-radius: 999px; padding: 3px 12px; font-size: 11px; cursor: pointer; transition: all 0.12s ease; }
+  .adv-reset:hover { background: rgba(245,101,101,0.2); }
+  .adv-count { font-size: 11px; color: var(--text-muted, #6b6b8d); }
+
+  .show-all { margin-top: 6px; background: rgba(147,51,234,0.1); color: var(--text-primary, #f0f0f8); border: 1px solid rgba(147,51,234,0.18); border-radius: 8px; padding: 0.35rem 0.7rem; cursor: pointer; font-size: 12px; transition: all 0.15s ease; }
+  .show-all:hover { background: rgba(147,51,234,0.2); }
+
+  .sidebar-content { flex: 1; overflow-y: auto; scrollbar-width: thin; scrollbar-color: rgba(147,51,234,0.35) transparent; }
+  .sidebar-content::-webkit-scrollbar { width: 5px; }
+  .sidebar-content::-webkit-scrollbar-thumb { background: rgba(147,51,234,0.35); border-radius: 3px; }
+
+  .search-status { display: flex; align-items: center; gap: 8px; padding: 12px 14px; font-size: 12px; color: var(--text-muted, #6b6b8d); }
+  .search-status.error { color: #f56565; }
+  .mini-spinner { width: 14px; height: 14px; border: 2px solid rgba(147,51,234,0.2); border-top-color: var(--accent-cyan, #22d3ee); border-radius: 50%; animation: spin 0.7s linear infinite; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  .results-info { padding: 6px 14px; font-size: 11px; color: var(--text-muted, #6b6b8d); border-bottom: 1px solid var(--glass-border, rgba(255,255,255,0.04)); }
+  .empty { color: var(--text-muted, #6b6b8d); padding: 1.5rem; font-size: 13px; text-align: center; }
+
+  .paper-item {
+    padding: 10px 14px; border-bottom: 1px solid var(--glass-border, rgba(255,255,255,0.06));
+    cursor: pointer; transition: all 0.15s ease; display: flex; gap: 0.7rem;
+  }
+  .paper-item:hover { background: rgba(147,51,234,0.08); }
+  .paper-item.selected { background: rgba(147,51,234,0.12); border-left: 3px solid var(--accent-purple, #9333ea); }
+
+  .paper-cluster {
+    width: 28px; height: 28px; border-radius: 50%;
+    display: flex; align-items: center; justify-content: center;
+    color: white; font-weight: bold; font-size: 11px;
+    flex-shrink: 0; box-shadow: 0 0 8px rgba(0,0,0,0.3);
+    cursor: help;
   }
 
-  .paper-info h4 {
-    margin: 0 0 0.5rem 0;
-    font-size: 14px;
-    color: white;
-    line-height: 1.3;
-    word-wrap: break-word;
-  }
+  .paper-info { flex: 1; min-width: 0; }
+  .paper-category { margin: 0 0 0.15rem; font-size: 10px; color: rgba(147,51,234,0.8); font-weight: 500; text-transform: uppercase; letter-spacing: 0.5px; }
+  .paper-info h4 { margin: 0 0 0.25rem; font-size: 13px; color: var(--text-primary, #f0f0f8); line-height: 1.3; font-weight: 500; word-wrap: break-word; }
+  .paper-authors { margin: 0 0 0.25rem; font-size: 11px; color: var(--text-muted, #6b6b8d); font-style: italic; }
+  .paper-summary { margin: 0 0 0.3rem; font-size: 11px; color: var(--text-secondary, #a8a8c8); line-height: 1.4; }
 
-  .paper-authors {
-    margin: 0 0 0.5rem 0;
-    font-size: 12px;
-    color: #999;
-    font-style: italic;
-  }
+  .paper-meta { display: flex; justify-content: space-between; align-items: flex-end; font-size: 11px; color: var(--text-muted, #6b6b8d); gap: 4px; flex-wrap: wrap; }
+  .meta-actions { display: flex; flex-direction: column; gap: 2px; }
+  .meta-counts { color: var(--text-muted, #6b6b8d); font-size: 11px; flex-wrap: wrap; }
+  .arxiv-count { color: var(--text-secondary, #a8a8c8); font-size: 10px; }
+  .non-arxiv-count { color: #888; font-size: 10px; }
+  .expand-btn { cursor: pointer; background: none; border: none; padding: 0; font-size: 11px; text-align: left; transition: color 0.15s ease; }
+  .citations-btn { color: #ff9999; }
+  .citations-btn:hover { color: #ffd0d0; }
+  .references-btn { color: #7ee8e3; }
+  .references-btn:hover { color: #b5f0ed; }
+  .date { color: var(--text-muted, #6b6b8d); flex-shrink: 0; }
 
-  .paper-summary {
-    margin: 0 0 0.5rem 0;
-    font-size: 12px;
-    color: #ccc;
-    line-height: 1.4;
-  }
-
-  .paper-meta {
-    display: flex;
-    justify-content: space-between;
-    font-size: 11px;
-    color: #999;
-  }
-
-  .citations {
-    cursor: pointer;
-    color: #4a9eff;
-    background: none;
-    border: none;
-    padding: 0;
-    text-decoration: underline;
-  }
-
-  .cited-papers {
-    margin-top: 0.5rem;
-    padding-left: 0.75rem;
-    border-left: 2px solid #4a9eff;
-  }
-
-  .cited-paper-item {
-    padding: 0.5rem;
-    background-color: #3a3a45;
-    margin-bottom: 0.25rem;
-    border-radius: 4px;
-    cursor: pointer;
-  }
-
-  .cited-paper-item:hover {
-    background-color: #4a4a55;
-  }
-
-  .cited-paper-item h5 {
-    margin: 0 0 0.15rem 0;
-    font-size: 12px;
-    color: white;
-  }
-
-  .cited-paper-item p {
-    margin: 0;
-    font-size: 10px;
-    color: #ccc;
-  }
+  .connected-papers { margin-top: 0.4rem; padding-left: 0.75rem; }
+  .citation-papers { border-left: 2px solid rgba(255,107,107,0.4); }
+  .reference-papers { border-left: 2px solid rgba(78,205,196,0.4); }
+  .connected-item { padding: 0.3rem 0.5rem; margin-bottom: 0.2rem; border-radius: 6px; cursor: pointer; transition: all 0.15s ease; background: rgba(147,51,234,0.05); }
+  .connected-item:hover { background: rgba(147,51,234,0.14); }
+  .ref-item { background: rgba(78,205,196,0.04); }
+  .ref-item:hover { background: rgba(78,205,196,0.1); }
+  .connected-item h5 { margin: 0 0 0.1rem; font-size: 11px; color: var(--text-primary, #f0f0f8); }
+  .connected-item p { margin: 0; font-size: 10px; color: var(--text-secondary, #a8a8c8); }
 </style>

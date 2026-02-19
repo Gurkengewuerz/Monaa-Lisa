@@ -161,7 +161,7 @@
     width: 100%;
     height: 100%;
     position: relative;
-    background: #1e1e27;
+    background: var(--bg-primary, #0F1020);
   }
   .sigma-container {
     width: 100%;
@@ -172,35 +172,38 @@
     top: 12px;
     right: 12px;
     max-width: 340px;
-    background: rgba(30, 30, 39, 0.95);
-    border: 1px solid rgba(255,255,255,0.15);
-    border-radius: 10px;
-    padding: 14px;
-    color: #e0e6ed;
+    background: var(--glass-bg, rgba(20, 22, 50, 0.55));
+    border: 1px solid var(--border-subtle, rgba(147,51,234,0.18));
+    border-radius: var(--radius-md, 12px);
+    padding: 14px 16px;
+    color: var(--text-primary, #f0f0f8);
     font-size: 13px;
     z-index: 10;
     pointer-events: none;
-    backdrop-filter: blur(8px);
+    backdrop-filter: blur(var(--glass-blur, 16px));
+    box-shadow: var(--shadow-glow-sm);
   }
   .tooltip h4 {
     margin: 0 0 6px;
     font-size: 14px;
-    color: #fff;
+    color: var(--text-primary, #f0f0f8);
     line-height: 1.3;
+    font-weight: 600;
   }
   .tooltip .meta {
     margin: 2px 0;
-    color: #999;
+    color: var(--text-muted, #6b6b8d);
     font-size: 12px;
   }
   .tooltip .abstract {
     margin: 8px 0 4px;
     line-height: 1.4;
-    color: #bbb;
+    color: var(--text-secondary, #a8a8c8);
   }
   .tooltip .stats {
     margin: 6px 0 0;
-    color: #888;
+    color: var(--accent-cyan, #22d3ee);
     font-size: 11px;
+    opacity: 0.8;
   }
 </style>

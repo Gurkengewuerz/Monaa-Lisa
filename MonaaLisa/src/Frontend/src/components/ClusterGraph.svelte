@@ -277,7 +277,7 @@
 
     // clear with DPR-aware transform
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-    ctx.fillStyle = '#1e1e27';
+    ctx.fillStyle = '#0F1020';
     ctx.fillRect(0, 0, canvasW, canvasH);
     if (!laid.length) return;
 
@@ -399,6 +399,9 @@
 
   // label display: show abbreviation when zoomed out, full name when zoomed in
   const LABEL_FULL_SCALE = 0.9; // >= show full name, < show abbreviation (tweakable)
+  // zoom limits
+  const MIN_SCALE = 0.18; // how far out the user can zoom
+  const MAX_SCALE = 20;
 
   function abbrevName(name: string): string {
     if (!name) return '';
@@ -510,7 +513,7 @@
     const mx = e.clientX - rect.left;
     const my = e.clientY - rect.top;
     const factor = e.deltaY > 0 ? 0.9 : 1.1;
-    const newScale = Math.max(0.1, Math.min(view.scale * factor, 20));
+    const newScale = Math.max(MIN_SCALE, Math.min(view.scale * factor, MAX_SCALE));
     const ratio = newScale / view.scale;
     view = {
       scale:   newScale,
@@ -612,7 +615,7 @@
     width: 100%;
     height: 100%;
     display: block;
-    background: #1e1e27;
+    background: var(--bg-primary, #0F1020);
   }
   .reset-btn {
     position: absolute;
@@ -621,20 +624,23 @@
     width: 38px;
     height: 38px;
     border-radius: 50%;
-    border: 1px solid rgba(255,255,255,0.15);
-    background: rgba(30,30,39,0.8);
-    color: #ccc;
+    border: 1px solid var(--border-subtle, rgba(147,51,234,0.18));
+    background: var(--glass-bg, rgba(20, 22, 50, 0.55));
+    backdrop-filter: blur(var(--glass-blur, 16px));
+    color: var(--text-secondary, #a8a8c8);
     font-size: 20px;
     cursor: pointer;
     display: flex;
     align-items: center;
     justify-content: center;
-    backdrop-filter: blur(6px);
     z-index: 10;
-    transition: background 0.2s, color 0.2s;
+    transition: all var(--transition-smooth, 0.3s cubic-bezier(0.4,0,0.2,1));
+    box-shadow: 0 0 10px rgba(147, 51, 234, 0.1);
   }
   .reset-btn:hover {
-    background: rgba(74,158,255,0.3);
+    background: rgba(147, 51, 234, 0.25);
     color: #fff;
+    border-color: rgba(147, 51, 234, 0.4);
+    box-shadow: 0 0 20px rgba(147, 51, 234, 0.3);
   }
 </style>

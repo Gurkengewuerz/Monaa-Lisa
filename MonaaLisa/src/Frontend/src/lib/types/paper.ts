@@ -36,11 +36,35 @@ export interface Paper {
   categories: string | null;
   url: string | null;
   citations: string[];
+  references: string[];
   non_arxiv_citation_count: number;
   non_arxiv_reference_count: number;
   tsne1: number;
   tsne2: number;
   cluster: string;
+}
+
+/**
+ * A fetched paper from the neighbourhood API (used in PaperSidebar).
+ */
+export interface NeighbourPaper {
+  entry_id: string;
+  title: string;
+  authors: string;
+  abstract: string;
+  published: string | null;
+  categories: string | null;
+  non_arxiv_citation_count: number;
+  non_arxiv_reference_count: number;
+}
+
+/**
+ * A paper browsing-history session stored in localStorage.
+ */
+export interface PaperSession {
+  id: string;
+  mainPaper: { entry_id: string; title: string; authors: string };
+  startedAt: number;
 }
 
 /**
@@ -67,4 +91,14 @@ export type ViewState =
   | { level: 'top' }
   | { level: 'sub'; parentName: string; parentId: string }
   | { level: 'papers'; categoryId: string; categoryName: string; parentName: string }
-  | { level: 'detail'; paper: Paper; categoryId: string; categoryName: string; parentName: string };
+  | {
+      level: 'detail';
+      paper: Paper;
+      categoryId: string;
+      categoryName: string;
+      parentName: string;
+      /** arXiv citation count (fetched after load, may be undefined) */
+      arxivCitationCount?: number;
+      /** arXiv reference count (fetched after load, may be undefined) */
+      arxivReferenceCount?: number;
+    };
