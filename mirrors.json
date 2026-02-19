@@ -1,0 +1,40 @@
+{
+    "files": {
+        "dataset": {
+            "filename": "Cleaned_Full_Dataset_With_Related.jsonl",
+            "description": "Full arXiv dataset with embeddings and related papers",
+            "mirrors": [
+                "https://monaa.shrimpshromp.eu/Cleaned_Full_Dataset_With_Related.jsonl"
+            ],
+            "gdrive_fallback": {
+                "file_id": "19R8YPDAkwcqnGSLHpLgssiBZHuscGYrn"
+            }
+        },
+        "pca_model": {
+            "filename": "pca_model_128d.pkl",
+            "description": "PCA model (768D → 128D)",
+            "mirrors": [
+                "https://monaa.shrimpshromp.eu/pca_model_128d.pkl"
+            ],
+            "gdrive_fallback": {
+                "file_id": "1cGSFPfLtn4ccGR_aDkDLpktQKHGzWHD0"
+            }
+        },
+        "umap_model": {
+            "filename": "umap_model_2d.pkl",
+            "description": "UMAP model (128D → 2D)",
+            "mirrors": [
+                "https://monaa.shrimpshromp.eu/umap_model_2d-003.pkl"
+            ],
+            "gdrive_fallback": {
+                "file_id": "1A98RFLD7TE9rT5Eb0pAzS6_eam3DpdXm"
+            }
+        }
+    },
+    "download_settings": {
+        "max_retries": 3,
+        "retry_delay_seconds": 10,
+        "timeout_seconds": 300,
+        "chunk_size_bytes": 8388608
+    }
+}
