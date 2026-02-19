@@ -15,34 +15,37 @@
     left: 0;
     width: 100vw;
     height: 100vh;
-    background-color: #1a1f2c; /* Dark-blueish gray from LandingPage */
+    background-color: var(--bg-primary, #0F1020);
     display: flex;
     justify-content: center;
     align-items: center;
-    z-index: 10000; /* High z-index to be on top */
+    z-index: 10000;
   }
 
   .loading-logo {
     font-size: 48px;
     font-weight: bold;
     letter-spacing: 4px;
-    border: 4px solid #fff;
+    border: 3px solid rgba(147, 51, 234, 0.5);
     padding: 10px 20px;
-    background: transparent;
+    background: linear-gradient(135deg, rgba(147,51,234,0.08), rgba(232,57,160,0.06));
     color: #fff;
-    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', sans-serif;
+    font-family: 'Inter', 'Segoe UI', system-ui, sans-serif;
     animation: glow 2s ease-in-out infinite;
   }
 
   @keyframes glow {
     0% {
-      filter: drop-shadow(0 0 5px rgba(0, 191, 255, 0.6)); /* Blue */
+      filter: drop-shadow(0 0 5px rgba(34, 211, 238, 0.6));
+      border-color: rgba(34, 211, 238, 0.5);
     }
     50% {
-      filter: drop-shadow(0 0 25px rgba(138, 43, 226, 0.9)); /* Purple */
+      filter: drop-shadow(0 0 25px rgba(147, 51, 234, 0.9));
+      border-color: rgba(147, 51, 234, 0.7);
     }
     100% {
-      filter: drop-shadow(0 0 5px rgba(255, 105, 180, 0.6)); /* Pink */
+      filter: drop-shadow(0 0 5px rgba(232, 57, 160, 0.6));
+      border-color: rgba(232, 57, 160, 0.5);
     }
   }
 </style>

@@ -1,5 +1,5 @@
 # Stage 1: Dependencies (cached)
-FROM python:3.11-slim AS deps
+FROM python:3.13-slim AS deps
 
 RUN apt-get update && apt-get install -y \
     git \
@@ -17,9 +17,12 @@ FROM deps AS app
 
 COPY . .
 
+# Create data directories – downloaded files live here at runtime
+RUN mkdir -p /app/data/models /app/.cache
+
 RUN useradd -m -s /bin/bash vscode \
     && chown -R vscode:vscode /app
 
 USER vscode
 
-CMD ["python", "main.py"]
+CMD ["python", "MonaaLisa/src/main.py"]

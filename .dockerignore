@@ -28,6 +28,11 @@ node_modules
 .git
 .gitignore
 *.md
+
+# Data files (downloaded at runtime)
+data/
+*.pkl
+*.jsonl
 docs/
 tests/
 **/__pycache__
