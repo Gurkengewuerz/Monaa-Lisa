@@ -131,9 +131,6 @@ CREATE INDEX "reference_belonging_paper_entry_id_idx" ON "reference"("belonging_
 CREATE INDEX "citation_belonging_paper_entry_id_idx" ON "citation"("belonging_paper_entry_id");
 
 -- CreateIndex
-CREATE INDEX "paper_citation_belonging_paper_entry_id_idx" ON "paper_citation"("belonging_paper_entry_id");
-
--- CreateIndex
 CREATE INDEX "paper_citation_cited_paper_entry_id_idx" ON "paper_citation"("cited_paper_entry_id");
 
 -- CreateIndex
