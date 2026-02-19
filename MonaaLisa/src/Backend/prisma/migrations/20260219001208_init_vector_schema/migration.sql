@@ -71,7 +71,7 @@ CREATE TABLE "paper_reference" (
 CREATE TABLE "embedding" (
     "id" SERIAL NOT NULL,
     "belonging_paper_entry_id" TEXT NOT NULL,
-    "content" vector(128) NOT NULL,
+    "content" JSON NOT NULL,
 
     CONSTRAINT "embedding_pkey" PRIMARY KEY ("id")
 );
