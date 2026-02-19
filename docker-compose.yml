@@ -61,9 +61,9 @@ services:
       test: ["CMD-SHELL", "wget --no-verbose --tries=1 --spider http://localhost:3000 || exit 1"]
       interval: 10s
       timeout: 5s
-      retries: 5
+      retries: 10
       # WICHTIG: Gib ihm Zeit für npm install & migration, bevor der erste Check zählt
-      start_period: 30s
+      start_period: 90s
 
 
   frontend:

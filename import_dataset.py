@@ -32,6 +32,7 @@ from datetime import datetime
 
 import psycopg2
 import psycopg2.extras
+from tqdm import tqdm
 
 
 # ---------------------------------------------------------------------------
@@ -322,8 +323,14 @@ def import_dataset(filepath: str, batch_size: int = 5000):
     total_references = 0
     t0 = time.time()
 
+    # Get total file size for progress bar (rough estimate)
+    file_size = os.path.getsize(filepath)
+
     with open(filepath, "r", encoding="utf-8") as fh:
-        for line_no, line in enumerate(fh, start=1):
+        # Use tqdm for progress bar
+        pbar = tqdm(fh, total=None, unit="papers", mininterval=1.0, desc="Importing")
+        
+        for line_no, line in enumerate(pbar, start=1):
             line = line.strip()
             if not line:
                 continue
@@ -414,16 +421,13 @@ def import_dataset(filepath: str, batch_size: int = 5000):
                 flush_links(conn, "paper_reference", PAPER_REFERENCE_COLS, reference_batch)
                 reference_batch.clear()
 
-            if line_no % 50000 == 0:
-                elapsed = time.time() - t0
-                rate = total_papers / elapsed if elapsed > 0 else 0
-                print(
-                    f"[progress] {total_papers:>10,} papers | "
-                    f"{total_embeddings:>10,} embeddings | "
-                    f"{total_citations:>10,} citations | "
-                    f"{total_references:>10,} references | "
-                    f"{rate:,.0f} papers/s"
-                )
+            # Update progress bar description with stats
+            if line_no % 1000 == 0:
+                pbar.set_postfix({
+                    "papers": f"{total_papers:,}",
+                    "cits": f"{total_citations:,}",
+                    "refs": f"{total_references:,}"
+                })
 
     # Flush remaining
     flush_papers(conn, paper_batch)

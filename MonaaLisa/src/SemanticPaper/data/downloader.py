@@ -1,21 +1,23 @@
 """
-Abstract: Downloads the initial dataset and pre-trained ML models from Google Drive.
+Abstract: Downloads the initial dataset and pre-trained ML models.
     Files are stored under DATA_DIR (default /app/data) and are gitignored /
     dockerignored so they are never baked into an image.
 
-    The download uses ``gdown`` which handles Google Drive's virus-scan warning
-    for large files automatically.
+    Download strategy:
+    1. Try HTTP mirrors from mirrors.json (fast direct downloads)
+    2. Fall back to Google Drive via gdown if all mirrors fail
 
     Integrity is verified by checking that the downloaded file size is non-zero
     and, for pkl models, that they can be loaded with joblib.
 """
 
 import os
-import hashlib
-import pickle
+import json
 import time
 from pathlib import Path
+from typing import Optional
 
+import requests
 import gdown
 import joblib
 
@@ -25,15 +27,27 @@ from config import cfg
 
 logger = Logger("Downloader")
 
-# ----- Google Drive file IDs (configurable via config.ini) -----
-DATASET_FILE_ID = cfg.get("semanticpaper", "gdrive_dataset_id", "1icCN9N3CsHxm8n3ccXetdU0yoZymBxuZ")
-PCA_MODEL_FILE_ID = cfg.get("semanticpaper", "gdrive_pca_model_id", "1cGSFPfLtn4ccGR_aDkDLpktQKHGzWHD0")
-UMAP_MODEL_FILE_ID = cfg.get("semanticpaper", "gdrive_umap_model_id", "1A98RFLD7TE9rT5Eb0pAzS6_eam3DpdXm")
 
-# ----- File names (configurable via config.ini) -----
-DATASET_FILENAME = cfg.get("semanticpaper", "dataset_filename", "Full_Dataset_WithCoordsAndEmbeddings.jsonl")
-PCA_MODEL_FILENAME = cfg.get("semanticpaper", "pca_model_filename", "pca_model_128d.pkl")
-UMAP_MODEL_FILENAME = cfg.get("semanticpaper", "umap_model_filename", "umap_model_2d.pkl")
+# ----- Load mirror configuration -----
+def _load_mirrors_config() -> dict:
+    """Load the mirrors configuration from mirrors.json in project root."""
+    # In Docker: /app/mirrors.json, locally: find project root
+    possible_paths = [
+        Path("/app/mirrors.json"),  # Docker container
+        Path(__file__).parent.parent.parent.parent.parent.parent / "mirrors.json",  # Local dev
+    ]
+    for config_path in possible_paths:
+        if config_path.exists():
+            with open(config_path, "r", encoding="utf-8") as f:
+                logger.info(f"Loaded mirrors config from {config_path}")
+                return json.load(f)
+    logger.warning("mirrors.json not found, using defaults")
+    return {"files": {}, "download_settings": {}}
+
+
+MIRRORS_CONFIG = _load_mirrors_config()
+DOWNLOAD_SETTINGS = MIRRORS_CONFIG.get("download_settings", {})
+FILES_CONFIG = MIRRORS_CONFIG.get("files", {})
 
 
 def _data_dir() -> Path:
@@ -50,13 +64,64 @@ def _models_dir() -> Path:
     return d
 
 
-def _gdrive_url(file_id: str) -> str:
-    return f"https://drive.google.com/uc?id={file_id}"
+def _get_file_config(file_key: str) -> dict:
+    """Get configuration for a specific file from mirrors.json."""
+    return FILES_CONFIG.get(file_key, {})
 
 
-def _download(file_id: str, dest: Path, description: str, max_retries: int = 3, retry_delay: int = 60) -> bool:
+def _download_http(url: str, dest: Path, description: str) -> bool:
     """
-    Abstract: Downloads a single file from Google Drive, verifying it arrived intact.
+    Abstract: Downloads a file from an HTTP mirror using streaming.
+    Args:
+    - url: Direct HTTP URL
+    - dest: Local destination path
+    - description: Human-readable label for log messages
+    Returns: bool -> True if download succeeded
+    """
+    timeout = DOWNLOAD_SETTINGS.get("timeout_seconds", 300)
+    chunk_size = DOWNLOAD_SETTINGS.get("chunk_size_bytes", 8 * 1024 * 1024)
+    
+    try:
+        logger.info(f"Downloading {description} from {url}...")
+        response = requests.get(url, stream=True, timeout=timeout)
+        response.raise_for_status()
+        
+        total_size = int(response.headers.get('content-length', 0))
+        downloaded = 0
+        last_log_percent = -10
+        
+        with open(dest, 'wb') as f:
+            for chunk in response.iter_content(chunk_size=chunk_size):
+                if chunk:
+                    f.write(chunk)
+                    downloaded += len(chunk)
+                    if total_size > 0:
+                        percent = int(downloaded * 100 / total_size)
+                        if percent >= last_log_percent + 10:
+                            logger.info(f"  {description}: {percent}% ({downloaded / (1024**2):.1f} MB / {total_size / (1024**2):.1f} MB)")
+                            last_log_percent = percent
+        
+        if dest.exists() and dest.stat().st_size > 0:
+            logger.info(f"Downloaded {description}: {dest.stat().st_size:,} bytes → {dest}")
+            return True
+        else:
+            logger.error(f"Download resulted in empty file: {dest}")
+            dest.unlink(missing_ok=True)
+            return False
+            
+    except requests.exceptions.RequestException as e:
+        logger.warning(f"HTTP download failed for {description} from {url}: {e}")
+        dest.unlink(missing_ok=True)
+        return False
+    except Exception as e:
+        logger.error(f"Unexpected error downloading {description}: {e}")
+        dest.unlink(missing_ok=True)
+        return False
+
+
+def _download_gdrive(file_id: str, dest: Path, description: str, max_retries: int = 3, retry_delay: int = 60) -> bool:
+    """
+    Abstract: Downloads a single file from Google Drive (fallback method).
               Retries on transient failures (e.g. Google Drive rate limits).
     Args:
     - file_id: Google Drive file ID
@@ -66,11 +131,7 @@ def _download(file_id: str, dest: Path, description: str, max_retries: int = 3, 
     - retry_delay: Seconds to wait between retries (doubles each attempt)
     Returns: bool -> True if download succeeded and file is non-empty
     """
-    if dest.exists() and dest.stat().st_size > 0:
-        logger.info(f"{description} already exists at {dest} ({dest.stat().st_size:,} bytes), skipping download.")
-        return True
-
-    url = _gdrive_url(file_id)
+    url = f"https://drive.google.com/uc?id={file_id}"
     delay = retry_delay
 
     for attempt in range(1, max_retries + 1):
@@ -78,7 +139,7 @@ def _download(file_id: str, dest: Path, description: str, max_retries: int = 3, 
         try:
             output = gdown.download(url, str(dest), quiet=False, fuzzy=True)
             if output is None or not dest.exists():
-                logger.error(f"Download failed for {description}")
+                logger.error(f"GDrive download failed for {description}")
                 if attempt < max_retries:
                     logger.info(f"Retrying in {delay}s...")
                     time.sleep(delay)
@@ -95,16 +156,63 @@ def _download(file_id: str, dest: Path, description: str, max_retries: int = 3, 
                     delay *= 2
                     continue
                 return False
-            logger.info(f"Downloaded {description}: {size:,} bytes → {dest}")
+            logger.info(f"Downloaded {description} from GDrive: {size:,} bytes → {dest}")
             return True
         except Exception as e:
-            logger.error(f"Error downloading {description}: {e}")
+            logger.error(f"Error downloading {description} from GDrive: {e}")
             if attempt < max_retries:
                 logger.info(f"Retrying in {delay}s...")
                 time.sleep(delay)
                 delay *= 2
             else:
                 return False
+    return False
+
+
+def _download_file(file_key: str, dest: Path) -> bool:
+    """
+    Abstract: Downloads a file using the mirror-first strategy.
+              1. Try each HTTP mirror in order
+              2. Fall back to Google Drive if all mirrors fail
+    Args:
+    - file_key: Key in mirrors.json (e.g., "dataset", "pca_model", "umap_model")
+    - dest: Local destination path
+    Returns: bool -> True if download succeeded
+    """
+    config = _get_file_config(file_key)
+    if not config:
+        logger.error(f"No configuration found for file: {file_key}")
+        return False
+    
+    description = config.get("description", file_key)
+    mirrors = config.get("mirrors", [])
+    gdrive_fallback = config.get("gdrive_fallback", {})
+    
+    # Check if file already exists
+    if dest.exists() and dest.stat().st_size > 0:
+        logger.info(f"{description} already exists at {dest} ({dest.stat().st_size:,} bytes), skipping download.")
+        return True
+    
+    max_retries = DOWNLOAD_SETTINGS.get("max_retries", 3)
+    retry_delay = DOWNLOAD_SETTINGS.get("retry_delay_seconds", 10)
+    
+    # Try HTTP mirrors first
+    for mirror_url in mirrors:
+        for attempt in range(1, max_retries + 1):
+            if _download_http(mirror_url, dest, description):
+                return True
+            if attempt < max_retries:
+                logger.info(f"Mirror attempt {attempt}/{max_retries} failed, retrying in {retry_delay}s...")
+                time.sleep(retry_delay)
+        logger.warning(f"Mirror {mirror_url} exhausted, trying next...")
+    
+    # Fall back to Google Drive
+    gdrive_id = gdrive_fallback.get("file_id")
+    if gdrive_id:
+        logger.info(f"All mirrors failed for {description}, falling back to Google Drive...")
+        return _download_gdrive(gdrive_id, dest, description, max_retries=5, retry_delay=60)
+    
+    logger.error(f"No mirrors or GDrive fallback available for {description}")
     return False
 
 
@@ -158,30 +266,41 @@ def _verify_pkl(path: Path, label: str, full_load: bool = True) -> bool:
 # ---- Public API ----
 
 
+def _get_filename(file_key: str) -> str:
+    """Get the filename for a file from mirrors.json config."""
+    config = _get_file_config(file_key)
+    return config.get("filename", f"{file_key}.bin")
+
+
 def download_dataset() -> Path | None:
     """
-    Abstract: Downloads the full dataset JSONL from Google Drive.
-              Uses aggressive retry since large files often hit Google Drive rate limits.
+    Abstract: Downloads the full dataset JSONL.
+              Tries HTTP mirrors first, then falls back to Google Drive.
     Returns: Path to the downloaded file, or None on failure.
     """
-    dest = _data_dir() / DATASET_FILENAME
-    if _download(DATASET_FILE_ID, dest, "Full dataset", max_retries=10, retry_delay=300):
+    filename = _get_filename("dataset")
+    dest = _data_dir() / filename
+    if _download_file("dataset", dest):
         return dest
     return None
 
 
 def download_models() -> bool:
     """
-    Abstract: Downloads PCA and UMAP pre-trained models from Google Drive and
-              verifies they can be loaded with joblib.
+    Abstract: Downloads PCA and UMAP pre-trained models and verifies they can be loaded.
+              Tries HTTP mirrors first, then falls back to Google Drive.
     Returns: bool -> True if both models were downloaded and verified.
     """
     models_dir = _models_dir()
-    pca_path = models_dir / PCA_MODEL_FILENAME
-    umap_path = models_dir / UMAP_MODEL_FILENAME
+    
+    pca_filename = _get_filename("pca_model")
+    umap_filename = _get_filename("umap_model")
+    
+    pca_path = models_dir / pca_filename
+    umap_path = models_dir / umap_filename
 
-    pca_ok = _download(PCA_MODEL_FILE_ID, pca_path, "PCA model (768→128D)")
-    umap_ok = _download(UMAP_MODEL_FILE_ID, umap_path, "UMAP model (128→2D)")
+    pca_ok = _download_file("pca_model", pca_path)
+    umap_ok = _download_file("umap_model", umap_path)
 
     if not pca_ok or not umap_ok:
         return False
@@ -216,15 +335,15 @@ def ensure_models_exist() -> bool:
 
 
 def get_dataset_path() -> Path:
-    return _data_dir() / DATASET_FILENAME
+    return _data_dir() / _get_filename("dataset")
 
 
 def get_pca_model_path() -> Path:
-    return _models_dir() / PCA_MODEL_FILENAME
+    return _models_dir() / _get_filename("pca_model")
 
 
 def get_umap_model_path() -> Path:
-    return _models_dir() / UMAP_MODEL_FILENAME
+    return _models_dir() / _get_filename("umap_model")
 
 
 def cleanup_dataset():
