@@ -70,7 +70,6 @@ model PaperCitation {
   cited_paper_entry_id     String
 
   @@id([belonging_paper_entry_id, cited_paper_entry_id])
-  @@index([belonging_paper_entry_id])
   @@index([cited_paper_entry_id])
   @@map("paper_citation")
 }
