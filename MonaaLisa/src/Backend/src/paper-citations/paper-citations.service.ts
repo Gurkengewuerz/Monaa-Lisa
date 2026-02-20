@@ -25,4 +25,3 @@ export class PaperCitationsService {
     return citations.filter((c) => validEntryIds.has(c.cited_paper_entry_id));
   }
 }
-

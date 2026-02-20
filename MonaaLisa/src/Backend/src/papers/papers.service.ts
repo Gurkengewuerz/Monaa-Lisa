@@ -95,59 +95,69 @@ export class PapersService {
    */
   // `MonaaLisa/src/Backend/src/papers/papers.service.ts`
 
-async findMany(q: QueryPaperDto) {
-  const skip = toNumber(q.skip, 0);
-  const take = toNumber(q.take, 20);
+  async findMany(q: QueryPaperDto) {
+    const skip = toNumber(q.skip, 0);
+    const take = toNumber(q.take, 20);
 
-  // ── sort=citations → raw SQL path (order by citation count DESC) ──
-  if (q.sort === 'citations' && q.categories && !q.search && !q.dateFrom && !q.dateTo) {
-    return this.findManyByCitationCount(q.categories, skip, take);
-  }
+    // ── sort=citations → raw SQL path (order by citation count DESC) ──
+    if (
+      q.sort === 'citations' &&
+      q.categories &&
+      !q.search &&
+      !q.dateFrom &&
+      !q.dateTo
+    ) {
+      return this.findManyByCitationCount(q.categories, skip, take);
+    }
 
-  const where: Prisma.PaperWhereInput = {};
+    const where: Prisma.PaperWhereInput = {};
 
-  // Stub-Titel grundsätzlich ausschließen
-  where.NOT = [
-    { title: { equals: '[STUB] Pending Fetch', mode: 'insensitive' } },
-  ];
-
-  if (q.search) {
-    const searchTerm = q.search.trim();
-    where.OR = [
-      { title: { contains: searchTerm, mode: 'insensitive' } },
-      { authors: { contains: searchTerm, mode: 'insensitive' } },
-      { abstract: { contains: searchTerm, mode: 'insensitive' } },
+    // Stub-Titel grundsätzlich ausschließen
+    where.NOT = [
+      { title: { equals: '[STUB] Pending Fetch', mode: 'insensitive' } },
     ];
+
+    if (q.search) {
+      const searchTerm = q.search.trim();
+      where.OR = [
+        { title: { contains: searchTerm, mode: 'insensitive' } },
+        { authors: { contains: searchTerm, mode: 'insensitive' } },
+        { abstract: { contains: searchTerm, mode: 'insensitive' } },
+      ];
+    }
+
+    if (q.categories) where.categories = { contains: q.categories };
+
+    if (q.dateFrom || q.dateTo) {
+      const publishedFilter: Prisma.DateTimeNullableFilter = {};
+      if (q.dateFrom) publishedFilter.gte = new Date(q.dateFrom);
+      if (q.dateTo) publishedFilter.lte = new Date(q.dateTo);
+      where.published = publishedFilter;
+    }
+
+    const [items, total] = await Promise.all([
+      this.prisma.paper.findMany({
+        where,
+        orderBy: [{ published: 'desc' }],
+        skip,
+        take,
+      }),
+      this.prisma.paper.count({ where }),
+    ]);
+
+    const enrichedItems = await this.enrichWithCitations(items);
+    return { items: enrichedItems, total, skip, take };
   }
-
-  if (q.categories) where.categories = { contains: q.categories };
-
-  if (q.dateFrom || q.dateTo) {
-    const publishedFilter: Prisma.DateTimeNullableFilter = {};
-    if (q.dateFrom) publishedFilter.gte = new Date(q.dateFrom);
-    if (q.dateTo) publishedFilter.lte = new Date(q.dateTo);
-    where.published = publishedFilter;
-  }
-
-  const [items, total] = await Promise.all([
-    this.prisma.paper.findMany({
-      where,
-      orderBy: [{ published: 'desc' }],
-      skip,
-      take,
-    }),
-    this.prisma.paper.count({ where }),
-  ]);
-
-  const enrichedItems = await this.enrichWithCitations(items);
-  return { items: enrichedItems, total, skip, take };
-}
 
   /**
    * Optimised path: fetches papers for a category ordered by citation count.
    * Uses raw SQL because Prisma cannot ORDER BY a count from a joined table.
    */
-  private async findManyByCitationCount(category: string, skip: number, take: number) {
+  private async findManyByCitationCount(
+    category: string,
+    skip: number,
+    take: number,
+  ) {
     const papers: any[] = await this.prisma.$queryRaw`
       SELECT p.*,
              COALESCE(cc.cnt, 0) AS cit_count
@@ -174,8 +184,14 @@ async findMany(q: QueryPaperDto) {
     const items = papers.map(({ cit_count, ...rest }) => ({
       ...rest,
       id: Number(rest.id),
-      non_arxiv_citation_count: rest.non_arxiv_citation_count != null ? Number(rest.non_arxiv_citation_count) : null,
-      non_arxiv_reference_count: rest.non_arxiv_reference_count != null ? Number(rest.non_arxiv_reference_count) : null,
+      non_arxiv_citation_count:
+        rest.non_arxiv_citation_count != null
+          ? Number(rest.non_arxiv_citation_count)
+          : null,
+      non_arxiv_reference_count:
+        rest.non_arxiv_reference_count != null
+          ? Number(rest.non_arxiv_reference_count)
+          : null,
     }));
 
     const enrichedItems = await this.enrichWithCitations(items as any);
@@ -187,12 +203,24 @@ async findMany(q: QueryPaperDto) {
    * Wirft, wenn es die ID nicht gibt → bewusst, damit der Caller entscheiden kann.
    */
   async findByEntryId(entry_id: string) {
-    const paper = await this.prisma.paper.findUniqueOrThrow({ where: { entry_id } });
-    const citations = await this.prisma.paperCitation.findMany({
-      where: { belonging_paper_entry_id: entry_id },
-      select: { cited_paper_entry_id: true },
+    const paper = await this.prisma.paper.findUniqueOrThrow({
+      where: { entry_id },
     });
-    return { ...paper, citations: citations.map(c => c.cited_paper_entry_id) };
+    const [citations, references] = await Promise.all([
+      this.prisma.paperCitation.findMany({
+        where: { belonging_paper_entry_id: entry_id },
+        select: { cited_paper_entry_id: true },
+      }),
+      this.prisma.paperReference.findMany({
+        where: { belonging_paper_entry_id: entry_id },
+        select: { referenced_paper_entry_id: true },
+      }),
+    ]);
+    return {
+      ...paper,
+      citations: citations.map((c) => c.cited_paper_entry_id),
+      references: references.map((r) => r.referenced_paper_entry_id),
+    };
   }
 
   /**
@@ -235,28 +263,52 @@ async findMany(q: QueryPaperDto) {
   }
 
   /**
-   * Holt aus der paper_citation-Tabelle die cited_paper_entry_ids für
-   * jedes übergebene Paper und hängt sie als `citations: string[]` an.
+   * Holt aus der paper_citation- und paper_reference-Tabelle die IDs für
+   * jedes übergebene Paper und hängt sie als `citations` / `references` an.
    */
-  private async enrichWithCitations<T extends { entry_id: string }>(papers: T[]): Promise<(T & { citations: string[] })[]> {
+  private async enrichWithCitations<T extends { entry_id: string }>(
+    papers: T[],
+  ): Promise<(T & { citations: string[]; references: string[] })[]> {
     if (!papers.length) return [];
 
-    const entryIds = papers.map(p => p.entry_id);
-    const rows = await this.prisma.paperCitation.findMany({
-      where: { belonging_paper_entry_id: { in: entryIds } },
-      select: { belonging_paper_entry_id: true, cited_paper_entry_id: true },
-    });
+    const entryIds = papers.map((p) => p.entry_id);
+
+    const [citRows, refRows] = await Promise.all([
+      this.prisma.paperCitation.findMany({
+        where: { belonging_paper_entry_id: { in: entryIds } },
+        select: { belonging_paper_entry_id: true, cited_paper_entry_id: true },
+      }),
+      this.prisma.paperReference.findMany({
+        where: { belonging_paper_entry_id: { in: entryIds } },
+        select: {
+          belonging_paper_entry_id: true,
+          referenced_paper_entry_id: true,
+        },
+      }),
+    ]);
 
     const citationMap = new Map<string, string[]>();
-    for (const r of rows) {
+    for (const r of citRows) {
       const arr = citationMap.get(r.belonging_paper_entry_id);
       if (arr) arr.push(r.cited_paper_entry_id);
-      else citationMap.set(r.belonging_paper_entry_id, [r.cited_paper_entry_id]);
+      else
+        citationMap.set(r.belonging_paper_entry_id, [r.cited_paper_entry_id]);
     }
 
-    return papers.map(p => ({
+    const referenceMap = new Map<string, string[]>();
+    for (const r of refRows) {
+      const arr = referenceMap.get(r.belonging_paper_entry_id);
+      if (arr) arr.push(r.referenced_paper_entry_id);
+      else
+        referenceMap.set(r.belonging_paper_entry_id, [
+          r.referenced_paper_entry_id,
+        ]);
+    }
+
+    return papers.map((p) => ({
       ...p,
       citations: citationMap.get(p.entry_id) ?? [],
+      references: referenceMap.get(p.entry_id) ?? [],
     }));
   }
 
@@ -268,7 +320,6 @@ async findMany(q: QueryPaperDto) {
     return this.prisma.paper.delete({ where: { entry_id } });
   }
 }
-
 
 /**
  *
