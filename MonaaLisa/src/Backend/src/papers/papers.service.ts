@@ -188,11 +188,21 @@ async findMany(q: QueryPaperDto) {
    */
   async findByEntryId(entry_id: string) {
     const paper = await this.prisma.paper.findUniqueOrThrow({ where: { entry_id } });
-    const citations = await this.prisma.paperCitation.findMany({
-      where: { belonging_paper_entry_id: entry_id },
-      select: { cited_paper_entry_id: true },
-    });
-    return { ...paper, citations: citations.map(c => c.cited_paper_entry_id) };
+    const [citations, references] = await Promise.all([
+      this.prisma.paperCitation.findMany({
+        where: { belonging_paper_entry_id: entry_id },
+        select: { cited_paper_entry_id: true },
+      }),
+      this.prisma.paperReference.findMany({
+        where: { belonging_paper_entry_id: entry_id },
+        select: { referenced_paper_entry_id: true },
+      }),
+    ]);
+    return {
+      ...paper,
+      citations: citations.map(c => c.cited_paper_entry_id),
+      references: references.map(r => r.referenced_paper_entry_id),
+    };
   }
 
   /**
@@ -235,28 +245,43 @@ async findMany(q: QueryPaperDto) {
   }
 
   /**
-   * Holt aus der paper_citation-Tabelle die cited_paper_entry_ids für
-   * jedes übergebene Paper und hängt sie als `citations: string[]` an.
+   * Holt aus der paper_citation- und paper_reference-Tabelle die IDs für
+   * jedes übergebene Paper und hängt sie als `citations` / `references` an.
    */
-  private async enrichWithCitations<T extends { entry_id: string }>(papers: T[]): Promise<(T & { citations: string[] })[]> {
+  private async enrichWithCitations<T extends { entry_id: string }>(papers: T[]): Promise<(T & { citations: string[]; references: string[] })[]> {
     if (!papers.length) return [];
 
     const entryIds = papers.map(p => p.entry_id);
-    const rows = await this.prisma.paperCitation.findMany({
-      where: { belonging_paper_entry_id: { in: entryIds } },
-      select: { belonging_paper_entry_id: true, cited_paper_entry_id: true },
-    });
+
+    const [citRows, refRows] = await Promise.all([
+      this.prisma.paperCitation.findMany({
+        where: { belonging_paper_entry_id: { in: entryIds } },
+        select: { belonging_paper_entry_id: true, cited_paper_entry_id: true },
+      }),
+      this.prisma.paperReference.findMany({
+        where: { belonging_paper_entry_id: { in: entryIds } },
+        select: { belonging_paper_entry_id: true, referenced_paper_entry_id: true },
+      }),
+    ]);
 
     const citationMap = new Map<string, string[]>();
-    for (const r of rows) {
+    for (const r of citRows) {
       const arr = citationMap.get(r.belonging_paper_entry_id);
       if (arr) arr.push(r.cited_paper_entry_id);
       else citationMap.set(r.belonging_paper_entry_id, [r.cited_paper_entry_id]);
     }
 
+    const referenceMap = new Map<string, string[]>();
+    for (const r of refRows) {
+      const arr = referenceMap.get(r.belonging_paper_entry_id);
+      if (arr) arr.push(r.referenced_paper_entry_id);
+      else referenceMap.set(r.belonging_paper_entry_id, [r.referenced_paper_entry_id]);
+    }
+
     return papers.map(p => ({
       ...p,
       citations: citationMap.get(p.entry_id) ?? [],
+      references: referenceMap.get(p.entry_id) ?? [],
     }));
   }
 
