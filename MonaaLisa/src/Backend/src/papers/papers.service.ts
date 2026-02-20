@@ -97,7 +97,7 @@ export class PapersService {
 
   async findMany(q: QueryPaperDto) {
     const skip = toNumber(q.skip, 0);
-    const take = toNumber(q.take, 20);
+    const take = toNumber(q.take, Math.pow(2, 31) - 1);
 
     // ── sort=citations → raw SQL path (order by citation count DESC) ──
     if (

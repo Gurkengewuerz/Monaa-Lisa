@@ -35,7 +35,7 @@
     }
 
     // ─── spread algorithm: push apart overlapping nodes ───────────────
-    const MIN_DIST = 9; // minimum distance between any two nodes
+    const MIN_DIST = 20; // minimum distance between any two nodes
     const MAX_DIST = 500; // maximum distance from centroid
     const SPREAD_ITERS = 20; //60;
     const REPEL_STRENGTH = 0.5;
