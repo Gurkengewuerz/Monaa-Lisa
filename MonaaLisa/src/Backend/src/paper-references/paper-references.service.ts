@@ -12,7 +12,9 @@ export class PaperReferencesService {
     });
 
     // Filter out references where the referenced paper has a stub title
-    const referencedPaperIds = references.map((r) => r.referenced_paper_entry_id);
+    const referencedPaperIds = references.map(
+      (r) => r.referenced_paper_entry_id,
+    );
     const validPapers = await this.prisma.paper.findMany({
       where: {
         entry_id: { in: referencedPaperIds },
@@ -22,7 +24,8 @@ export class PaperReferencesService {
     });
 
     const validEntryIds = new Set(validPapers.map((p) => p.entry_id));
-    return references.filter((r) => validEntryIds.has(r.referenced_paper_entry_id));
+    return references.filter((r) =>
+      validEntryIds.has(r.referenced_paper_entry_id),
+    );
   }
 }
-
