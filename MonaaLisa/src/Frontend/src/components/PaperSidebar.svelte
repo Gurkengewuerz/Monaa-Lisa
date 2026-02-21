@@ -7,6 +7,7 @@
   import { createEventDispatcher, onMount } from 'svelte';
   import type { Paper } from '$lib/types/paper';
   import { getSubcategoryName } from '../utils/arxivTaxonomy';
+  import LoadingSpinner from './LoadingSpinner.svelte';
 
   export let paper: Paper;
   export let apiBaseUrl: string = 'http://localhost:3000';
@@ -31,6 +32,7 @@
     toggle: void;
     navigate: Paper;
     favorite: Paper;
+    authorHighlight: string;
   }>();
 
   // ─── UI state ─────────────────────────────────────────────────────
@@ -48,6 +50,7 @@
     dateFrom: string;   // YYYY-MM-DD or ''
     dateTo: string;
     authorQuery: string;
+    abstractQuery: string;
     onlyArxiv: boolean; // hide entries without arXiv data
     minCitations: string; // '' or number string
   }
@@ -55,6 +58,7 @@
     dateFrom: '',
     dateTo: '',
     authorQuery: '',
+    abstractQuery: '',
     onlyArxiv: false,
     minCitations: '',
   };
@@ -85,8 +89,30 @@
   }
 
   function resetFilter() {
-    nFilter = { dateFrom: '', dateTo: '', authorQuery: '', onlyArxiv: false, minCitations: '' };
+    nFilter = { dateFrom: '', dateTo: '', authorQuery: '', abstractQuery: '', onlyArxiv: false, minCitations: '' };
     filterError = null;
+    filterBadges = [];
+    dispatch('authorHighlight', '');
+  }
+
+  // ─── filter badges ──────────────────────────────────────────────
+  interface FilterBadge { key: string; label: string }
+  let filterBadges: FilterBadge[] = [];
+
+  function buildFilterBadges() {
+    const badges: FilterBadge[] = [];
+    if (nFilter.authorQuery.trim()) badges.push({ key: 'author', label: nFilter.authorQuery.trim() });
+    if (nFilter.abstractQuery.trim()) badges.push({ key: 'abstract', label: nFilter.abstractQuery.trim() });
+    if (nFilter.dateFrom) badges.push({ key: 'dateFrom', label: `From: ${nFilter.dateFrom}` });
+    if (nFilter.dateTo) badges.push({ key: 'dateTo', label: `To: ${nFilter.dateTo}` });
+    if (nFilter.minCitations) badges.push({ key: 'minCit', label: `Min Cit: ${nFilter.minCitations}` });
+    filterBadges = badges;
+  }
+
+  function applyFilterAndBadge() {
+    if (!validateFilter()) return;
+    buildFilterBadges();
+    dispatch('authorHighlight', nFilter.authorQuery.trim());
   }
 
   function applyFilter(items: NeighbourPaperItem[]): NeighbourPaperItem[] {
@@ -104,6 +130,10 @@
         const q = nFilter.authorQuery.trim().toLowerCase();
         if (!item.authors.toLowerCase().includes(q)) return false;
       }
+      if (nFilter.abstractQuery.trim()) {
+        const q = nFilter.abstractQuery.trim().toLowerCase();
+        if (!item.abstract.toLowerCase().includes(q)) return false;
+      }
       const mc = parseInt(nFilter.minCitations, 10);
       if (!isNaN(mc) && nFilter.minCitations !== '') {
         if ((item.non_arxiv_citation_count ?? 0) < mc) return false;
@@ -114,7 +144,7 @@
 
   $: hasActiveFilter = !!(
     nFilter.dateFrom || nFilter.dateTo || nFilter.authorQuery.trim() ||
-    nFilter.onlyArxiv || nFilter.minCitations
+    nFilter.abstractQuery.trim() || nFilter.onlyArxiv || nFilter.minCitations
   );
 
   // ─── neighbour data ───────────────────────────────────────────────
@@ -377,6 +407,12 @@
           bind:value={nFilter.authorQuery} />
       </div>
       <div class="adv-row">
+        <label class="adv-label">Abstract contains</label>
+        <input class="adv-input" type="text" placeholder="Text in abstract"
+          maxlength="200"
+          bind:value={nFilter.abstractQuery} />
+      </div>
+      <div class="adv-row">
         <label class="adv-label">Min. arXiv citations</label>
         <input class="adv-input" type="number" min="0" step="1" placeholder="e.g. 5"
           bind:value={nFilter.minCitations}
@@ -387,10 +423,18 @@
       {/if}
       <div class="adv-actions">
         <button class="adv-reset-btn" on:click={resetFilter}>Reset</button>
+        <button class="adv-search-btn" on:click={applyFilterAndBadge}>Search</button>
         <span class="filter-count">
           {filteredCited.length + filteredCitedBy.length} of {citedPapers.length + citedByPapers.length} shown
         </span>
       </div>
+      {#if filterBadges.length > 0}
+        <div class="badge-row">
+          {#each filterBadges as badge (badge.key)}
+            <span class="filter-badge">{badge.label}</span>
+          {/each}
+        </div>
+      {/if}
     </div>
   {/if}
 
@@ -439,7 +483,7 @@
     </div>
 
     {#if loading}
-      <div class="loading-row"><div class="mini-spinner"></div><span>Loading…</span></div>
+      <div class="loading-row"><LoadingSpinner size={24} /><span>Loading…</span></div>
     {:else if errorMsg}
       <div class="error-row">{errorMsg}</div>
     {:else}
@@ -487,7 +531,7 @@
                       </div>
                       {#if expandedNested.has(item.entry_id)}
                         {#if nestedData[item.entry_id]?.loading}
-                          <div class="loading-row small"><div class="mini-spinner"></div><span>Loading…</span></div>
+                          <div class="loading-row small"><LoadingSpinner size={20} /><span>Loading…</span></div>
                         {:else}
                           {@const nd = nestedData[item.entry_id]}
                           {#if nd && (nd.cites.length > 0 || nd.citedBy.length > 0)}
@@ -575,7 +619,7 @@
                       </div>
                       {#if expandedNested.has(item.entry_id)}
                         {#if nestedData[item.entry_id]?.loading}
-                          <div class="loading-row small"><div class="mini-spinner"></div><span>Loading…</span></div>
+                          <div class="loading-row small"><LoadingSpinner size={20} /><span>Loading…</span></div>
                         {:else}
                           {@const nd = nestedData[item.entry_id]}
                           {#if nd && (nd.cites.length > 0 || nd.citedBy.length > 0)}
@@ -808,6 +852,20 @@
     transition: all 0.12s ease;
   }
   .adv-reset-btn:hover { background: rgba(245,101,101,0.2); }
+  .adv-search-btn {
+    background: linear-gradient(135deg, var(--accent-purple, #9333ea), var(--accent-magenta, #e839a0));
+    border: none; color: white; border-radius: 999px; padding: 3px 14px;
+    cursor: pointer; font-size: 11px; font-weight: 600;
+    transition: all 0.12s ease; box-shadow: 0 0 8px rgba(147,51,234,0.2);
+  }
+  .adv-search-btn:hover { box-shadow: 0 0 16px rgba(147,51,234,0.4); }
+  .badge-row { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 6px; }
+  .filter-badge {
+    display: inline-flex; align-items: center; gap: 4px;
+    padding: 2px 10px; border-radius: 999px; font-size: 11px;
+    background: rgba(147,51,234,0.15); border: 1px solid rgba(147,51,234,0.3);
+    color: var(--accent-cyan, #22d3ee);
+  }
   .filter-count {
     font-size: 11px;
     color: var(--text-muted, #6b6b8d);
@@ -1104,14 +1162,6 @@
     color: var(--text-muted, #6b6b8d); font-size: 12px;
   }
   .loading-row.small { padding: 6px 0; font-size: 11px; }
-  .mini-spinner {
-    width: 14px; height: 14px;
-    border: 2px solid rgba(147,51,234,0.2);
-    border-top-color: var(--accent-cyan, #22d3ee);
-    border-radius: 50%;
-    animation: spin 0.7s linear infinite; flex-shrink: 0;
-  }
-  @keyframes spin { to { transform: rotate(360deg); } }
   .error-row {
     padding: 10px 14px; color: #f56565; font-size: 12px;
   }

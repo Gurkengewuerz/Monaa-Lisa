@@ -1,11 +1,19 @@
 <!--
   PaperDetailGraph.svelte
-  Sigma.js network view for a single paper + its citations & references.
-  Features:
-    - Citation Graph view (sigma.js) with UMAP coordinates
-    - Relation View with draggable paper cards (top-20 related papers)
-    - Non-arXiv shown as single aggregate node with tooltip
-    - Filter controls: show/hide citations, references, non-arXiv
+  Written by Nick
+
+  Shows two views for a single selected paper:
+    1. Citation Graph (default) — a Sigma.js network where nodes are papers
+       and edges are citations/references. Uses UMAP coordinates so similar
+       papers cluster together visually.
+    2. Relation View — draggable, resizable cards showing the top-20 most
+       semantically related papers. Cards are connected by lines drawn in SVG.
+
+  Props:
+    - paper           : the paper to show (required)
+    - apiBaseUrl      : NestJS backend URL
+    - authorHighlight : if set, dims all nodes except those by this author
+    - isFavoriteCheck : callback so each card can show the correct star state
 -->
 <script lang="ts">
     import { createEventDispatcher, onMount, onDestroy, tick } from "svelte";
@@ -13,6 +21,7 @@
     import Sigma from "sigma";
     import type { Paper } from "$lib/types/paper";
     import { getSubcategoryName } from "../utils/arxivTaxonomy";
+    import LoadingSpinner from "./LoadingSpinner.svelte";
 
     /** The paper whose neighbourhood we are visualising. */
     export let paper: Paper;
@@ -20,6 +29,10 @@
     export let apiBaseUrl: string = "http://localhost:3000";
     /** Maximum total nodes (citations + references). 0 = unlimited. */
     export let nodeLimit: number = 5000;
+    /** Author name to highlight in the citation graph. */
+    export let authorHighlight: string = "";
+    /** Function to check if a paper is favorited */
+    export let isFavoriteCheck: (entryId: string) => boolean = () => false;
 
     let container: HTMLDivElement | null = null;
     let renderer: Sigma | null = null;
@@ -69,6 +82,7 @@
         back: void;
         neighbourhoodLoaded: { citationCount: number; referenceCount: number };
         navigate: Paper;
+        favorite: Paper;
     }>();
 
     // ─── colours ──────────────────────────────────────────────────────
@@ -233,6 +247,20 @@
     }
 
     // ─── graph building (filter-aware, UMAP coords) ──────────────────
+
+    // ─── edge colour helper: fade opacity near the selected (center) node ────
+    // Edges whose far endpoint lies close to the origin get reduced opacity so
+    // the dense cluster right around the selected paper stays readable.
+    function edgeColor(r: number, g: number, b: number, baseAlpha: number, nodeX: number, nodeY: number): string {
+        const dist = Math.sqrt(nodeX * nodeX + nodeY * nodeY);
+        // Full opacity is reached at FADE_DIST units away from center
+        const FADE_DIST = 20;
+        const t = Math.min(dist / FADE_DIST, 1);
+        // Minimum alpha is 35% of base so edges never fully disappear
+        const alpha = (baseAlpha * 0.35) + (baseAlpha * 0.65) * t;
+        return `rgba(${r},${g},${b},${alpha.toFixed(3)})`;
+    }
+
     function buildGraph(data: FetchedData) {
         const g = new GraphLib();
 
@@ -285,8 +313,9 @@
                 if (!g.hasNode(id)) {
                     g.addNode(id, { x, y, size, label, color });
                 }
+                // Edge colour fades near the center so clustered edges stay readable
                 g.addEdge(paper.entry_id, id, {
-                    color: "rgba(255,107,107,0.35)",
+                    color: edgeColor(255, 107, 107, 0.35, x, y),
                     size: 0.6,
                     type: "arrow",
                 });
@@ -329,8 +358,9 @@
                 if (!g.hasNode(id)) {
                     g.addNode(id, { x, y, size, label, color });
                 }
+                // Edge colour fades near the center so clustered edges stay readable
                 g.addEdge(id, paper.entry_id, {
-                    color: "rgba(78,205,196,0.30)",
+                    color: edgeColor(78, 205, 196, 0.30, x, y),
                     size: 0.5,
                     type: "arrow",
                 });
@@ -387,16 +417,82 @@
         if (!fetchedData || !container) return;
         destroySigma();
         graph = buildGraph(fetchedData);
+        // Snapshot edge colours so the zoom-opacity reducer has a baseline after rebuild.
+        storeBaseEdgeColors();
         renderer = new Sigma(graph, container, {
             renderEdgeLabels: false,
             defaultNodeType: "circle",
             defaultEdgeType: "line",
-            minCameraRatio: 0.01,
-            maxCameraRatio: 50,
+            minCameraRatio: 0.08,
+            maxCameraRatio: 5,
             labelRenderedSizeThreshold: 18,
             labelColor: { color: "#ccc" },
         });
         attachSigmaEvents();
+        // Re-attach camera listener so max-zoom label reveal works after filter rebuilds
+        attachCameraListener();
+    }
+
+    // ─── camera zoom listener: reveal all labels at max zoom ─────────────
+    // When the user zooms in as far as possible (cameraRatio ~ minCameraRatio)
+    // lower the label threshold to 0 so every node’s title becomes visible.
+    function attachCameraListener() {
+        if (!renderer) return;
+        const MIN_RATIO = 0.08; // matches minCameraRatio passed to Sigma
+        const NEAR_MAX_FACTOR = 1.4; // trigger when within 40% of min ratio
+        // Track the last applied edge-opacity factor to avoid redundant graph writes.
+        let lastEdgeFactor = -1;
+        renderer.getCamera().on('updated', (state: any) => {
+            if (!renderer) return;
+
+            // ─ label reveal at max zoom ─
+            const atMaxZoom = state.ratio <= MIN_RATIO * NEAR_MAX_FACTOR;
+            renderer.setSetting('labelRenderedSizeThreshold', atMaxZoom ? 0 : 18);
+
+            // ─ edge opacity fade as user zooms in ──────────────────────────
+            // Normalise: t=0 when fully zoomed in, t=1 at normal view distance.
+            const t = Math.max(0, Math.min(1, (state.ratio - MIN_RATIO) / (1.0 - MIN_RATIO)));
+            // Minimum opacity is 30% so edges never become completely invisible.
+            const factor = 0.30 + 0.70 * t;
+            // Only rewrite edge attributes when the shift is visually noticeable
+            // (> 2%) to avoid unnecessary per-frame graph writes.
+            if (Math.abs(factor - lastEdgeFactor) > 0.02) {
+                lastEdgeFactor = factor;
+                if (!graph) return;
+                graph.forEachEdge((edge) => {
+                    const base = graph!.getEdgeAttribute(edge, 'baseColor') as string;
+                    if (base) {
+                        graph!.setEdgeAttribute(edge, 'color', applyAlphaFactor(base, factor));
+                    }
+                });
+                renderer.refresh();
+            }
+        });
+    }
+
+    /**
+     * Copy each edge's current `color` into a `baseColor` attribute so the
+     * zoom-opacity reducer always has the original colour to scale from.
+     * Must be called immediately after buildGraph / rebuildRenderer.
+     */
+    function storeBaseEdgeColors() {
+        if (!graph) return;
+        graph.forEachEdge((e) => {
+            graph!.setEdgeAttribute(e, 'baseColor', graph!.getEdgeAttribute(e, 'color'));
+        });
+    }
+
+    /**
+     * Parse an `rgba(r,g,b,a)` or `rgb(r,g,b)` colour string and return a new
+     * one with its alpha channel multiplied by `factor`.  If parsing fails the
+     * original string is returned unchanged.
+     */
+    function applyAlphaFactor(rgba: string, factor: number): string {
+        const m = rgba.match(/rgba?\((\d+),\s*(\d+),\s*(\d+)(?:,\s*([\d.]+))?\)/);
+        if (!m) return rgba;
+        const [, r, g, b] = m;
+        const a = parseFloat(m[4] ?? '1');
+        return `rgba(${r},${g},${b},${(a * factor).toFixed(3)})`;
     }
 
     function destroySigma() {
@@ -512,6 +608,51 @@
     // reactive rebuilds when filters change
     let filtersInitialized = false;
 
+    // ─── reactive author highlight for citation graph ───────────────
+    $: handleDetailAuthorHighlight(authorHighlight);
+
+    function handleDetailAuthorHighlight(author: string) {
+        if (!graph || !renderer || !fetchedData || viewMode !== 'graph') return;
+        if (!author) {
+            // Reset colors
+            graph.forEachNode((n) => {
+                if (n === paper.entry_id) {
+                    graph!.setNodeAttribute(n, 'color', COLOR_CENTER);
+                } else if (n === '__non_arxiv_aggregate') {
+                    graph!.setNodeAttribute(n, 'color', COLOR_DUMMY);
+                } else {
+                    const real = fetchedData!.realPapers[n];
+                    const isCitation = fetchedData!.citedIds.includes(n);
+                    graph!.setNodeAttribute(n, 'color', real ? (isCitation ? COLOR_CITATION : COLOR_REFERENCE) : COLOR_DUMMY);
+                }
+            });
+            renderer.refresh();
+            return;
+        }
+        const q = author.toLowerCase();
+        graph.forEachNode((n) => {
+            if (n === paper.entry_id) {
+                if (paper.authors.toLowerCase().includes(q)) {
+                    graph!.setNodeAttribute(n, 'color', '#ffd166');
+                    graph!.setNodeAttribute(n, 'size', 16);
+                }
+                return;
+            }
+            if (n === '__non_arxiv_aggregate') return;
+            const real = fetchedData!.realPapers[n];
+            if (real) {
+                const authors = Array.isArray(real.authors) ? real.authors.join(', ') : (real.authors ?? '');
+                if (authors.toLowerCase().includes(q)) {
+                    graph!.setNodeAttribute(n, 'color', '#ffd166');
+                    graph!.setNodeAttribute(n, 'size', 8);
+                } else {
+                    graph!.setNodeAttribute(n, 'color', 'rgba(255,255,255,0.08)');
+                }
+            }
+        });
+        renderer.refresh();
+    }
+
     // ─── Relation View ────────────────────────────────────────────────
     let relatedPapers: any[] = [];
     let relatedLoading = false;
@@ -531,6 +672,7 @@
 
     // resize drag state
     let resizeTarget: string | null = null;
+    let resizeStartX = 0;
     let resizeStartY = 0;
     let resizeStartScale = 1;
 
@@ -579,6 +721,8 @@
         return null;
     }
 
+    // Calculates the initial x/y positions for all cards in the relation view.
+    // Selected paper sits at top-center; related papers fill out a grid below it.
     function defaultTreeLayout(papers: any[]): Record<string, CardPos> {
         const pos: Record<string, CardPos> = {};
         // Selected paper at top center
@@ -684,6 +828,8 @@
     }
 
     // ─── relation view drag handlers ──────────────────────────────────
+    // onCardMouseDown starts dragging a card; records cursor offset so the card
+    // moves with the mouse without jumping to the cursor position.
     function onCardMouseDown(e: MouseEvent, entryId: string) {
         e.stopPropagation();
         e.preventDefault();
@@ -719,10 +865,13 @@
     }
 
     // ─── card resize handlers ─────────────────────────────────────────
+    // Drag the resize handle (corner of card) to scale it up or down.
+    // Dragging right/down = bigger; left/up = smaller. Range: 0.5× to 2×.
     function onResizeMouseDown(e: MouseEvent, entryId: string) {
         e.stopPropagation();
         e.preventDefault();
         resizeTarget = entryId;
+        resizeStartX = e.clientX;
         resizeStartY = e.clientY;
         resizeStartScale = cardScales[entryId] ?? 1;
         window.addEventListener("mousemove", onResizeMove);
@@ -731,11 +880,13 @@
 
     function onResizeMove(e: MouseEvent) {
         if (!resizeTarget) return;
+        // Dragging right OR down = increase scale; left OR up = decrease
+        const dx = e.clientX - resizeStartX;
         const dy = e.clientY - resizeStartY;
-        // Dragging down = increase scale, up = decrease. 200px = 1.0 scale unit
+        const delta = (dx + dy) / 2;
         const newScale = Math.max(
             0.5,
-            Math.min(2.0, resizeStartScale + dy / 200),
+            Math.min(2.0, resizeStartScale + delta / 250),
         );
         cardScales[resizeTarget] = newScale;
         cardScales = { ...cardScales };
@@ -809,6 +960,44 @@
         return fullName && fullName !== cat ? `${fullName} (${cat})` : cat;
     }
 
+    /** Build a Paper object from a raw related paper for navigation / favorite */
+    function buildPaperFromRelated(rp: any): Paper {
+        const [tx, ty] = parseTsne(rp.tsne);
+        return {
+            id: rp.id ?? 0,
+            entry_id: rp.entry_id,
+            title: rp.title ?? rp.entry_id,
+            authors: Array.isArray(rp.authors) ? rp.authors.join(', ') : (rp.authors ?? ''),
+            abstract: rp.abstract ?? '',
+            published: rp.published ?? null,
+            categories: rp.categories ?? null,
+            url: rp.url ?? null,
+            citations: Array.isArray(rp.citations)
+                ? rp.citations.map((c: any) => typeof c === 'string' ? c : (c.cited_paper_entry_id ?? c.entry_id ?? ''))
+                : [],
+            references: Array.isArray(rp.references)
+                ? rp.references.map((r: any) => typeof r === 'string' ? r : (r.referenced_paper_entry_id ?? r.entry_id ?? ''))
+                : [],
+            non_arxiv_citation_count: rp.non_arxiv_citation_count ?? 0,
+            non_arxiv_reference_count: rp.non_arxiv_reference_count ?? 0,
+            tsne1: tx,
+            tsne2: ty,
+            cluster: rp.cluster ?? '',
+        };
+    }
+
+    function navigateToRelated(rp: any) {
+        dispatch('navigate', buildPaperFromRelated(rp));
+    }
+
+    function favoriteRelated(rp: any) {
+        dispatch('favorite', buildPaperFromRelated(rp));
+    }
+
+    function favoritePaper() {
+        dispatch('favorite', paper);
+    }
+
     // ─── view mode switching ──────────────────────────────────────────
     function switchToGraph() {
         viewMode = "graph";
@@ -830,24 +1019,34 @@
     // ─── lifecycle ────────────────────────────────────────────────────
     onMount(() => {
         fetchNeighbourhood()
-            .then((data) => {
+            .then(async (data) => {
                 fetchedData = data;
                 dispatch("neighbourhoodLoaded", {
                     citationCount: [...new Set(data.citedIds)].length,
                     referenceCount: [...new Set(data.referencedIds)].length,
                 });
+                // Yield two animation frames so the browser can paint and
+                // composite the loading spinner before we block the main
+                // thread with buildGraph + new Sigma(). Without this the
+                // spinner renders as a static image on first display.
+                await new Promise<void>(resolve =>
+                    requestAnimationFrame(() => requestAnimationFrame(() => resolve()))
+                );
                 if (!container) return;
                 graph = buildGraph(data);
+                // Snapshot base edge colours for the zoom-opacity reducer.
+                storeBaseEdgeColors();
                 renderer = new Sigma(graph, container, {
                     renderEdgeLabels: false,
                     defaultNodeType: "circle",
                     defaultEdgeType: "line",
-                    minCameraRatio: 0.01,
-                    maxCameraRatio: 50,
+                    minCameraRatio: 0.08,
+                    maxCameraRatio: 5,
                     labelRenderedSizeThreshold: 18,
                     labelColor: { color: "#ccc" },
                 });
                 attachSigmaEvents();
+                attachCameraListener();
                 loading = false;
                 filtersInitialized = true;
             })
@@ -873,6 +1072,16 @@
             ? paper.abstract.slice(0, 300) + "…"
             : paper.abstract
         : "No abstract available.";
+
+    // Reactive citation/reference counts for the relation view selected paper card.
+    // fetchedData is more accurate (actual DB relations) vs paper.citations array
+    // which may be empty when navigating from a citation link in the sidebar.
+    $: relViewCitCount = fetchedData
+        ? [...new Set(fetchedData.citedIds)].length
+        : (paper.citations?.length ?? 0);
+    $: relViewRefCount = fetchedData
+        ? [...new Set(fetchedData.referencedIds)].length
+        : (paper.references?.length ?? 0);
 </script>
 
 <div class="detail-wrapper">
@@ -952,7 +1161,7 @@
 
         {#if loading}
             <div class="overlay">
-                <div class="spinner"></div>
+                <LoadingSpinner size={60} />
                 <p>Loading citation network…</p>
             </div>
         {:else if errorMsg}
@@ -1001,7 +1210,7 @@
     {#if viewMode === "relation"}
         {#if relatedLoading}
             <div class="overlay">
-                <div class="spinner"></div>
+                <LoadingSpinner size={60} />
                 <p>Loading related papers…</p>
             </div>
         {:else if relatedError}
@@ -1023,10 +1232,14 @@
                     class="relation-transform"
                     style="transform: scale({canvasScale}) translate({canvasTranslate.x}px, {canvasTranslate.y}px)"
                 >
-                    <!-- Connecting lines from selected to related (SVG behind cards) -->
+                    <!-- Connecting lines: SVG behind all cards.
+                         Must have explicit width/height so Chrome renders it correctly
+                         (Firefox is lenient with SVG overflow:visible, Chrome is not) -->
                     <svg
                         class="relation-lines"
                         xmlns="http://www.w3.org/2000/svg"
+                        width="10000"
+                        height="10000"
                     >
                         {#each relatedPapers as rp (rp.entry_id)}
                             {@const sx =
@@ -1080,35 +1293,27 @@
                                 paper.entry_id,
                             )}
                         >
-                            {#if expandedAbstracts.has(paper.entry_id)}
-                                <p>
-                                    {paper.abstract || "No abstract available."}
-                                </p>
-                            {:else}
-                                <p>
-                                    {paper.abstract
-                                        ? truncate(paper.abstract, 150)
-                                        : "No abstract available."}
-                                </p>
-                            {/if}
-                            {#if paper.abstract && paper.abstract.length > 150}
-                                <button
-                                    class="abstract-toggle"
-                                    on:click|stopPropagation={() =>
-                                        toggleAbstract(paper.entry_id)}
-                                >
-                                    {expandedAbstracts.has(paper.entry_id)
-                                        ? "Show less"
-                                        : "Show more"}
-                                </button>
-                            {/if}
+                            <p>
+                                {paper.abstract || "No abstract available."}
+                            </p>
                         </div>
+                        {#if paper.abstract}
+                            <button
+                                class="abstract-toggle"
+                                on:click|stopPropagation={() =>
+                                    toggleAbstract(paper.entry_id)}
+                            >
+                                {expandedAbstracts.has(paper.entry_id)
+                                    ? "Show less ▴"
+                                    : "Show more ▾"}
+                            </button>
+                        {/if}
                         <div class="rel-card-footer">
                             <span class="rel-stat"
-                                >{paper.citations?.length ?? 0} Citations</span
+                                >{relViewCitCount} Citations</span
                             >
                             <span class="rel-stat"
-                                >{paper.references?.length ?? 0} References</span
+                                >{relViewRefCount} References</span
                             >
                             {#if (paper.non_arxiv_citation_count ?? 0) + (paper.non_arxiv_reference_count ?? 0) > 0}
                                 <span class="rel-stat non-arxiv"
@@ -1127,6 +1332,9 @@
                                     arXiv ↗
                                 </a>
                             {/if}
+                            <button class="rel-action-btn rel-fav-btn" class:favorited={isFavoriteCheck(paper.entry_id)} title="{isFavoriteCheck(paper.entry_id) ? 'Remove from favorites' : 'Add to favorites'}" on:click|stopPropagation={favoritePaper}>
+                                {isFavoriteCheck(paper.entry_id) ? '★' : '☆'}
+                            </button>
                         </div>
                         <!-- svelte-ignore a11y-no-static-element-interactions -->
                         <div
@@ -1176,30 +1384,21 @@
                                     rp.entry_id,
                                 )}
                             >
-                                {#if expandedAbstracts.has(rp.entry_id)}
-                                    <p>
-                                        {rp.abstract ||
-                                            "No abstract available."}
-                                    </p>
-                                {:else}
-                                    <p>
-                                        {rp.abstract
-                                            ? truncate(rp.abstract, 120)
-                                            : "No abstract available."}
-                                    </p>
-                                {/if}
-                                {#if rp.abstract && rp.abstract.length > 120}
-                                    <button
-                                        class="abstract-toggle"
-                                        on:click|stopPropagation={() =>
-                                            toggleAbstract(rp.entry_id)}
-                                    >
-                                        {expandedAbstracts.has(rp.entry_id)
-                                            ? "Show less"
-                                            : "Show more"}
-                                    </button>
-                                {/if}
+                                <p>
+                                    {rp.abstract || "No abstract available."}
+                                </p>
                             </div>
+                            {#if rp.abstract}
+                                <button
+                                    class="abstract-toggle"
+                                    on:click|stopPropagation={() =>
+                                        toggleAbstract(rp.entry_id)}
+                                >
+                                    {expandedAbstracts.has(rp.entry_id)
+                                        ? "Show less ▴"
+                                        : "Show more ▾"}
+                                </button>
+                            {/if}
                             <div class="rel-card-footer">
                                 <span class="rel-stat"
                                     >{rp.citations?.length ?? 0} Cit.</span
@@ -1225,6 +1424,12 @@
                                         arXiv ↗
                                     </a>
                                 {/if}
+                                <button class="rel-action-btn rel-nav-btn" title="Navigate to this paper" on:click|stopPropagation={() => navigateToRelated(rp)}>
+                                    ➜
+                                </button>
+                                <button class="rel-action-btn rel-fav-btn" class:favorited={isFavoriteCheck(rp.entry_id)} title="{isFavoriteCheck(rp.entry_id) ? 'Remove from favorites' : 'Add to favorites'}" on:click|stopPropagation={() => favoriteRelated(rp)}>
+                                    {isFavoriteCheck(rp.entry_id) ? '★' : '☆'}
+                                </button>
                             </div>
                             <!-- svelte-ignore a11y-no-static-element-interactions -->
                             <div
@@ -1389,19 +1594,6 @@
     }
     .overlay.error {
         color: #f56565;
-    }
-    .spinner {
-        width: 28px;
-        height: 28px;
-        border: 3px solid rgba(147, 51, 234, 0.2);
-        border-top-color: var(--accent-cyan, #22d3ee);
-        border-radius: 50%;
-        animation: spin 0.8s linear infinite;
-    }
-    @keyframes spin {
-        to {
-            transform: rotate(360deg);
-        }
     }
 
     /* ── hover tooltip (paper info on node hover) ── */
@@ -1615,19 +1807,23 @@
     }
 
     .rel-card-abstract {
-        margin-bottom: 8px;
-        max-height: 60px;
+        margin-bottom: 4px;
         overflow: hidden;
-        transition: max-height 0.3s ease;
-    }
-    .rel-card-abstract.expanded {
-        max-height: 600px;
     }
     .rel-card-abstract p {
         margin: 0;
         font-size: 11px;
         line-height: 1.45;
         color: var(--text-secondary, #a8a8c8);
+        display: -webkit-box;
+        -webkit-line-clamp: 2;
+        -webkit-box-orient: vertical;
+        overflow: hidden;
+    }
+    .rel-card-abstract.expanded p {
+        display: block;
+        overflow: visible;
+        -webkit-line-clamp: unset;
     }
 
     .abstract-toggle {
@@ -1637,6 +1833,8 @@
         font-size: 10px;
         cursor: pointer;
         padding: 2px 0;
+        margin-bottom: 6px;
+        display: block;
         transition: color 0.15s ease;
     }
     .abstract-toggle:hover {
@@ -1672,15 +1870,47 @@
         text-decoration: underline;
     }
 
+    /* ── nav / fav action buttons ── */
+    .rel-action-btn {
+        background: none;
+        border: 1px solid var(--glass-border, rgba(255, 255, 255, 0.1));
+        border-radius: 4px;
+        color: var(--text-muted, #6b6b8d);
+        font-size: 12px;
+        padding: 1px 5px;
+        cursor: pointer;
+        transition: background 0.15s, color 0.15s, border-color 0.15s;
+        line-height: 1;
+    }
+    .rel-action-btn:hover {
+        background: rgba(255, 255, 255, 0.06);
+        color: #fff;
+        border-color: rgba(255, 255, 255, 0.2);
+    }
+    .rel-nav-btn:hover {
+        color: var(--accent-cyan, #22d3ee);
+        border-color: var(--accent-cyan, #22d3ee);
+    }
+    .rel-fav-btn:hover {
+        color: #ffd166;
+        border-color: #ffd166;
+    }
+    /* Lit-up state when the paper is already favorited */
+    .rel-fav-btn.favorited {
+        color: #ffd166;
+        border-color: rgba(255, 209, 102, 0.45);
+        background: rgba(255, 209, 102, 0.08);
+    }
+
     /* ── resize handle ── */
     .resize-handle {
         position: absolute;
         bottom: 4px;
-        left: 4px;
+        right: 4px;
         width: 14px;
         height: 14px;
-        cursor: nesw-resize;
-        opacity: 0;
+        cursor: se-resize;
+        opacity: 0.45;
         transition: opacity 0.15s ease;
         z-index: 5;
     }
@@ -1688,12 +1918,12 @@
         content: "";
         position: absolute;
         bottom: 0;
-        left: 0;
+        right: 0;
         width: 10px;
         height: 10px;
-        border-left: 2px solid rgba(147, 51, 234, 0.5);
-        border-bottom: 2px solid rgba(147, 51, 234, 0.5);
-        border-radius: 0 0 0 3px;
+        border-right: 2px solid rgba(147, 51, 234, 0.6);
+        border-bottom: 2px solid rgba(147, 51, 234, 0.6);
+        border-radius: 0 0 3px 0;
     }
     .rel-card:hover .resize-handle {
         opacity: 1;

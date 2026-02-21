@@ -1,13 +1,22 @@
 <!--
   ClusterGraph.svelte
-  Smooth cluster visualization with pan/zoom.
-  Used for both top-level category and subcategory views.
-  Clusters are rendered as glowing territories with particle fill.
+  Written by Nick
+
+  Draws the top-level and sub-level category "blob" clusters on an HTML canvas.
+  Uses a particle system to fill cluster territories with glowing dots.
+  Pan/zoom: click-drag to pan, scroll-wheel to zoom.
+  Clicking a cluster dispatches the 'clusterClick' event with the cluster's id/name/color.
 -->
 <script lang="ts">
   import { onMount, createEventDispatcher } from 'svelte';
   import type { ClusterNode } from '$lib/types/paper';
   import { EdgeAnimator } from './edgeAnimation';
+  // UMAP coordinate data for semantic layout
+  import rawUmapLocs from '../utils/cluster-locations.json';
+  const UMAP_LOCS: Record<string, { x: number; y: number }> = {
+    ...(rawUmapLocs as any).top,
+    ...(rawUmapLocs as any).sub,
+  };
 
   /** Array of clusters to visualise. */
   export let clusters: ClusterNode[] = [];
@@ -19,6 +28,14 @@
   let canvasH = 0;
   let dpr = 1;
   let hoveredCluster: string | null = null;
+  // ─── layout mode: 'default' = ellipse/phyllotaxis, 'semantic' = UMAP positions ─
+  const LAYOUT_MODE_KEY = 'monaalisa-layout-mode';
+  let layoutMode: 'default' | 'semantic' = (
+    (typeof localStorage !== 'undefined' &&
+      (localStorage.getItem(LAYOUT_MODE_KEY) as 'default' | 'semantic' | null))
+  ) || 'default';
+  // tooltip visibility for the info (ⓘ) button
+  let showLayoutInfo = false;
 
   const dispatch = createEventDispatcher();
 
@@ -137,6 +154,13 @@
   // ─── layout ───────────────────────────────────────────────────────
   function computeLayout(): LayoutCluster[] {
     if (!clusters.length) return [];
+    if (layoutMode === 'semantic') return computeUmapLayout();
+    return computeDefaultLayout();
+  }
+
+  /** Default ellipse (top-level) / phyllotaxis (sub-level) arrangement. */
+  function computeDefaultLayout(): LayoutCluster[] {
+    if (!clusters.length) return [];
     const sorted = [...clusters].sort((a, b) => b.count - a.count);
     const maxCount = sorted[0].count;
     const aspect = canvasW && canvasH ? canvasW / canvasH : 16 / 9;
@@ -181,6 +205,57 @@
         };
       });
     }
+  }
+
+  /**
+   * UMAP layout: positions clusters at their pre-computed semantic coordinates.
+   * After placing them, a push-apart pass ensures no more than slight border overlap.
+   */
+  function computeUmapLayout(): LayoutCluster[] {
+    if (!clusters.length) return [];
+    const sorted = [...clusters].sort((a, b) => b.count - a.count);
+    const maxCount = sorted[0].count;
+
+    // Build mutable positioned array
+    const placed: LayoutCluster[] = sorted.map((c, i) => {
+      const pos = UMAP_LOCS[c.id];
+      return {
+        ...c,
+        x: pos ? pos.x : (i - sorted.length / 2) * 80,
+        y: pos ? pos.y : 0,
+        radius: !parentColor
+          ? 55 + 110 * Math.sqrt(c.count / maxCount)
+          : 40 + 95 * Math.sqrt(c.count / maxCount),
+        color: assignColor(c, i),
+      };
+    });
+
+    // Push-apart: allow slight overlap at the circle border (10% overlap max)
+    // Iterate several times so clusters cascade‐push each other.
+    const MAX_OVERLAP_RATIO = 0.90; // allow touching up to 90% of sum of radii
+    for (let iter = 0; iter < 60; iter++) {
+      for (let i = 0; i < placed.length; i++) {
+        for (let j = i + 1; j < placed.length; j++) {
+          const ci = placed[i];
+          const cj = placed[j];
+          const dx = cj.x - ci.x;
+          const dy = cj.y - ci.y;
+          const d = Math.sqrt(dx * dx + dy * dy) || 0.001;
+          const minD = (ci.radius + cj.radius) * MAX_OVERLAP_RATIO;
+          if (d < minD) {
+            const push = (minD - d) / 2;
+            const ux = (dx / d) * push;
+            const uy = (dy / d) * push;
+            ci.x -= ux;
+            ci.y -= uy;
+            cj.x += ux;
+            cj.y += uy;
+          }
+        }
+      }
+    }
+
+    return placed;
   }
 
   function computeInitialView(laid: LayoutCluster[], W: number, H: number): Transform {
@@ -400,8 +475,15 @@
   // label display: show abbreviation when zoomed out, full name when zoomed in
   const LABEL_FULL_SCALE = 0.9; // >= show full name, < show abbreviation (tweakable)
   // zoom limits
-  const MIN_SCALE = 0.18; // how far out the user can zoom
+  const MIN_SCALE = 0.38; // how far out the user can zoom (prevents zooming out too far)
   const MAX_SCALE = 20;
+  // At this zoom level, check if a cluster fills the screen enough to auto-drill in
+  const AUTO_DRILL_SCALE = 9.0;
+  // Minimum fraction of shorter canvas edge that a cluster must fill to trigger auto-drill
+  const AUTO_DRILL_FILL = 0.40;
+  // Prevents auto-drill from firing multiple times
+  let autoDrillPending = false;
+  let autoDrillTimeout: ReturnType<typeof setTimeout> | null = null;
 
   function abbrevName(name: string): string {
     if (!name) return '';
@@ -520,6 +602,45 @@
       offsetX: mx - (mx - view.offsetX) * ratio,
       offsetY: my - (my - view.offsetY) * ratio,
     };
+    // Check whether the user has zoomed deep enough into a single cluster to auto-drill
+    checkAutoDrill();
+  }
+
+  /**
+   * If the user has zoomed in past AUTO_DRILL_SCALE and a cluster fills most of the
+   * visible canvas, dispatch a clusterClick after a short debounce delay so the
+   * user has time to see the zoom-in animation before the view transitions.
+   */
+  function checkAutoDrill() {
+    if (view.scale < AUTO_DRILL_SCALE) {
+      // Below threshold — cancel any pending drill
+      if (autoDrillTimeout) { clearTimeout(autoDrillTimeout); autoDrillTimeout = null; }
+      autoDrillPending = false;
+      return;
+    }
+    if (autoDrillPending) return; // already scheduled
+    // Find the cluster closest to the canvas centre
+    const cx = canvasW / 2;
+    const cy = canvasH / 2;
+    const w = s2w(cx, cy);
+    let best: LayoutCluster | null = null;
+    let bestD = Infinity;
+    for (const c of laid) {
+      const dx = w.x - c.x;
+      const dy = w.y - c.y;
+      const d = Math.sqrt(dx * dx + dy * dy);
+      if (d < bestD && d < c.radius * 1.5) { bestD = d; best = c; }
+    }
+    if (!best) return;
+    const screenR = best.radius * view.scale;
+    if (screenR > Math.min(canvasW, canvasH) * AUTO_DRILL_FILL) {
+      autoDrillPending = true;
+      autoDrillTimeout = setTimeout(() => {
+        autoDrillPending = false;
+        autoDrillTimeout = null;
+        if (best) dispatch('clusterClick', { id: best.id, name: best.name, color: best.color });
+      }, 450); // short delay so the zoom animation is visible before transition
+    }
   }
 
   function handleMouseLeave() {
@@ -591,7 +712,17 @@
     if (!canvasEl || canvasW <= 0) return;
     rebuild(canvasW, canvasH);
   }
+
+  /** Toggle between default and semantic (UMAP) layout; rebuilds and persists. */
+  function setLayoutMode(mode: 'default' | 'semantic') {
+    if (layoutMode === mode) return;
+    layoutMode = mode;
+    if (typeof localStorage !== 'undefined') localStorage.setItem(LAYOUT_MODE_KEY, mode);
+    if (canvasEl && canvasW > 0) rebuild(canvasW, canvasH);
+  }
 </script>
+
+<svelte:window on:click={() => { if (showLayoutInfo) showLayoutInfo = false; }} />
 
 <div class="cluster-container">
   <canvas
@@ -602,6 +733,39 @@
     on:wheel|preventDefault={handleWheel}
   ></canvas>
   <button class="reset-btn" on:click={resetView} title="Reset view">&#x27F2;</button>
+
+  <!-- Layout-mode toggle — bottom left, styled like the citation-graph tab buttons -->
+  <div class="layout-controls">
+    <div class="layout-toggle">
+      <button
+        class="layout-btn" class:active={layoutMode === 'default'}
+        on:click={() => setLayoutMode('default')}
+        title="Default arrangement"
+      >Default</button>
+      <button
+        class="layout-btn" class:active={layoutMode === 'semantic'}
+        on:click={() => setLayoutMode('semantic')}
+        title="Semantic arrangement based on UMAP coordinates"
+      >Semantic</button>
+    </div>
+    <!-- info button -->
+    <button
+      class="layout-info-btn"
+      class:active={showLayoutInfo}
+      on:click|stopPropagation={() => showLayoutInfo = !showLayoutInfo}
+      title="About these views"
+      aria-label="Layout mode info"
+    >ⓘ</button>
+  </div>
+  {#if showLayoutInfo}
+    <!-- svelte-ignore a11y-click-events-have-key-events -->
+    <!-- svelte-ignore a11y-no-static-element-interactions -->
+    <div class="layout-info-tooltip" on:click|stopPropagation>
+      <button class="layout-info-close" on:click={() => showLayoutInfo = false} aria-label="Close">✕</button>
+      <p><strong>Semantic</strong><br>Displays the clusters as close as possible to their semantic similarity without ruining visibility.</p>
+      <p><strong>Default</strong><br>Positions the clusters in an aesthetically pleasing way, ignoring similarity.</p>
+    </div>
+  {/if}
 </div>
 
 <style>
@@ -642,5 +806,118 @@
     color: #fff;
     border-color: rgba(147, 51, 234, 0.4);
     box-shadow: 0 0 20px rgba(147, 51, 234, 0.3);
+  }
+
+  /* ── Layout-mode toggle (bottom-left, mirrors PaperDetailGraph tab-btn style) ── */
+  .layout-controls {
+    position: absolute;
+    bottom: 16px;
+    left: 16px;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    z-index: 10;
+  }
+  .layout-toggle {
+    display: flex;
+    gap: 2px;
+    background: rgba(0, 0, 0, 0.3);
+    border-radius: 8px;
+    padding: 3px;
+    border: 1px solid rgba(255, 255, 255, 0.08);
+  }
+
+  .layout-btn {
+    background: none;
+    border: none;
+    color: var(--text-muted, #6b6b8d);
+    border-radius: 6px;
+    padding: 5px 14px;
+    cursor: pointer;
+    font-size: 12px;
+    font-weight: 500;
+    transition: all 0.15s ease;
+  }
+  .layout-btn.active {
+    /* Match .tab-btn.active from PaperDetailGraph */
+    background: linear-gradient(
+      135deg,
+      rgba(147, 51, 234, 0.35),
+      rgba(232, 57, 160, 0.25)
+    );
+    color: var(--text-primary, #f0f0f8);
+    box-shadow: 0 0 12px rgba(147, 51, 234, 0.2);
+  }
+  .layout-btn:hover:not(.active) {
+    background: rgba(255, 255, 255, 0.05);
+    color: var(--text-secondary, #a8a8c8);
+  }
+
+  /* ── Info button ── */
+  .layout-info-btn {
+    width: 26px;
+    height: 26px;
+    border-radius: 50%;
+    border: 1px solid rgba(255, 255, 255, 0.14);
+    background: rgba(0, 0, 0, 0.3);
+    color: var(--text-muted, #6b6b8d);
+    font-size: 14px;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 0;
+    transition: all 0.15s ease;
+    line-height: 1;
+  }
+  .layout-info-btn.active,
+  .layout-info-btn:hover {
+    background: rgba(147, 51, 234, 0.25);
+    color: #e0e0f8;
+    border-color: rgba(147, 51, 234, 0.4);
+  }
+
+  /* ── Info tooltip ── */
+  .layout-info-tooltip {
+    position: absolute;
+    bottom: 56px;
+    left: 16px;
+    width: 260px;
+    background: rgba(14, 16, 36, 0.96);
+    backdrop-filter: blur(12px);
+    border: 1px solid rgba(147, 51, 234, 0.28);
+    border-radius: 10px;
+    padding: 14px 14px 12px;
+    z-index: 20;
+    box-shadow: 0 4px 24px rgba(0, 0, 0, 0.45), 0 0 16px rgba(147, 51, 234, 0.12);
+    font-size: 12px;
+    line-height: 1.55;
+    color: var(--text-secondary, #a8a8c8);
+  }
+  .layout-info-tooltip p {
+    margin: 0 0 8px;
+  }
+  .layout-info-tooltip p:last-child {
+    margin-bottom: 0;
+  }
+  .layout-info-tooltip strong {
+    color: var(--text-primary, #f0f0f8);
+    font-weight: 600;
+  }
+  .layout-info-close {
+    float: right;
+    margin: -4px -4px 6px 8px;
+    background: none;
+    border: none;
+    color: var(--text-muted, #6b6b8d);
+    font-size: 12px;
+    cursor: pointer;
+    padding: 2px 4px;
+    border-radius: 4px;
+    line-height: 1;
+  }
+  .layout-info-close:hover {
+    color: #e0e0f8;
+    background: rgba(255, 255, 255, 0.06);
   }
 </style>
