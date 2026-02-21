@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { createEventDispatcher } from 'svelte';
+  import { createEventDispatcher, onMount } from 'svelte';
   import { fade } from 'svelte/transition';
   import { spring } from 'svelte/motion';
   import techlistImg from '../assets/techlist.png';
@@ -81,6 +81,9 @@
   // 7. Fade out previous section
   $: previousSectionOpacity = Math.max(0, 1 - (progress - 1.0) * 5);
 
+  // 7b. New section fades in as previous fades out
+  $: newSectionOpacity = Math.min(1, Math.max(0, 1 - previousSectionOpacity));
+
   // 8. New Section Animations
   // Node 1 forms in the middle (scale 0 to 1)
   $: node1Scale = Math.min(1, Math.max(0, (progress - 1.2) * 10));
@@ -92,23 +95,102 @@
   // Text 1 "Search a Paper" appears
   $: text1Opacity = Math.min(1, Math.max(0, (progress - 1.35) * 10));
 
-  // Edge 1 forms (height 0 to 100px)
-  $: edge1Height = Math.min(1, Math.max(0, (progress - 1.4) * 10)) * 100;
+  // Edge 1 forms (height 0 to 130px)
+  $: edge1Height = Math.min(1, Math.max(0, (progress - 1.4) * 10)) * 130;
 
   // Node 2 forms and text "Find its References and Citations" appears
   $: node2Opacity = Math.min(1, Math.max(0, (progress - 1.5) * 10));
 
-  // Edge 2 forms (height 0 to 100px)
-  $: edge2Height = Math.min(1, Math.max(0, (progress - 1.6) * 10)) * 100;
+  // Edge 2 forms (height 0 to 130px)
+  $: edge2Height = Math.min(1, Math.max(0, (progress - 1.6) * 10)) * 130;
 
   // Node 3 forms and text "Find thematically similar paper" appears
   $: node3Opacity = Math.min(1, Math.max(0, (progress - 1.7) * 10));
 
-  // Edge 3 forms (height 0 to 100px)
-  $: edge3Height = Math.min(1, Math.max(0, (progress - 1.8) * 10)) * 100;
+  // Edge 3 forms (height 0 to 130px)
+  $: edge3Height = Math.min(1, Math.max(0, (progress - 1.8) * 10)) * 130;
 
   // Big text appears
   $: finalProjectOpacity = Math.min(1, Math.max(0, (progress - 1.9) * 10));
+
+  // ── Canvas: cross-browser zoom-through-text (replaces SVG mask) ──
+  let canvasEl: HTMLCanvasElement;
+
+  function drawCanvas() {
+    if (!canvasEl || typeof window === 'undefined') return;
+    const ctx = canvasEl.getContext('2d');
+    if (!ctx) return;
+    const W = canvasEl.width;
+    const H = canvasEl.height;
+
+    ctx.clearRect(0, 0, W, H);
+
+    // Replicate SVG viewBox "0 0 100 50" with preserveAspectRatio="xMidYMid slice"
+    const svgScale = Math.max(W / 100, H / 50);
+    const svgOffX = (W - 100 * svgScale) / 2;
+    const svgOffY = (H - 50 * svgScale) / 2;
+
+    // Focus point (viewport centre) and text anchor in canvas pixels
+    const fpx = svgOffX + focusX * svgScale;
+    const fpy = svgOffY + focusY * svgScale;
+    const textPx = svgOffX + titleX * svgScale;
+    const textPy = svgOffY + titleYAbs * svgScale;
+
+    const fontSizePx = 12 * svgScale;
+    const fontDef = `900 ${fontSizePx}px Arial, sans-serif`;
+
+    // 1. Dark overlay
+    ctx.fillStyle = '#1a1f2c';
+    ctx.fillRect(0, 0, W, H);
+
+    // 2. Cut text-shaped hole via destination-out
+    ctx.save();
+    ctx.translate(fpx, fpy);
+    ctx.scale(titleScale, titleScale);
+    ctx.translate(-fpx, -fpy);
+    ctx.font = fontDef;
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.globalCompositeOperation = 'destination-out';
+    ctx.fillStyle = 'rgba(0,0,0,1)';
+    ctx.fillText('MONAA-LISA', textPx, textPy);
+    ctx.restore();
+
+    // 3. White text fill that fades in as zoom completes
+    if (titleOpacity > 0) {
+      ctx.save();
+      ctx.globalAlpha = titleOpacity;
+      ctx.translate(fpx, fpy);
+      ctx.scale(titleScale, titleScale);
+      ctx.translate(-fpx, -fpy);
+      ctx.font = fontDef;
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.globalCompositeOperation = 'source-over';
+      ctx.fillStyle = 'white';
+      ctx.fillText('MONAA-LISA', textPx, textPy);
+      ctx.restore();
+    }
+  }
+
+  function resizeCanvas() {
+    if (!canvasEl || typeof window === 'undefined') return;
+    const dpr = window.devicePixelRatio || 1;
+    canvasEl.width = window.innerWidth * dpr;
+    canvasEl.height = window.innerHeight * dpr;
+    canvasEl.style.width = window.innerWidth + 'px';
+    canvasEl.style.height = window.innerHeight + 'px';
+    drawCanvas();
+  }
+
+  onMount(() => {
+    resizeCanvas();
+    window.addEventListener('resize', resizeCanvas);
+    return () => window.removeEventListener('resize', resizeCanvas);
+  });
+
+  // Redraw whenever animated values change
+  $: titleScale, titleOpacity, titleYAbs, canvasEl, drawCanvas();
 
   export function reset() {
     window.scrollTo({ top: 0, behavior: 'instant' });
@@ -159,31 +241,8 @@
           </div>
       </div>
 
-      <!-- Second Section (Zoomed out view) -->
-      <!-- 
-        We use an SVG mask to create the "Hole" effect.
-        The SVG scales via transform instead of viewBox to fix Chrome bugs.
-      -->
-      <div class="second-section">
-           <svg class="overlay-svg" viewBox="0 0 100 50" preserveAspectRatio="xMidYMid slice">
-              <defs>
-                 <mask id="text-mask" maskUnits="userSpaceOnUse" maskContentUnits="userSpaceOnUse" x="-500" y="-500" width="1000" height="1000">
-                    <!-- Infinite White Rect (The Mask) -->
-                    <rect x="-500" y="-500" width="1000" height="1000" fill="white" />
-                    <g transform="translate({focusX}, {focusY}) scale({titleScale}) translate(-{focusX}, -{focusY})">
-                        <text x="{titleX}" y="{titleYAbs}" text-anchor="middle" dominant-baseline="middle" font-size="12" font-weight="900" fill="black">Monaa-Lisa</text>
-                    </g>
-                 </mask>
-              </defs>
-              <!-- The Solid Background with Hole (Infinite Rect) -->
-              <rect x="-500" y="-500" width="1000" height="1000" fill="#1a1f2c" mask="url(#text-mask)" />
-              
-              <!-- The White Text Fill -->
-              <g transform="translate({focusX}, {focusY}) scale({titleScale}) translate(-{focusX}, -{focusY})">
-                  <text x="{titleX}" y="{titleYAbs}" text-anchor="middle" dominant-baseline="middle" font-size="12" font-weight="900" fill="white" opacity={titleOpacity}>Monaa-Lisa</text>
-              </g>
-           </svg>
-      </div>
+      <!-- Second Section: Canvas-based zoom-through-text — works identically on Chromium and Firefox -->
+      <canvas bind:this={canvasEl} class="overlay-canvas"></canvas>
       
       <!-- Subtitle is separate, fades in at the end -->
       <div class="subtitle-container" style="opacity: {subtitleOpacity * previousSectionOpacity}">
@@ -206,8 +265,8 @@
       </div>
 
       <!-- New Section: Program Explanation -->
-      <div class="program-explanation-section" style="pointer-events: {progress > 1.1 ? 'auto' : 'none'}">
-          <div class="node-container" style="transform: translateY(-150px)">
+      <div class="program-explanation-section" style="opacity: {newSectionOpacity}; pointer-events: {progress > 1.1 ? 'auto' : 'none'}">
+          <div class="node-container">
               <div class="node-row">
                   <div class="node" style="transform: translateX({node1X}vw) scale({node1Scale})"></div>
                   <div class="node-text" style="opacity: {text1Opacity}; transform: translateX(calc({node1X}vw + 20px))">Search a Paper</div>
@@ -230,7 +289,8 @@
               <div class="edge" style="height: {edge3Height}px; transform: translateX({node1X}vw)"></div>
               
               <div class="final-project-text" style="opacity: {finalProjectOpacity}">
-                  a software project by name,name,name,name
+                <span class="final-prefix">A software project by</span>
+                <span class="final-names">Nico Bestek, Bastian Rosinski, Lenio Cabral-Rosario, Nick Wittkowski</span>
               </div>
           </div>
       </div>
@@ -376,29 +436,13 @@
     text-shadow: 0 2px 2px rgba(0,0,0,0.9);
   }
 
-  .second-section {
+  .overlay-canvas {
     position: absolute;
     z-index: 20;
-    width: 100%;
-    height: 100%;
-    display: flex;
-    justify-content: center;
-    align-items: center;
+    top: 0;
+    left: 0;
     pointer-events: none;
-    /* Removed will-change to prevent layer composition artifacts in Chrome */
-  }
-
-  .overlay-svg {
-    width: 100vw;
-    height: 100vh;
-    /* Ensure text is crisp */
-    shape-rendering: auto;
-    text-rendering: optimizeLegibility;
-  }
-  
-  .overlay-svg text {
-    font-family: Arial, sans-serif;
-    text-transform: uppercase;
+    /* width/height set dynamically via resizeCanvas() */
   }
 
   .subtitle-container {
@@ -476,6 +520,7 @@
     display: flex;
     justify-content: center;
     align-items: center;
+    background: #1a1f2c;
   }
 
   .node-container {
@@ -489,27 +534,27 @@
     display: flex;
     align-items: center;
     position: relative;
-    height: 40px;
+    height: 56px;
   }
 
   .node {
-    width: 20px;
-    height: 20px;
+    width: 28px;
+    height: 28px;
     background-color: white;
     border-radius: 50%;
-    box-shadow: 0 0 15px rgba(255, 255, 255, 0.8);
+    box-shadow: 0 0 20px rgba(255, 255, 255, 0.85);
     position: absolute;
-    left: -10px; /* Center the node on the vertical axis */
+    left: -14px; /* Centre the node on the vertical axis */
   }
 
   .node-text {
     position: absolute;
     left: 0;
     white-space: nowrap;
-    font-size: 1.5rem;
+    font-size: 1.9rem;
     font-weight: 300;
-    letter-spacing: 2px;
-    text-shadow: 0 0 10px rgba(0,0,0,0.8);
+    letter-spacing: 3px;
+    text-shadow: 0 0 12px rgba(0,0,0,0.8);
   }
 
   .edge {
@@ -521,13 +566,27 @@
   }
 
   .final-project-text {
-    margin-top: 30px;
-    font-size: 2.5rem;
-    font-weight: 700;
+    margin-top: 48px;
     text-align: center;
+    text-shadow: 0 0 24px rgba(255, 255, 255, 0.35);
+  }
+
+  .final-prefix {
+    display: block;
+    font-size: 3.2rem;
+    font-weight: 700;
+    letter-spacing: 6px;
     text-transform: uppercase;
-    letter-spacing: 5px;
-    text-shadow: 0 0 20px rgba(255, 255, 255, 0.3);
+    margin-bottom: 0.6rem;
+  }
+
+  .final-names {
+    display: block;
+    font-size: 2.2rem;
+    font-weight: 600;
+    letter-spacing: 3px;
+    text-transform: uppercase;
+    white-space: normal;
   }
 
   .sub-title {
@@ -545,6 +604,14 @@
     .hero-subtitle {
       bottom: 20px;
       font-size: 0.9rem;
+    }
+    .final-prefix {
+      font-size: 2.2rem;
+      letter-spacing: 3px;
+    }
+    .final-names {
+      font-size: 1.6rem;
+      letter-spacing: 1.5px;
     }
   }
 </style>
