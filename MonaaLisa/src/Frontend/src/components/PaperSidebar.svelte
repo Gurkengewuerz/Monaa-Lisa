@@ -13,6 +13,8 @@
   export let apiBaseUrl: string = 'http://localhost:3000';
   export let isOpen: boolean = false;
   export let isFavorite: boolean = false;
+  /** When true (dashboard is open), the toggle button is blurred and non-interactive. */
+  export let dashboardOpen: boolean = false;
 
   const COLOR_CITATION  = '#ff6b6b';
   const COLOR_REFERENCE = '#4ecdc4';
@@ -353,7 +355,7 @@
 </script>
 
 <!-- toggle button -->
-<button class="sidebar-toggle" class:open={isOpen} on:click={() => dispatch('toggle')}>
+<button class="sidebar-toggle" class:open={isOpen} class:db-blurred={dashboardOpen} disabled={dashboardOpen} on:click={() => dispatch('toggle')}>
   <span class="toggle-icon">{isOpen ? '→' : '←'}</span>
 </button>
 
@@ -696,6 +698,12 @@
   .sidebar-toggle.open {
     right: calc(var(--sidebar-width, 385px) - 5px);
     border-radius: 0 50% 50% 0;
+  }
+  .sidebar-toggle.db-blurred {
+    filter: blur(3px);
+    opacity: 0.4;
+    pointer-events: none;
+    cursor: default;
   }
   .toggle-icon { font-size: 16px; font-weight: bold; }
 

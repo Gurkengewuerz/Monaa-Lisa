@@ -41,20 +41,115 @@
 
     const API_BASE_URL =
         publicEnv.PUBLIC_API_BASE_URL || "http://localhost:3000";
-    // How many papers to load into the Sigma graph (higher = slower but more complete)
-    // Default lowered to 1000 for faster initial loads; users can pick other values.
+
+    // ─── paper / node limits — Written by Nick ────────────────────────
+    // Defaults kept at 1000 for faster initial load; 2500 added as a middle
+    // ground. Values >= 10000 and "All" show a confirmation modal because
+    // they can cause severe slowdowns or browser crashes.
     let paperLimit = 1000;
     let nodeLimit = 1000;
     const LIMIT_OPTIONS = [
-        { value: 100, label: "100" },
-        { value: 500, label: "500" },
-        { value: 1000, label: "1000" },
-        { value: 2500, label: "2500" },
-        { value: 5000, label: "5000" },
+        { value: 100,   label: "100" },
+        { value: 500,   label: "500" },
+        { value: 1000,  label: "1000" },
+        { value: 2500,  label: "2500" },
+        { value: 5000,  label: "5000" },
         { value: 10000, label: "10000" },
-        { value: 0, label: "Alle" },
+        { value: 0,     label: "All" },
     ];
+    // Threshold above which the user must confirm before the value is applied.
+    const LARGE_LIMIT_THRESHOLD = 10000;
     const SIDEBAR_SAMPLE = 50; // papers shown in sidebar at cluster levels
+
+    // ─── large-load confirmation modal — Written by Nick ─────────────
+    // Shows when the user picks 10000 or "All". Confirm is locked behind a
+    // 5-second countdown so the warning text is actually read.
+    let confirmModalOpen  = false;   // whether the modal is visible
+    let confirmCountdown  = 5;       // seconds remaining before Confirm unlocks
+    let confirmTimer: ReturnType<typeof setInterval> | null = null;
+    // The value the user attempted to select (held until confirmed/cancelled).
+    let pendingLimit: number | null = null;
+    // Which selector triggered the modal: 'paper' or 'node'.
+    let pendingLimitTarget: 'paper' | 'node' = 'paper';
+    // Last confirmed safe values — restored on cancel.
+    let prevPaperLimit = paperLimit;
+    let prevNodeLimit  = nodeLimit;
+
+    /** Open the modal for a dangerously large limit selection. */
+    function openLimitConfirm(target: 'paper' | 'node', attempted: number) {
+        pendingLimitTarget = target;
+        pendingLimit       = attempted;
+        confirmCountdown   = 5;
+        confirmModalOpen   = true;
+        // Kick off the 1-second tick.
+        if (confirmTimer) clearInterval(confirmTimer);
+        confirmTimer = setInterval(() => {
+            confirmCountdown -= 1;
+            if (confirmCountdown <= 0) {
+                clearInterval(confirmTimer!);
+                confirmTimer = null;
+            }
+        }, 1000);
+    }
+
+    /** User confirmed — apply the pending value and close. */
+    function applyLimitConfirm() {
+        if (pendingLimit === null) return;
+        if (pendingLimitTarget === 'paper') {
+            paperLimit     = pendingLimit;
+            prevPaperLimit = pendingLimit;
+            if (view.level === 'papers') loadPapers(view.categoryId);
+        } else {
+            nodeLimit     = pendingLimit;
+            prevNodeLimit = pendingLimit;
+        }
+        closeLimitConfirm();
+    }
+
+    /** User cancelled — revert the select back to the previous safe value. */
+    function cancelLimitConfirm() {
+        // Revert binding so the <select> shows the old value again.
+        if (pendingLimitTarget === 'paper') paperLimit = prevPaperLimit;
+        else nodeLimit = prevNodeLimit;
+        closeLimitConfirm();
+    }
+
+    function closeLimitConfirm() {
+        confirmModalOpen = false;
+        pendingLimit     = null;
+        if (confirmTimer) { clearInterval(confirmTimer); confirmTimer = null; }
+    }
+
+    /**
+     * Called by the Papers <select> on:change.
+     * Intercepts large values and shows the modal instead of applying them.
+     */
+    function handlePaperLimitChange(e: Event) {
+        const attempted = Number((e.target as HTMLSelectElement).value);
+        if (attempted === 10000 || attempted === 0) {
+            // Immediately revert binding so the select still shows the old value.
+            paperLimit = prevPaperLimit;
+            openLimitConfirm('paper', attempted);
+        } else {
+            // Safe value — apply and track.
+            prevPaperLimit = attempted;
+            if (view.level === 'papers') loadPapers(view.categoryId);
+        }
+    }
+
+    /**
+     * Called by the Nodes <select> on:change.
+     * Same guard as handlePaperLimitChange but for the detail view node cap.
+     */
+    function handleNodeLimitChange(e: Event) {
+        const attempted = Number((e.target as HTMLSelectElement).value);
+        if (attempted === 10000 || attempted === 0) {
+            nodeLimit = prevNodeLimit;
+            openLimitConfirm('node', attempted);
+        } else {
+            prevNodeLimit = attempted;
+        }
+    }
     const MAX_HISTORY = 5;
     const HISTORY_KEY = "monaalisa_paper_sessions_v1";
 
@@ -841,25 +936,28 @@
         <div class="limit-select-wrapper">
             {#if view.level === "papers"}
                 <span class="limit-label">Papers:</span>
+                <!-- on:change intercepted — large values go through the modal -->
                 <select
                     class="limit-select"
                     bind:value={paperLimit}
-                    on:change={() => {
-                        if (view.level === "papers")
-                            loadPapers(view.categoryId);
-                    }}
+                    on:change={handlePaperLimitChange}
                 >
                     {#each LIMIT_OPTIONS as opt}
                         <option value={opt.value}
                             >{opt.label}{opt.value === 0
-                                ? " ⚠ Große Datenmenge"
+                                ? " (uncapped)"
                                 : ""}</option
                         >
                     {/each}
                 </select>
             {:else if view.level === "detail"}
                 <span class="limit-label">Nodes:</span>
-                <select class="limit-select" bind:value={nodeLimit}>
+                <!-- on:change intercepted — large values go through the modal -->
+                <select
+                    class="limit-select"
+                    bind:value={nodeLimit}
+                    on:change={handleNodeLimitChange}
+                >
                     {#each LIMIT_OPTIONS as opt}
                         <option value={opt.value}>{opt.label}</option>
                     {/each}
@@ -867,6 +965,40 @@
             {/if}
         </div>
     </nav>
+
+    <!-- Large-load confirmation modal — Written by Nick
+         Triggered when the user selects 10 000 or "All" papers/nodes.
+         The Confirm button is intentionally locked for 5 seconds so the
+         warning text has time to be read before the destructive action fires. -->
+    {#if confirmModalOpen}
+        <div class="confirm-modal-backdrop" role="presentation">
+            <div class="confirm-modal" role="alertdialog" aria-modal="true" aria-labelledby="confirm-modal-title">
+                <h3 id="confirm-modal-title" class="confirm-modal-title">⚠ Large Dataset Warning</h3>
+                <p class="confirm-modal-body">
+                    Displaying more than 5 000 papers at once will significantly
+                    increase loading times and may impact performance or
+                    <strong>crash your browser</strong>. Are you sure you want to
+                    continue?
+                </p>
+                <div class="confirm-modal-buttons">
+                    <button class="confirm-btn confirm-btn-cancel" on:click={cancelLimitConfirm}>
+                        Cancel
+                    </button>
+                    <button
+                        class="confirm-btn confirm-btn-ok"
+                        disabled={confirmCountdown > 0}
+                        on:click={applyLimitConfirm}
+                    >
+                        {#if confirmCountdown > 0}
+                            Confirm ({confirmCountdown})
+                        {:else}
+                            Confirm
+                        {/if}
+                    </button>
+                </div>
+            </div>
+        </div>
+    {/if}
 
     <div class="main-content">
         <!-- ── graph panel (central area) ── -->
@@ -941,6 +1073,7 @@
                     paper={view.paper}
                     apiBaseUrl={API_BASE_URL}
                     isOpen={sidebarOpen}
+                    {dashboardOpen}
                     isFavorite={favoritesVersion >= 0 && dashboardRef
                         ? dashboardRef.isFavorite(view.paper.entry_id)
                         : false}
@@ -955,6 +1088,7 @@
             <Sidebar
                 papers={view.level === "papers" ? papers : sidebarSamplePapers}
                 isOpen={sidebarOpen}
+                {dashboardOpen}
                 {selectedPaperId}
                 categoryFilter={view.level === "papers" ||
                 view.level === "detail"
@@ -1098,6 +1232,80 @@
     .limit-select option {
         background: #141530;
         color: #f0f0f8;
+    }
+
+    /* ── Large-load confirmation modal — Written by Nick ── */
+    .confirm-modal-backdrop {
+        position: fixed;
+        inset: 0;
+        z-index: 10100;
+        background: rgba(0, 0, 0, 0.55);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        backdrop-filter: blur(3px);
+    }
+    .confirm-modal {
+        width: 420px;
+        max-width: calc(100vw - 40px);
+        background: var(--bg-secondary, #0e1024);
+        border: 1px solid rgba(147, 51, 234, 0.28);
+        border-radius: 12px;
+        padding: 24px 24px 20px;
+        box-shadow: 0 16px 48px rgba(0, 0, 0, 0.6), 0 0 24px rgba(147, 51, 234, 0.1);
+        display: flex;
+        flex-direction: column;
+        gap: 14px;
+    }
+    .confirm-modal-title {
+        margin: 0;
+        font-size: 15px;
+        font-weight: 700;
+        color: #ffd166;
+    }
+    .confirm-modal-body {
+        margin: 0;
+        font-size: 13px;
+        line-height: 1.55;
+        color: var(--text-secondary, #a8a8c8);
+    }
+    .confirm-modal-body strong {
+        color: #ff6b6b;
+    }
+    .confirm-modal-buttons {
+        display: flex;
+        justify-content: flex-end;
+        gap: 10px;
+    }
+    .confirm-btn {
+        padding: 7px 16px;
+        border-radius: 8px;
+        border: none;
+        font-size: 12px;
+        font-weight: 600;
+        cursor: pointer;
+        transition: all 0.15s ease;
+    }
+    .confirm-btn-cancel {
+        background: rgba(255, 255, 255, 0.05);
+        color: var(--text-secondary, #a8a8c8);
+        border: 1px solid rgba(255, 255, 255, 0.1);
+    }
+    .confirm-btn-cancel:hover {
+        background: rgba(255, 255, 255, 0.1);
+        color: var(--text-primary, #f0f0f8);
+    }
+    .confirm-btn-ok {
+        background: linear-gradient(135deg, rgba(147, 51, 234, 0.9), rgba(232, 57, 160, 0.8));
+        color: #fff;
+    }
+    .confirm-btn-ok:hover:not(:disabled) {
+        filter: brightness(1.15);
+    }
+    .confirm-btn-ok:disabled {
+        opacity: 0.55;
+        cursor: not-allowed;
+        filter: grayscale(0.2);
     }
 
     .db-toggle-btn {

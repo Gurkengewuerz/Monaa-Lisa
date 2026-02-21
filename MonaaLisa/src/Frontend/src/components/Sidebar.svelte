@@ -21,6 +21,8 @@
   export let papers: Paper[] = [];
   export let isOpen: boolean = false;
   export let selectedPaperId: string | null = null;
+  /** When true (dashboard is open), the toggle button is blurred and non-interactive. */
+  export let dashboardOpen: boolean = false;
   /** When true, citations/references can be expanded (paper-detail view only) */
   export let allowExpand: boolean = false;
   /** Category ID prefix used to scope backend search, e.g. "cs.AI" */
@@ -316,7 +318,7 @@
   }
 </script>
 
-<button class="sidebar-toggle" class:open={isOpen} on:click={toggleSidebar}>
+<button class="sidebar-toggle" class:open={isOpen} class:db-blurred={dashboardOpen} disabled={dashboardOpen} on:click={toggleSidebar}>
   <span class="toggle-icon">{isOpen ? "\u2192" : "\u2190"}</span>
 </button>
 
@@ -501,6 +503,7 @@
   }
   .sidebar-toggle:hover { box-shadow: 0 0 25px rgba(147,51,234,0.5); transform: translateY(-50%) scale(1.05); }
   .sidebar-toggle.open { right: 370px; border-radius: 0 50% 50% 0; }
+  .sidebar-toggle.db-blurred { filter: blur(3px); opacity: 0.4; pointer-events: none; cursor: default; }
   .toggle-icon { font-size: 16px; font-weight: bold; }
 
   .sidebar {

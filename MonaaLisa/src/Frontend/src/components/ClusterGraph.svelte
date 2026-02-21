@@ -232,7 +232,7 @@
 
     // Push-apart: allow slight overlap at the circle border (10% overlap max)
     // Iterate several times so clusters cascade‐push each other.
-    const MAX_OVERLAP_RATIO = 0.90; // allow touching up to 90% of sum of radii
+    const MAX_OVERLAP_RATIO = 0.8; // allow touching up to 90% of sum of radii
     for (let iter = 0; iter < 60; iter++) {
       for (let i = 0; i < placed.length; i++) {
         for (let j = i + 1; j < placed.length; j++) {
@@ -755,7 +755,7 @@
       on:click|stopPropagation={() => showLayoutInfo = !showLayoutInfo}
       title="About these views"
       aria-label="Layout mode info"
-    >ⓘ</button>
+    >i</button>
   </div>
   {#if showLayoutInfo}
     <!-- svelte-ignore a11y-click-events-have-key-events -->
