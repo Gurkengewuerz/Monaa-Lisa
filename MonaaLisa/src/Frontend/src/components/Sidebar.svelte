@@ -1,3 +1,16 @@
+<!--
+  Sidebar.svelte
+
+  Slide-in paper list that appears on the right side of the screen.
+  Used in both the papers view (Graph.svelte) and the detail view (PaperDetailGraph.svelte).
+
+  Supports:
+    - Free-text search (debounced, hits /papers?search=...)
+    - Advanced filter panel: title, author, abstract, date range, sort order
+    - Filter badges: shown after clicking Search so the user knows what's active
+    - Author highlight: dispatches 'authorHighlight' event so the graph can
+      highlight/add nodes whose authors match the search term
+-->
 <script lang="ts">
   import { createEventDispatcher, tick } from "svelte";
   import type { Paper } from "$lib/types/paper";
@@ -7,6 +20,8 @@
   export let papers: Paper[] = [];
   export let isOpen: boolean = false;
   export let selectedPaperId: string | null = null;
+  /** When true (dashboard is open), the toggle button is blurred and non-interactive. */
+  export let dashboardOpen: boolean = false;
   /** When true, citations/references can be expanded (paper-detail view only) */
   export let allowExpand: boolean = false;
   /** Category ID prefix used to scope backend search, e.g. "cs.AI" */
@@ -16,7 +31,14 @@
   /** Backend API base URL */
   export let apiBaseUrl: string = "http://localhost:3000";
 
-  const dispatch = createEventDispatcher();
+  const dispatch = createEventDispatcher<{
+    toggle: void;
+    selectPaper: Paper;
+    authorHighlight: string;
+    /** Fired whenever the search results change; carries the full paper objects so
+     *  the graph can highlight matching nodes and add any that are missing. */
+    searchHighlight: Paper[];
+  }>();
 
   // ─── backend search state ─────────────────────────────────────────
   let searchResults: Paper[] | null = null;
@@ -24,12 +46,36 @@
   let searchError: string | null = null;
   let searchTotal = 0;
 
-  // ─── advanced search form ─────────────────────────────────────────
+  // Advanced filter form type - each field maps to a backend query param
   const TODAY = new Date().toISOString().slice(0, 10);
-  interface AdvFilter { dateFrom: string; dateTo: string; authorQuery: string; sort: "published" | "citations"; }
-  let adv: AdvFilter = { dateFrom: "", dateTo: "", authorQuery: "", sort: "published" };
+  interface AdvFilter {
+    titleQuery: string;    // search by paper title
+    dateFrom: string;      // published after this date
+    dateTo: string;        // published before this date
+    authorQuery: string;   // search by author name
+    abstractQuery: string; // search for text in abstract
+    /** Sort order: published_desc = newest first, published_asc = oldest first, citations = most cited first */
+    sort: "published_desc" | "published_asc" | "citations";
+  }
+  // Default sort: newest papers first
+  let adv: AdvFilter = { titleQuery: "", dateFrom: "", dateTo: "", authorQuery: "", abstractQuery: "", sort: "published_desc" };
   let advError: string | null = null;
   let advancedOpen = false;
+
+  // ─── filter badges ──────────────────────────────────────────────
+  interface FilterBadge { key: string; label: string; }
+  let filterBadges: FilterBadge[] = [];
+
+  function buildBadges() {
+    const badges: FilterBadge[] = [];
+    if (query.trim()) badges.push({ key: 'query', label: `"${query.trim()}"` });
+    if (adv.titleQuery.trim()) badges.push({ key: 'title', label: `Title: ${adv.titleQuery.trim()}` });
+    if (adv.authorQuery.trim()) badges.push({ key: 'author', label: `Author: ${adv.authorQuery.trim()}` });
+    if (adv.abstractQuery.trim()) badges.push({ key: 'abstract', label: `Abstract: ${adv.abstractQuery.trim()}` });
+    if (adv.dateFrom) badges.push({ key: 'from', label: `From: ${adv.dateFrom}` });
+    if (adv.dateTo) badges.push({ key: 'to', label: `To: ${adv.dateTo}` });
+    filterBadges = badges;
+  }
 
   function validateAdv(): boolean {
     advError = null;
@@ -39,7 +85,7 @@
     return true;
   }
 
-  function resetAdv() { adv = { dateFrom: "", dateTo: "", authorQuery: "", sort: "published" }; advError = null; }
+  function resetAdv() { adv = { titleQuery: "", dateFrom: "", dateTo: "", authorQuery: "", abstractQuery: "", sort: "published_desc" }; advError = null; }
 
   // ─── search debounce ──────────────────────────────────────────────
   let searchTimer: ReturnType<typeof setTimeout> | null = null;
@@ -48,7 +94,7 @@
   async function runSearch() {
     if (!validateAdv()) return;
     const trimmed = query.trim();
-    const hasAdv = !!(adv.dateFrom || adv.dateTo || adv.authorQuery.trim());
+    const hasAdv = !!(adv.titleQuery.trim() || adv.dateFrom || adv.dateTo || adv.authorQuery.trim() || adv.abstractQuery.trim());
     if (!trimmed && !hasAdv) { searchResults = null; searchError = null; return; }
 
     searchLoading = true; searchError = null;
@@ -56,36 +102,83 @@
       const params = new URLSearchParams();
       const safeCat = (categoryFilter || "").replace(/[^a-zA-Z0-9._-]/g, "");
       if (safeCat) params.set("categories", safeCat);
-      let searchTerm = trimmed;
-      if (adv.authorQuery.trim()) searchTerm = searchTerm ? `${searchTerm} ${adv.authorQuery.trim()}` : adv.authorQuery.trim();
-      if (searchTerm) params.set("search", searchTerm.slice(0, 200));
+      // Combine all text-based search fields into a single `search` param.
+      // The backend searches title, authors, and abstract together.
+      const parts: string[] = [];
+      if (trimmed) parts.push(trimmed);
+      if (adv.titleQuery.trim()) parts.push(adv.titleQuery.trim());
+      if (adv.authorQuery.trim()) parts.push(adv.authorQuery.trim());
+      if (adv.abstractQuery.trim()) parts.push(adv.abstractQuery.trim());
+      if (parts.length > 0) params.set("search", parts.join(" ").slice(0, 300));
       if (adv.dateFrom) params.set("dateFrom", adv.dateFrom);
       if (adv.dateTo) params.set("dateTo", adv.dateTo);
-      params.set("sort", adv.sort);
+      // Map frontend sort values to backend param (published_asc/desc both map to "published";
+      // client-side sort is applied below to guarantee correct order).
+      const backendSort = adv.sort === "citations" ? "citations" : "published";
+      params.set("sort", backendSort);
       params.set("take", "100");
       params.set("skip", "0");
 
       const res = await fetch(`${apiBaseUrl}/papers?${params.toString()}`);
       if (!res.ok) throw new Error(`Server error ${res.status}`);
       const payload = await res.json();
-      const items: any[] = Array.isArray(payload) ? payload : (payload?.items ?? []);
-      searchTotal = Array.isArray(payload) ? items.length : (payload?.total ?? items.length);
-      searchResults = items.map((raw: any) => ({
-        id: Number(raw.id ?? 0),
-        entry_id: raw.entry_id,
-        title: raw.title ?? raw.entry_id,
-        authors: Array.isArray(raw.authors) ? raw.authors.join(", ") : (raw.authors ?? ""),
-        abstract: raw.abstract ?? "",
-        published: raw.published ?? null,
-        categories: raw.categories ?? null,
-        url: raw.url ?? null,
-        citations: Array.isArray(raw.citations) ? raw.citations : [],
-        references: [],
-        non_arxiv_citation_count: Number(raw.non_arxiv_citation_count ?? 0),
-        non_arxiv_reference_count: Number(raw.non_arxiv_reference_count ?? 0),
-        tsne1: 0, tsne2: 0,
-        cluster: raw.categories ?? "U",
-      }));
+      const rawItems: any[] = Array.isArray(payload) ? payload : (payload?.items ?? []);
+      searchTotal = Array.isArray(payload) ? rawItems.length : (payload?.total ?? rawItems.length);
+
+      // Client-side sort guarantees the correct order regardless of backend behaviour.
+      if (adv.sort === "published_desc") {
+        rawItems.sort((a, b) => {
+          const da = a.published ? new Date(a.published).getTime() : 0;
+          const db = b.published ? new Date(b.published).getTime() : 0;
+          return db - da; // newest first
+        });
+      } else if (adv.sort === "published_asc") {
+        rawItems.sort((a, b) => {
+          const da = a.published ? new Date(a.published).getTime() : 0;
+          const db = b.published ? new Date(b.published).getTime() : 0;
+          return da - db; // oldest first
+        });
+      } else if (adv.sort === "citations") {
+        rawItems.sort((a, b) => {
+          const ca = (Number(a.non_arxiv_citation_count ?? 0)) + (Array.isArray(a.citations) ? a.citations.length : 0);
+          const cb = (Number(b.non_arxiv_citation_count ?? 0)) + (Array.isArray(b.citations) ? b.citations.length : 0);
+          return cb - ca; // most cited first
+        });
+      }
+
+      searchResults = rawItems.map((raw: any) => {
+        // Parse tsne coordinates so the graph can position added nodes correctly.
+        let tsne1 = 0, tsne2 = 0;
+        if (raw.tsne) {
+          if (typeof raw.tsne === 'string') {
+            try { const t = JSON.parse(raw.tsne); tsne1 = t.x ?? 0; tsne2 = t.y ?? 0; } catch {}
+          } else if (typeof raw.tsne === 'object') {
+            tsne1 = raw.tsne.x ?? 0; tsne2 = raw.tsne.y ?? 0;
+          }
+        } else {
+          tsne1 = raw.tsne1 ?? 0; tsne2 = raw.tsne2 ?? 0;
+        }
+        return {
+          id: Number(raw.id ?? 0),
+          entry_id: raw.entry_id,
+          title: raw.title ?? raw.entry_id,
+          authors: Array.isArray(raw.authors) ? raw.authors.join(", ") : (raw.authors ?? ""),
+          abstract: raw.abstract ?? "",
+          published: raw.published ?? null,
+          categories: raw.categories ?? null,
+          url: raw.url ?? null,
+          citations: Array.isArray(raw.citations) ? raw.citations : [],
+          references: Array.isArray(raw.references) ? raw.references : [],
+          non_arxiv_citation_count: Number(raw.non_arxiv_citation_count ?? 0),
+          non_arxiv_reference_count: Number(raw.non_arxiv_reference_count ?? 0),
+          tsne1,
+          tsne2,
+          cluster: raw.categories ?? "U",
+        };
+      });
+
+      // Emit search highlight so the graph can highlight / add matching nodes.
+      dispatch('searchHighlight', searchResults);
     } catch (e) {
       searchError = e instanceof Error ? e.message : "Search failed.";
       searchResults = null;
@@ -94,18 +187,38 @@
     }
   }
 
+  // Called when the user clicks the "Search" button in the advanced panel.
+  // Builds filter badges for display, runs the search, then tells the graph
+  // to highlight author-matching nodes (only when an author query is set -
+  // the general searchHighlight event covers all other parameter combinations).
+  function applyAdvancedSearch() {
+    if (!validateAdv()) return;
+    buildBadges();
+    runSearch();
+    // Only dispatch author highlight when an author query is active.
+    // runSearch() will fire searchHighlight for the full results regardless.
+    dispatch('authorHighlight', adv.authorQuery.trim());
+  }
+
   function onQueryInput(e: Event) {
     query = (e.currentTarget as HTMLInputElement).value;
     if (searchTimer) clearTimeout(searchTimer);
     if (!query.trim() && !adv.dateFrom && !adv.dateTo && !adv.authorQuery.trim()) {
-      searchResults = null; searchError = null; return;
+      searchResults = null; searchError = null;
+      // Notify the graph that there are no active search results to highlight.
+      dispatch('searchHighlight', []);
+      return;
     }
     searchTimer = setTimeout(runSearch, 400);
   }
 
   function clearSearch() {
     query = ""; searchResults = null; searchError = null; advError = null;
+    filterBadges = [];
     if (searchTimer) clearTimeout(searchTimer);
+    // Clear both the author highlight and the general search highlight in the graph.
+    dispatch('authorHighlight', '');
+    dispatch('searchHighlight', []);
   }
 
   // ─── display list ─────────────────────────────────────────────────
@@ -204,7 +317,7 @@
   }
 </script>
 
-<button class="sidebar-toggle" class:open={isOpen} on:click={toggleSidebar}>
+<button class="sidebar-toggle" class:open={isOpen} class:db-blurred={dashboardOpen} disabled={dashboardOpen} on:click={toggleSidebar}>
   <span class="toggle-icon">{isOpen ? "\u2192" : "\u2190"}</span>
 </button>
 
@@ -231,32 +344,51 @@
     {#if advancedOpen}
       <div class="adv-panel">
         <div class="adv-row">
+          <label class="adv-label">Title</label>
+          <input class="adv-input" type="text" placeholder="Words in title" maxlength="200" bind:value={adv.titleQuery} />
+        </div>
+        <div class="adv-row">
           <label class="adv-label">Author</label>
-          <input class="adv-input" type="text" placeholder="Author name" maxlength="100" bind:value={adv.authorQuery}
-            on:input={() => { if (searchTimer) clearTimeout(searchTimer); searchTimer = setTimeout(runSearch, 500); }} />
+          <input class="adv-input" type="text" placeholder="Author name" maxlength="100" bind:value={adv.authorQuery} />
+        </div>
+        <div class="adv-row">
+          <label class="adv-label">Abstract</label>
+          <input class="adv-input" type="text" placeholder="Text in abstract" maxlength="200" bind:value={adv.abstractQuery} />
         </div>
         <div class="adv-row">
           <label class="adv-label">From</label>
           <input class="adv-input" type="date" max={TODAY} bind:value={adv.dateFrom}
-            on:change={() => { validateAdv(); if (!advError) runSearch(); }} />
+            on:change={() => validateAdv()} />
         </div>
         <div class="adv-row">
           <label class="adv-label">To</label>
           <input class="adv-input" type="date" max={TODAY} bind:value={adv.dateTo}
-            on:change={() => { validateAdv(); if (!advError) runSearch(); }} />
+            on:change={() => validateAdv()} />
         </div>
         <div class="adv-row">
           <label class="adv-label">Sort by</label>
-          <select class="adv-select" bind:value={adv.sort} on:change={() => runSearch()}>
-            <option value="published">Published date</option>
+          <!-- Two published-date options: newest = most recent papers first,
+               oldest = earliest papers first. Most cited sorts by combined citation count. -->
+          <select class="adv-select" bind:value={adv.sort}>
+            <option value="published_desc">Published date (newest)</option>
+            <option value="published_asc">Published date (oldest)</option>
             <option value="citations">Most cited</option>
           </select>
         </div>
         {#if advError}<p class="adv-error">{advError}</p>{/if}
         <div class="adv-footer">
           <button class="adv-reset" on:click={() => { resetAdv(); clearSearch(); }}>Reset</button>
+          <button class="adv-search-btn" on:click={applyAdvancedSearch}>Search</button>
           {#if searchTotal > 0}<span class="adv-count">{searchTotal} result{searchTotal !== 1 ? "s" : ""}</span>{/if}
         </div>
+      </div>
+    {/if}
+
+    {#if filterBadges.length > 0}
+      <div class="badge-row">
+        {#each filterBadges as badge (badge.key)}
+          <span class="filter-badge">{badge.label}</span>
+        {/each}
       </div>
     {/if}
 
@@ -370,6 +502,7 @@
   }
   .sidebar-toggle:hover { box-shadow: 0 0 25px rgba(147,51,234,0.5); transform: translateY(-50%) scale(1.05); }
   .sidebar-toggle.open { right: 370px; border-radius: 0 50% 50% 0; }
+  .sidebar-toggle.db-blurred { filter: blur(3px); opacity: 0.4; pointer-events: none; cursor: default; }
   .toggle-icon { font-size: 16px; font-weight: bold; }
 
   .sidebar {
@@ -443,7 +576,25 @@
   .adv-footer { display: flex; align-items: center; gap: 8px; margin-top: 6px; }
   .adv-reset { background: rgba(245,101,101,0.1); border: 1px solid rgba(245,101,101,0.25); color: #fca5a5; border-radius: 999px; padding: 3px 12px; font-size: 11px; cursor: pointer; transition: all 0.12s ease; }
   .adv-reset:hover { background: rgba(245,101,101,0.2); }
+  .adv-search-btn {
+    background: linear-gradient(135deg, var(--accent-purple, #9333ea), var(--accent-magenta, #e839a0));
+    border: none; color: white; border-radius: 999px; padding: 3px 14px;
+    cursor: pointer; font-size: 11px; font-weight: 600;
+    transition: all 0.12s ease; box-shadow: 0 0 8px rgba(147,51,234,0.2);
+  }
+  .adv-search-btn:hover { box-shadow: 0 0 16px rgba(147,51,234,0.4); }
   .adv-count { font-size: 11px; color: var(--text-muted, #6b6b8d); }
+
+  .badge-row {
+    display: flex; flex-wrap: wrap; gap: 4px;
+    padding: 4px 10px 6px;
+  }
+  .filter-badge {
+    display: inline-flex; align-items: center; gap: 4px;
+    padding: 2px 10px; border-radius: 999px; font-size: 11px;
+    background: rgba(147,51,234,0.15); border: 1px solid rgba(147,51,234,0.3);
+    color: var(--accent-cyan, #22d3ee);
+  }
 
   .show-all { margin-top: 6px; background: rgba(147,51,234,0.1); color: var(--text-primary, #f0f0f8); border: 1px solid rgba(147,51,234,0.18); border-radius: 8px; padding: 0.35rem 0.7rem; cursor: pointer; font-size: 12px; transition: all 0.15s ease; }
   .show-all:hover { background: rgba(147,51,234,0.2); }

@@ -26,7 +26,19 @@
                 on:click={() => (showAboutModal = false)}>×</button
             >
             <h2>About Us</h2>
-            <p>Dieses Projekt wurde von xy erstellt.</p>
+            <p>
+                MONAA-LISA ist eine Web-Anwendung zur hierarchischen Visualisierung von Open Access Literatur, die wissenschaftliche Recherchen
+                intuitiver und strukturierter gestaltet. Entwickelt wurde das Projekt von Nico Bestek, Nick Wittkowski, Lenio Cabral-Rosario
+                und Bastian Rosinski im Rahmen des Softwarepraktikums 2025 an der Hochschule Bochum unter der Betreuung von Prof. Dr. Christian
+                Scheffer und Jonas Friemel.
+                
+            </p>
+            <p>
+                Ein ganz besonderer Dank gilt dabei <strong>Jonas Friemel</strong>, der uns das gesamte Jahr über als direkter Ansprechpartner
+                intensiv betreut hat. Er stand uns nicht nur jederzeit mit Rat und Tat zur Seite, sondern bewies auch in stressigen Phasen
+                ein sicheres Händchen. Gerade dann, wenn es im Projektverlauf einmal brenzlig wurde, hat er uns geholfen, stets einen kühlen
+                Kopf zu bewahren und einen guten Mittelweg zu finden.
+            </p>
         </div>
     </div>
 {/if}
@@ -131,25 +143,37 @@
 
     .modal-content {
         background: var(--bg-secondary, #141530);
-        border: 1px solid var(--glass-border, rgba(255, 255, 255, 0.1));
+        border: 1px solid var(--glass-border, rgba(255, 255, 255, 0.08));
         border-radius: var(--radius-md, 12px);
-        padding: 28px 32px;
-        max-width: 480px;
-        width: 90%;
+        padding: 28px 36px;
+        max-width: 640px;
+        width: 92%;
         position: relative;
         color: var(--text-primary, #f0f0f8);
-        box-shadow: 0 16px 48px rgba(0, 0, 0, 0.5);
+        box-shadow: 0 20px 60px rgba(0, 0, 0, 0.6);
+        text-align: left;
     }
     .modal-content h2 {
-        margin: 0 0 14px;
-        font-size: 18px;
-        font-weight: 600;
+        margin: 0 0 12px;
+        font-size: 20px;
+        font-weight: 700;
+        color: var(--text-primary, #f0f0f8);
     }
     .modal-content p {
         margin: 0;
-        font-size: 14px;
-        line-height: 1.6;
-        color: var(--text-secondary, #a8a8c8);
+        font-size: 15px;
+        line-height: 1.65;
+        color: var(--text-secondary, #c1c1d6);
+    }
+    .modal-content p + p {
+        margin-top: 12px;
+    }
+    .modal-content p:first-of-type {
+        font-weight: 500;
+    }
+    .modal-content strong {
+        color: var(--text-primary, #f0f0f8);
+        font-weight: 700;
     }
 
     .modal-close {

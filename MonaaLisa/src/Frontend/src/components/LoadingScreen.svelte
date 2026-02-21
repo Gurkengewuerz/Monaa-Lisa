@@ -19,7 +19,7 @@
     display: flex;
     justify-content: center;
     align-items: center;
-    z-index: 10000;
+    z-index: 10001;
   }
 
   .loading-logo {

@@ -1,13 +1,22 @@
 <!--
   GraphLayout.svelte
-  Navigation state machine for the hierarchical graph views:
-    top → subcategory → papers → paper detail
+
+  This is the main "shell" component that renders everything.
+  It works like a state machine with 4 view levels:
+    1. top      - shows top-level subject clusters (Physics, CS, Math, ...)
+    2. sub      - shows subcategory clusters inside a top-level subject
+    3. papers   - shows individual paper nodes via Sigma.js (Graph.svelte)
+    4. detail   - shows a paper's citation/reference graph (PaperDetailGraph.svelte)
+
+  The `view` variable holds the current level plus whatever context that level needs.
+  Navigation always pushes forward (top → sub → papers → detail) or uses breadcrumbs to go back.
 -->
 <script lang="ts">
     import { onMount } from "svelte";
     import ClusterGraph from "./ClusterGraph.svelte";
     import Graph from "./Graph.svelte";
     import PaperDetailGraph from "./PaperDetailGraph.svelte";
+    import LoadingSpinner from "./LoadingSpinner.svelte";
     import Header from "./Header.svelte";
     import Sidebar from "./Sidebar.svelte";
     import PaperSidebar from "./PaperSidebar.svelte";
@@ -31,17 +40,118 @@
 
     const API_BASE_URL =
         publicEnv.PUBLIC_API_BASE_URL || "http://localhost:3000";
-    let paperLimit = 5000;
-    let nodeLimit = 5000;
+
+    // ─── paper / node limits────────────────────────
+    // Defaults kept at 1000 for faster initial load; 2500 added as a middle
+    // ground. Values >= 10000 and "All" show a confirmation modal because
+    // they can cause severe slowdowns or browser crashes.
+    let paperLimit = 1000;
+    let nodeLimit = 1000;
     const LIMIT_OPTIONS = [
         { value: 100, label: "100" },
         { value: 500, label: "500" },
         { value: 1000, label: "1000" },
+        { value: 2500, label: "2500" },
         { value: 5000, label: "5000" },
         { value: 10000, label: "10000" },
-        { value: 0, label: "Alle" },
+        { value: 0, label: "All" },
     ];
+    // Threshold above which the user must confirm before the value is applied.
+    const LARGE_LIMIT_THRESHOLD = 10000;
     const SIDEBAR_SAMPLE = 50; // papers shown in sidebar at cluster levels
+
+    // ─── large-load confirmation modal ─────────────
+    // Shows when the user picks 10000 or "All". Confirm is locked behind a
+    // 5-second countdown so the warning text is actually read.
+    let confirmModalOpen = false; // whether the modal is visible
+    let confirmCountdown = 5; // seconds remaining before Confirm unlocks
+    let confirmTimer: ReturnType<typeof setInterval> | null = null;
+    // The value the user attempted to select (held until confirmed/cancelled).
+    let pendingLimit: number | null = null;
+    // Which selector triggered the modal: 'paper' or 'node'.
+    let pendingLimitTarget: "paper" | "node" = "paper";
+    // Last confirmed safe values - restored on cancel.
+    let prevPaperLimit = paperLimit;
+    let prevNodeLimit = nodeLimit;
+
+    /** Open the modal for a dangerously large limit selection. */
+    function openLimitConfirm(target: "paper" | "node", attempted: number) {
+        pendingLimitTarget = target;
+        pendingLimit = attempted;
+        confirmCountdown = 5;
+        confirmModalOpen = true;
+        // Kick off the 1-second tick.
+        if (confirmTimer) clearInterval(confirmTimer);
+        confirmTimer = setInterval(() => {
+            confirmCountdown -= 1;
+            if (confirmCountdown <= 0) {
+                clearInterval(confirmTimer!);
+                confirmTimer = null;
+            }
+        }, 1000);
+    }
+
+    /** User confirmed - apply the pending value and close. */
+    function applyLimitConfirm() {
+        if (pendingLimit === null) return;
+        if (pendingLimitTarget === "paper") {
+            paperLimit = pendingLimit;
+            prevPaperLimit = pendingLimit;
+            if (view.level === "papers") loadPapers(view.categoryId);
+        } else {
+            nodeLimit = pendingLimit;
+            prevNodeLimit = pendingLimit;
+        }
+        closeLimitConfirm();
+    }
+
+    /** User cancelled - revert the select back to the previous safe value. */
+    function cancelLimitConfirm() {
+        // Revert binding so the <select> shows the old value again.
+        if (pendingLimitTarget === "paper") paperLimit = prevPaperLimit;
+        else nodeLimit = prevNodeLimit;
+        closeLimitConfirm();
+    }
+
+    function closeLimitConfirm() {
+        confirmModalOpen = false;
+        pendingLimit = null;
+        if (confirmTimer) {
+            clearInterval(confirmTimer);
+            confirmTimer = null;
+        }
+    }
+
+    /**
+     * Called by the Papers <select> on:change.
+     * Intercepts large values and shows the modal instead of applying them.
+     */
+    function handlePaperLimitChange(e: Event) {
+        const attempted = Number((e.target as HTMLSelectElement).value);
+        if (attempted === 10000 || attempted === 0) {
+            // Immediately revert binding so the select still shows the old value.
+            paperLimit = prevPaperLimit;
+            openLimitConfirm("paper", attempted);
+        } else {
+            // Safe value - apply and track.
+            prevPaperLimit = attempted;
+            if (view.level === "papers") loadPapers(view.categoryId);
+        }
+    }
+
+    /**
+     * Called by the Nodes <select> on:change.
+     * Same guard as handlePaperLimitChange but for the detail view node cap.
+     */
+    function handleNodeLimitChange(e: Event) {
+        const attempted = Number((e.target as HTMLSelectElement).value);
+        if (attempted === 10000 || attempted === 0) {
+            nodeLimit = prevNodeLimit;
+            openLimitConfirm("node", attempted);
+        } else {
+            prevNodeLimit = attempted;
+        }
+    }
     const MAX_HISTORY = 5;
     const HISTORY_KEY = "monaalisa_paper_sessions_v1";
 
@@ -60,11 +170,34 @@
     let loading = false;
     let error: string | null = null;
 
+    // ─── author highlight state ────────────────────────────────────
+    let authorHighlight: string = "";
+
+    /** Full paper objects from the sidebar's latest search.
+     *  Passed to Graph.svelte so it can highlight matching nodes and inject
+     *  any missing ones.  Cleared on every view-level navigation. */
+    let searchHighlightPapers: Paper[] = [];
+
+    function handleAuthorHighlightFromSidebar(e: CustomEvent<string>) {
+        authorHighlight = e.detail;
+    }
+
+    /** Receive search results from Sidebar and forward them to the Graph. */
+    function handleSearchHighlightFromSidebar(e: CustomEvent<Paper[]>) {
+        searchHighlightPapers = e.detail;
+    }
+
     // ─── dashboard ────────────────────────────────────────────────────
     let dashboardOpen = false;
     let dashboardRef: Dashboard;
     /** Incremented whenever favorites change forces re-evaluation of isFavorite */
     let favoritesVersion = 0;
+
+    // ─── group picker modal ───────────────────────────────────────────
+    let groupPickerOpen = false;
+    let groupPickerPaper: Paper | null = null;
+    let groupPickerSelectedIds: string[] = [];
+    let groupPickerNewGroupName = "";
 
     function openDashboard() {
         dashboardOpen = true;
@@ -74,8 +207,35 @@
     }
 
     function handleFavoritePaper(e: CustomEvent<Paper>) {
-        if (dashboardRef) dashboardRef.toggleFavorite(e.detail);
-        favoritesVersion += 1; // trigger reactive re-render
+        const paper = e.detail;
+        if (dashboardRef && dashboardRef.isFavorite(paper.entry_id)) {
+            dashboardRef.removeFavoriteById(paper.entry_id);
+            favoritesVersion += 1;
+        } else {
+            groupPickerPaper = paper;
+            groupPickerSelectedIds = [];
+            groupPickerNewGroupName = "";
+            groupPickerOpen = true;
+        }
+    }
+
+    function confirmGroupPicker() {
+        if (!groupPickerPaper || !dashboardRef) return;
+        dashboardRef.addFavoriteWithGroups(
+            groupPickerPaper,
+            groupPickerSelectedIds,
+            groupPickerNewGroupName.trim() || null,
+        );
+        favoritesVersion += 1;
+        groupPickerOpen = false;
+        groupPickerPaper = null;
+        groupPickerSelectedIds = [];
+        groupPickerNewGroupName = "";
+    }
+
+    function cancelGroupPicker() {
+        groupPickerOpen = false;
+        groupPickerPaper = null;
     }
 
     // colour of the current parent category (passed to subcategory + papers)
@@ -275,52 +435,75 @@
     function handleTopClusterClick(
         e: CustomEvent<{ id: string; name: string; color: string }>,
     ) {
-        currentCategoryColor = e.detail.color;
-        view = {
-            level: "sub",
-            parentName: e.detail.name,
-            parentId: e.detail.id,
-        };
-        papers = [];
-        error = null;
-        loadSamplePapers("sub", e.detail.id);
+        // User clicked a top-level blob - drill into its subcategories with a fade transition
+        drillDown(() => {
+            currentCategoryColor = e.detail.color;
+            authorHighlight = "";
+            view = {
+                level: "sub",
+                parentName: e.detail.name,
+                parentId: e.detail.id,
+            };
+            papers = [];
+            error = null;
+            loadSamplePapers("sub", e.detail.id);
+        });
     }
 
     function handleSubClusterClick(
         e: CustomEvent<{ id: string; name: string; color: string }>,
     ) {
         if (view.level !== "sub") return;
-        currentCategoryColor = e.detail.color;
-        view = {
-            level: "papers",
-            categoryId: e.detail.id,
-            categoryName: e.detail.name,
-            parentName: view.parentName,
-        };
-        loadPapers(e.detail.id);
+        // Capture the current parentName before the async transition
+        const parentName = view.parentName;
+        // User clicked a subcategory blob - load papers and switch to graph view with fade
+        drillDown(() => {
+            currentCategoryColor = e.detail.color;
+            authorHighlight = "";
+            searchHighlightPapers = []; // clear stale highlights on navigation
+            view = {
+                level: "papers",
+                categoryId: e.detail.id,
+                categoryName: e.detail.name,
+                parentName,
+            };
+            loadPapers(e.detail.id);
+        });
     }
 
+    // Called when the user clicks a node in the Sigma scatter graph.
+    // Records a session entry and transitions to the detail view with a fade.
     function handlePaperSelected(e: CustomEvent<Paper>) {
         if (view.level !== "papers") return;
         const paper = e.detail;
+        // Capture context now - view may mutate before the drillDown callback runs
+        const categoryId = view.categoryId;
+        const categoryName = view.categoryName;
+        const parentName = view.parentName;
         arxivCitationCount = undefined;
         arxivReferenceCount = undefined;
+        authorHighlight = "";
+        searchHighlightPapers = []; // clear on detail entry
         previousView = view;
         addSession(paper);
-        view = {
-            level: "detail",
-            paper,
-            categoryId: view.categoryId,
-            categoryName: view.categoryName,
-            parentName: view.parentName,
-        };
-        if (dashboardRef) dashboardRef.addToHistory(paper);
+        drillDown(() => {
+            view = {
+                level: "detail",
+                paper,
+                categoryId,
+                categoryName,
+                parentName,
+            };
+            if (dashboardRef) dashboardRef.addToHistory(paper);
+        });
     }
 
     function handleDetailBack() {
         if (view.level !== "detail") return;
         arxivCitationCount = undefined;
         arxivReferenceCount = undefined;
+        authorHighlight = ""; // clear highlights on view change
+        searchHighlightPapers = []; // clear search highlights on back
         // Return to wherever we came from (papers, sub, or top)
         view = previousView;
     }
@@ -483,11 +666,16 @@
     }
 
     // ─── data loading ─────────────────────────────────────────────────
+    // Fetches papers for a specific subcategory from the NestJS backend.
+    // Papers are stored in the `papers` array which Graph.svelte reads reactively.
     async function loadPapers(categoryId: string) {
         loading = true;
         error = null;
         papers = [];
+        // Clear stale search highlights whenever a new category is loaded.
+        searchHighlightPapers = [];
         try {
+            // Build URL: filter by category, apply optional cap, sort by citation count
             const url = `${API_BASE_URL}/papers?categories=${encodeURIComponent(categoryId)}${paperLimit > 0 ? `&take=${paperLimit}` : ""}&skip=0&sort=citations`;
             const response = await fetch(url);
             if (!response.ok) throw new Error(`Backend ${response.status}`);
@@ -637,10 +825,43 @@
     onMount(() => {
         // Don't load papers at top level by default
     });
+
+    // ─── drill-down transition ─────────────────────────────────────────────
+    // Whether the full-screen fade overlay is visible (true during transitions)
+    let drillTransitioning = false;
+    // true while the overlay is fading back OUT (fade-in of the new view)
+    let drillFadingIn = false;
+
+    /**
+     * Execute a view-change with a smooth fade-out / fade-in overlay.
+     * The callback fires after the fade-out completes so the new view is
+     * never seen mid-transition.
+     */
+    function drillDown(callback: () => void) {
+        drillTransitioning = true;
+        drillFadingIn = false;
+        // Wait for fade-out to finish, then do view change and fade back in
+        setTimeout(() => {
+            callback();
+            drillFadingIn = true;
+            setTimeout(() => {
+                drillTransitioning = false;
+                drillFadingIn = false;
+            }, 450);
+        }, 320);
+    }
 </script>
 
 <!-- main app container -->
 <div class="app-container">
+    <!-- Full-screen fade overlay for drill-down transitions -->
+    {#if drillTransitioning}
+        <div
+            class="drill-overlay"
+            class:drill-fade-out={!drillFadingIn}
+            class:drill-fade-in={drillFadingIn}
+        ></div>
+    {/if}
     <!-- Dashboard slide-in panel -->
     <Dashboard
         bind:this={dashboardRef}
@@ -694,7 +915,9 @@
     <nav class="breadcrumbs">
         <button
             class="db-toggle-btn"
+            class:db-btn-disabled={dashboardOpen}
             on:click={openDashboard}
+            disabled={dashboardOpen}
             title="Open Dashboard"
         >
             &#9776; Dashboard
@@ -718,25 +941,28 @@
         <div class="limit-select-wrapper">
             {#if view.level === "papers"}
                 <span class="limit-label">Papers:</span>
+                <!-- on:change intercepted - large values go through the modal -->
                 <select
                     class="limit-select"
                     bind:value={paperLimit}
-                    on:change={() => {
-                        if (view.level === "papers")
-                            loadPapers(view.categoryId);
-                    }}
+                    on:change={handlePaperLimitChange}
                 >
                     {#each LIMIT_OPTIONS as opt}
                         <option value={opt.value}
                             >{opt.label}{opt.value === 0
-                                ? " ⚠ Große Datenmenge"
+                                ? " (uncapped)"
                                 : ""}</option
                         >
                     {/each}
                 </select>
             {:else if view.level === "detail"}
                 <span class="limit-label">Nodes:</span>
-                <select class="limit-select" bind:value={nodeLimit}>
+                <!-- on:change intercepted - large values go through the modal -->
+                <select
+                    class="limit-select"
+                    bind:value={nodeLimit}
+                    on:change={handleNodeLimitChange}
+                >
                     {#each LIMIT_OPTIONS as opt}
                         <option value={opt.value}>{opt.label}</option>
                     {/each}
@@ -744,6 +970,50 @@
             {/if}
         </div>
     </nav>
+
+    <!-- Large-load confirmation modal
+         Triggered when the user selects 10 000 or "All" papers/nodes.
+         The Confirm button is intentionally locked for 5 seconds so the
+         warning text has time to be read before the destructive action fires. -->
+    {#if confirmModalOpen}
+        <div class="confirm-modal-backdrop" role="presentation">
+            <div
+                class="confirm-modal"
+                role="alertdialog"
+                aria-modal="true"
+                aria-labelledby="confirm-modal-title"
+            >
+                <h3 id="confirm-modal-title" class="confirm-modal-title">
+                    ⚠ Large Dataset Warning
+                </h3>
+                <p class="confirm-modal-body">
+                    Displaying more than 5 000 papers at once will significantly
+                    increase loading times and may impact performance or
+                    <strong>crash your browser</strong>. Are you sure you want
+                    to continue?
+                </p>
+                <div class="confirm-modal-buttons">
+                    <button
+                        class="confirm-btn confirm-btn-cancel"
+                        on:click={cancelLimitConfirm}
+                    >
+                        Cancel
+                    </button>
+                    <button
+                        class="confirm-btn confirm-btn-ok"
+                        disabled={confirmCountdown > 0}
+                        on:click={applyLimitConfirm}
+                    >
+                        {#if confirmCountdown > 0}
+                            Confirm ({confirmCountdown})
+                        {:else}
+                            Confirm
+                        {/if}
+                    </button>
+                </div>
+            </div>
+        </div>
+    {/if}
 
     <div class="main-content">
         <!-- ── graph panel (central area) ── -->
@@ -768,7 +1038,7 @@
             {:else if view.level === "papers"}
                 {#if loading}
                     <div class="status-card">
-                        <div class="status-spinner"></div>
+                        <LoadingSpinner size={60} />
                         <p>Fetching Papers for {view.categoryName}…</p>
                     </div>
                 {:else if error}
@@ -783,6 +1053,10 @@
                         {papers}
                         {selectedPaperId}
                         categoryColor={currentCategoryColor}
+                        {authorHighlight}
+                        {searchHighlightPapers}
+                        apiBaseUrl={API_BASE_URL}
+                        categoryId={view.categoryId}
                         on:paperSelected={handlePaperSelected}
                         on:nodeDeselected={handleNodeDeselected}
                     />
@@ -795,9 +1069,15 @@
                         paper={view.paper}
                         apiBaseUrl={API_BASE_URL}
                         {nodeLimit}
+                        {authorHighlight}
+                        isFavoriteCheck={(entryId) =>
+                            favoritesVersion >= 0 && dashboardRef
+                                ? dashboardRef.isFavorite(entryId)
+                                : false}
                         on:back={handleDetailBack}
                         on:neighbourhoodLoaded={handleNeighbourhoodLoaded}
                         on:navigate={handleGraphNavigate}
+                        on:favorite={handleFavoritePaper}
                     />
                 {/key}
             {/if}
@@ -811,12 +1091,14 @@
                     paper={view.paper}
                     apiBaseUrl={API_BASE_URL}
                     isOpen={sidebarOpen}
+                    {dashboardOpen}
                     isFavorite={favoritesVersion >= 0 && dashboardRef
                         ? dashboardRef.isFavorite(view.paper.entry_id)
                         : false}
                     on:toggle={handleToggleSidebar}
                     on:navigate={handlePaperSidebarNavigate}
                     on:favorite={handleFavoritePaper}
+                    on:authorHighlight={handleAuthorHighlightFromSidebar}
                 />
             {/key}
         {:else}
@@ -824,6 +1106,7 @@
             <Sidebar
                 papers={view.level === "papers" ? papers : sidebarSamplePapers}
                 isOpen={sidebarOpen}
+                {dashboardOpen}
                 {selectedPaperId}
                 categoryFilter={view.level === "papers" ||
                 view.level === "detail"
@@ -835,10 +1118,84 @@
                 apiBaseUrl={API_BASE_URL}
                 on:toggle={handleToggleSidebar}
                 on:selectPaper={handleSidebarSelect}
+                on:authorHighlight={handleAuthorHighlightFromSidebar}
+                on:searchHighlight={handleSearchHighlightFromSidebar}
             />
         {/if}
     </div>
 </div>
+
+{#if groupPickerOpen && groupPickerPaper}
+    <!-- svelte-ignore a11y-click-events-have-key-events -->
+    <div
+        class="picker-overlay"
+        on:click|self={cancelGroupPicker}
+        role="dialog"
+        aria-modal="true"
+    >
+        <div class="picker-modal">
+            <h3 class="picker-heading">Add to Favorites</h3>
+            <p class="picker-paper-title">
+                {truncate(groupPickerPaper.title, 90)}
+            </p>
+
+            {#if dashboardRef && dashboardRef.getGroups().length > 0}
+                <p class="picker-section-label">Add to group(s):</p>
+                <div class="picker-groups">
+                    {#each dashboardRef.getGroups() as group (group.id)}
+                        <label class="picker-group-item">
+                            <input
+                                type="checkbox"
+                                value={group.id}
+                                checked={groupPickerSelectedIds.includes(
+                                    group.id,
+                                )}
+                                on:change={(e) => {
+                                    if (
+                                        (e.target as HTMLInputElement).checked
+                                    ) {
+                                        groupPickerSelectedIds = [
+                                            ...groupPickerSelectedIds,
+                                            group.id,
+                                        ];
+                                    } else {
+                                        groupPickerSelectedIds =
+                                            groupPickerSelectedIds.filter(
+                                                (id) => id !== group.id,
+                                            );
+                                    }
+                                }}
+                            />
+                            {group.name}
+                        </label>
+                    {/each}
+                </div>
+            {/if}
+
+            <p class="picker-section-label">Or create a new group:</p>
+            <div class="picker-new-group">
+                <input
+                    type="text"
+                    class="picker-group-input"
+                    placeholder="New group name (optional)"
+                    bind:value={groupPickerNewGroupName}
+                    on:keydown={(e) => {
+                        if (e.key === "Enter") confirmGroupPicker();
+                    }}
+                />
+            </div>
+
+            <div class="picker-actions">
+                <button class="picker-cancel" on:click={cancelGroupPicker}
+                    >Cancel</button
+                >
+                <button class="picker-confirm" on:click={confirmGroupPicker}
+                    >★ Add to Favorites</button
+                >
+            </div>
+        </div>
+    </div>
+{/if}
 
 <style>
     .app-container {
@@ -849,6 +1206,37 @@
         background-color: var(--bg-primary, #0f1020);
         color: var(--text-primary, #f0f0f8);
         overflow: hidden;
+    }
+
+    /* ── Drill-down transition overlay ── */
+    .drill-overlay {
+        position: fixed;
+        inset: 0;
+        z-index: 9990;
+        background: var(--bg-primary, #0f1020);
+        pointer-events: none;
+    }
+    .drill-fade-out {
+        animation: drillFadeOut 320ms ease-in forwards;
+    }
+    .drill-fade-in {
+        animation: drillFadeIn 450ms ease-out forwards;
+    }
+    @keyframes drillFadeOut {
+        from {
+            opacity: 0;
+        }
+        to {
+            opacity: 1;
+        }
+    }
+    @keyframes drillFadeIn {
+        from {
+            opacity: 1;
+        }
+        to {
+            opacity: 0;
+        }
     }
 
     .breadcrumbs {
@@ -895,6 +1283,86 @@
         color: #f0f0f8;
     }
 
+    /* ── Large-load confirmation modal── */
+    .confirm-modal-backdrop {
+        position: fixed;
+        inset: 0;
+        z-index: 10100;
+        background: rgba(0, 0, 0, 0.55);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        backdrop-filter: blur(3px);
+    }
+    .confirm-modal {
+        width: 420px;
+        max-width: calc(100vw - 40px);
+        background: var(--bg-secondary, #0e1024);
+        border: 1px solid rgba(147, 51, 234, 0.28);
+        border-radius: 12px;
+        padding: 24px 24px 20px;
+        box-shadow:
+            0 16px 48px rgba(0, 0, 0, 0.6),
+            0 0 24px rgba(147, 51, 234, 0.1);
+        display: flex;
+        flex-direction: column;
+        gap: 14px;
+    }
+    .confirm-modal-title {
+        margin: 0;
+        font-size: 15px;
+        font-weight: 700;
+        color: #ffd166;
+    }
+    .confirm-modal-body {
+        margin: 0;
+        font-size: 13px;
+        line-height: 1.55;
+        color: var(--text-secondary, #a8a8c8);
+    }
+    .confirm-modal-body strong {
+        color: #ff6b6b;
+    }
+    .confirm-modal-buttons {
+        display: flex;
+        justify-content: flex-end;
+        gap: 10px;
+    }
+    .confirm-btn {
+        padding: 7px 16px;
+        border-radius: 8px;
+        border: none;
+        font-size: 12px;
+        font-weight: 600;
+        cursor: pointer;
+        transition: all 0.15s ease;
+    }
+    .confirm-btn-cancel {
+        background: rgba(255, 255, 255, 0.05);
+        color: var(--text-secondary, #a8a8c8);
+        border: 1px solid rgba(255, 255, 255, 0.1);
+    }
+    .confirm-btn-cancel:hover {
+        background: rgba(255, 255, 255, 0.1);
+        color: var(--text-primary, #f0f0f8);
+    }
+    .confirm-btn-ok {
+        background: linear-gradient(
+            135deg,
+            rgba(147, 51, 234, 0.9),
+            rgba(232, 57, 160, 0.8)
+        );
+        color: #fff;
+    }
+    .confirm-btn-ok:hover:not(:disabled) {
+        filter: brightness(1.15);
+    }
+    .confirm-btn-ok:disabled {
+        opacity: 0.55;
+        cursor: not-allowed;
+        filter: grayscale(0.2);
+    }
+
     .db-toggle-btn {
         background: none;
         border: 1px solid rgba(255, 255, 255, 0.1);
@@ -911,6 +1379,15 @@
         background: rgba(147, 51, 234, 0.15);
         color: var(--text-primary, #f0f0f8);
         border-color: rgba(147, 51, 234, 0.35);
+    }
+
+    /* Dashboard is open: blur and disable the toggle button so the user
+       cannot open a second dashboard while one is already active. */
+    .db-toggle-btn.db-btn-disabled {
+        filter: blur(1.5px);
+        opacity: 0.4;
+        pointer-events: none;
+        cursor: not-allowed;
     }
 
     .crumb-sep-line {
@@ -973,7 +1450,7 @@
 
     .status-card {
         margin: auto;
-        padding: 2rem 3rem;
+        padding: 3rem 2rem;
         border-radius: var(--radius-lg, 16px);
         border: 1px solid var(--border-subtle, rgba(147, 51, 234, 0.18));
         background: var(--glass-bg, rgba(20, 22, 50, 0.55));
@@ -983,24 +1460,9 @@
         display: flex;
         flex-direction: column;
         align-items: center;
-        gap: 1rem;
+        gap: 2rem;
         min-width: 320px;
         box-shadow: var(--shadow-glow-sm);
-    }
-
-    .status-spinner {
-        width: 28px;
-        height: 28px;
-        border: 3px solid rgba(147, 51, 234, 0.2);
-        border-top-color: var(--accent-cyan, #22d3ee);
-        border-radius: 50%;
-        animation: spin 0.8s linear infinite;
-    }
-
-    @keyframes spin {
-        to {
-            transform: rotate(360deg);
-        }
     }
 
     .status-card.error {
@@ -1028,5 +1490,145 @@
     .status-card button:hover {
         transform: translateY(-1px);
         box-shadow: 0 0 25px rgba(147, 51, 234, 0.5);
+    }
+
+    /* ── group picker modal ── */
+    .picker-overlay {
+        position: fixed;
+        inset: 0;
+        z-index: 500;
+        background: rgba(0, 0, 0, 0.55);
+        backdrop-filter: blur(3px);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+    }
+
+    .picker-modal {
+        background: var(--bg-secondary, #141530);
+        border: 1px solid var(--glass-border, rgba(255, 255, 255, 0.12));
+        border-radius: 14px;
+        padding: 22px 24px;
+        width: 360px;
+        max-width: 94vw;
+        box-shadow: 0 8px 40px rgba(0, 0, 0, 0.6);
+        display: flex;
+        flex-direction: column;
+        gap: 14px;
+    }
+
+    .picker-heading {
+        margin: 0;
+        font-size: 15px;
+        font-weight: 700;
+        color: var(--text-primary, #f0f0f8);
+    }
+
+    .picker-paper-title {
+        margin: 0;
+        font-size: 12px;
+        color: var(--text-secondary, #a8a8c8);
+        line-height: 1.5;
+    }
+
+    .picker-section-label {
+        margin: 0;
+        font-size: 11px;
+        font-weight: 600;
+        color: var(--text-muted, #6b6b8d);
+        text-transform: uppercase;
+        letter-spacing: 0.5px;
+    }
+
+    .picker-groups {
+        display: flex;
+        flex-direction: column;
+        gap: 6px;
+        max-height: 180px;
+        overflow-y: auto;
+        scrollbar-width: thin;
+    }
+
+    .picker-group-item {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        font-size: 12px;
+        color: var(--text-primary, #f0f0f8);
+        cursor: pointer;
+        padding: 4px 6px;
+        border-radius: 6px;
+        transition: background 0.12s;
+    }
+    .picker-group-item:hover {
+        background: rgba(255, 255, 255, 0.05);
+    }
+
+    .picker-new-group {
+    }
+
+    .picker-group-input {
+        width: 100%;
+        box-sizing: border-box;
+        background: rgba(255, 255, 255, 0.06);
+        border: 1px solid rgba(255, 255, 255, 0.14);
+        color: var(--text-primary, #f0f0f8);
+        font-size: 12px;
+        padding: 6px 10px;
+        border-radius: 8px;
+        outline: none;
+        transition: border-color 0.15s;
+    }
+    .picker-group-input:focus {
+        border-color: var(--accent-cyan, #22d3ee);
+    }
+
+    .picker-actions {
+        display: flex;
+        justify-content: flex-end;
+        gap: 8px;
+        margin-top: 4px;
+    }
+
+    .picker-cancel {
+        background: none;
+        border: 1px solid rgba(255, 255, 255, 0.15);
+        color: var(--text-muted, #6b6b8d);
+        font-size: 12px;
+        padding: 6px 14px;
+        border-radius: 8px;
+        cursor: pointer;
+        transition: all 0.15s;
+    }
+    .picker-cancel:hover {
+        background: rgba(255, 255, 255, 0.06);
+        color: var(--text-primary, #f0f0f8);
+    }
+
+    .picker-confirm {
+        /* Matches the active tab-btn colour scheme from PaperDetailGraph */
+        background: linear-gradient(
+            135deg,
+            rgba(147, 51, 234, 0.35),
+            rgba(232, 57, 160, 0.25)
+        );
+        border: 1px solid rgba(147, 51, 234, 0.35);
+        color: var(--text-primary, #f0f0f8);
+        font-size: 12px;
+        font-weight: 600;
+        padding: 6px 16px;
+        border-radius: 8px;
+        cursor: pointer;
+        transition: all 0.15s;
+        box-shadow: 0 0 12px rgba(147, 51, 234, 0.2);
+    }
+    .picker-confirm:hover {
+        background: linear-gradient(
+            135deg,
+            rgba(147, 51, 234, 0.55),
+            rgba(232, 57, 160, 0.45)
+        );
+        box-shadow: 0 0 20px rgba(147, 51, 234, 0.4);
+        transform: translateY(-1px);
     }
 </style>
