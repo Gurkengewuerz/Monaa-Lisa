@@ -49,22 +49,6 @@ class SemanticScholarAPI:
 
     """
     27-December-2025 - Lenio
-    Fetches a paper from Semantic Scholar by its arXiv ID.
-    Args:
-        arxiv_id (str): The arXiv ID of the paper to fetch.
-    Returns:
-        Paper: The fetched paper object.
-    Note: This is a test method previously used in the playground.
-    """
-    def fetch_arxiv_paper(self, arxiv_id: str) -> Paper:
-        async def fetch_arxiv_paper_async(aid: str):
-            return await self.client.get_paper(f"ARXIV:{aid}")
-
-        return asyncio.run(fetch_arxiv_paper_async(arxiv_id))
-
-
-    """
-    27-December-2025 - Lenio
     Fetches citations for a given paper from Semantic Scholar.
     Args:
         p_paper (Paper): The paper object for which to fetch citations.
