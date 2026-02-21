@@ -1,6 +1,5 @@
 <!--
   LoadingSpinner.svelte
-  Written by Nick
   A simple rotating CSS ring spinner.
   Use <LoadingSpinner size={40}/> anywhere a loading indicator is needed.
 -->

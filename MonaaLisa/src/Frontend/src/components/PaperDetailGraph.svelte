@@ -1,6 +1,5 @@
 <!--
   PaperDetailGraph.svelte
-  Written by Nick
 
   Shows two views for a single selected paper:
     1. Citation Graph (default) - a Sigma.js network where nodes are papers

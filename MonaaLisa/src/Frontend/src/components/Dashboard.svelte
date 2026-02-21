@@ -1,6 +1,5 @@
 <!--
   Dashboard.svelte
-  Written by Nick
 
   Slide-in panel on the left side of the screen.
   Two tabs:

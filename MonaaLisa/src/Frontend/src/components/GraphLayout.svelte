@@ -1,6 +1,5 @@
 <!--
   GraphLayout.svelte
-  Written by Nick
 
   This is the main "shell" component that renders everything.
   It works like a state machine with 4 view levels:
@@ -42,7 +41,7 @@
     const API_BASE_URL =
         publicEnv.PUBLIC_API_BASE_URL || "http://localhost:3000";
 
-    // ─── paper / node limits - Written by Nick ────────────────────────
+    // ─── paper / node limits────────────────────────
     // Defaults kept at 1000 for faster initial load; 2500 added as a middle
     // ground. Values >= 10000 and "All" show a confirmation modal because
     // they can cause severe slowdowns or browser crashes.
@@ -61,7 +60,7 @@
     const LARGE_LIMIT_THRESHOLD = 10000;
     const SIDEBAR_SAMPLE = 50; // papers shown in sidebar at cluster levels
 
-    // ─── large-load confirmation modal - Written by Nick ─────────────
+    // ─── large-load confirmation modal ─────────────
     // Shows when the user picks 10000 or "All". Confirm is locked behind a
     // 5-second countdown so the warning text is actually read.
     let confirmModalOpen = false; // whether the modal is visible
@@ -972,7 +971,7 @@
         </div>
     </nav>
 
-    <!-- Large-load confirmation modal - Written by Nick
+    <!-- Large-load confirmation modal
          Triggered when the user selects 10 000 or "All" papers/nodes.
          The Confirm button is intentionally locked for 5 seconds so the
          warning text has time to be read before the destructive action fires. -->
@@ -1284,7 +1283,7 @@
         color: #f0f0f8;
     }
 
-    /* ── Large-load confirmation modal - Written by Nick ── */
+    /* ── Large-load confirmation modal── */
     .confirm-modal-backdrop {
         position: fixed;
         inset: 0;

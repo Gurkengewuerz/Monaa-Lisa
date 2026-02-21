@@ -1,6 +1,5 @@
 <!--
   Sidebar.svelte
-  Written by Nick
 
   Slide-in paper list that appears on the right side of the screen.
   Used in both the papers view (Graph.svelte) and the detail view (PaperDetailGraph.svelte).

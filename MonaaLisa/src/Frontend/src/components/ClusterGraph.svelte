@@ -1,6 +1,5 @@
 <!--
   ClusterGraph.svelte
-  Written by Nick
 
   Draws the top-level and sub-level category "blob" clusters on an HTML canvas.
   Uses a particle system to fill cluster territories with glowing dots.
