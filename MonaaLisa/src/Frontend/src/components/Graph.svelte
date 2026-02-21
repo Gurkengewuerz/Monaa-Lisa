@@ -101,11 +101,13 @@
                     const sizeJ = g.getNodeAttribute(nodes[j], "size") || 2;
                     const deltaX = xj - xi;
                     const deltaY = yj - yi;
-                    const dist = Math.sqrt(deltaX * deltaX + deltaY * deltaY) || 0.01;
+                    const dist =
+                        Math.sqrt(deltaX * deltaX + deltaY * deltaY) || 0.01;
                     // Dynamic min distance
                     const minimumDistance = MIN_DIST + (sizeI + sizeJ) * 0.15;
                     if (dist < minimumDistance) {
-                        const push = ((minimumDistance - dist) / 2) * REPEL_STRENGTH;
+                        const push =
+                            ((minimumDistance - dist) / 2) * REPEL_STRENGTH;
                         const ux = (deltaX / dist) * push;
                         const uy = (deltaY / dist) * push;
                         g.setNodeAttribute(nodes[i], "x", xi - ux);
@@ -124,8 +126,16 @@
                 const deltaY = y - centroidY;
                 const d = Math.sqrt(deltaX * deltaX + deltaY * deltaY);
                 if (d > MAX_DIST) {
-                    g.setNodeAttribute(n, "x", centroidX + (deltaX / d) * MAX_DIST);
-                    g.setNodeAttribute(n, "y", centroidY + (deltaY / d) * MAX_DIST);
+                    g.setNodeAttribute(
+                        n,
+                        "x",
+                        centroidX + (deltaX / d) * MAX_DIST,
+                    );
+                    g.setNodeAttribute(
+                        n,
+                        "y",
+                        centroidY + (deltaY / d) * MAX_DIST,
+                    );
                 }
             });
         }
@@ -149,7 +159,7 @@
         // Remove author-added nodes
         for (const nid of authorAddedNodes) {
             if (graph.hasNode(nid)) {
-                graph.edges(nid).forEach(e => graph!.dropEdge(e));
+                graph.edges(nid).forEach((e) => graph!.dropEdge(e));
                 graph.dropNode(nid);
             }
         }
@@ -157,14 +167,18 @@
         // Remove search-added nodes
         for (const nid of searchAddedNodes) {
             if (graph.hasNode(nid)) {
-                graph.edges(nid).forEach(e => graph!.dropEdge(e));
+                graph.edges(nid).forEach((e) => graph!.dropEdge(e));
                 graph.dropNode(nid);
             }
         }
         searchAddedNodes = new Set();
         // Restore original colours
         graph.forEachNode((n) => {
-            graph!.setNodeAttribute(n, "color", graph!.getNodeAttribute(n, "originalColor"));
+            graph!.setNodeAttribute(
+                n,
+                "color",
+                graph!.getNodeAttribute(n, "originalColor"),
+            );
         });
         renderer.refresh();
     }
@@ -182,7 +196,7 @@
         // Remove previously injected search nodes before re-applying.
         for (const nid of searchAddedNodes) {
             if (graph.hasNode(nid)) {
-                graph.edges(nid).forEach(e => graph!.dropEdge(e));
+                graph.edges(nid).forEach((e) => graph!.dropEdge(e));
                 graph.dropNode(nid);
             }
         }
@@ -190,13 +204,13 @@
         // Also remove author-added nodes since search takes priority.
         for (const nid of authorAddedNodes) {
             if (graph.hasNode(nid)) {
-                graph.edges(nid).forEach(e => graph!.dropEdge(e));
+                graph.edges(nid).forEach((e) => graph!.dropEdge(e));
                 graph.dropNode(nid);
             }
         }
         authorAddedNodes = new Set();
 
-        const entryIds = new Set(papers.map(p => p.entry_id));
+        const entryIds = new Set(papers.map((p) => p.entry_id));
         const rgb = hexToRgb(categoryColor);
         // Full-opacity category colour for highlighted (found) nodes.
         const highlightColor = `rgba(${rgb[0]},${rgb[1]},${rgb[2]},1.0)`;
@@ -222,7 +236,8 @@
 
             // Prefer UMAP position; fall back to outward spiral around the graph.
             const hasUmap = p.tsne1 !== 0 || p.tsne2 !== 0;
-            const spiralAngle = (papers.length + i) * Math.PI * (3 - Math.sqrt(5));
+            const spiralAngle =
+                (papers.length + i) * Math.PI * (3 - Math.sqrt(5));
             const x = hasUmap
                 ? p.tsne1
                 : 6 * Math.sqrt(papers.length + i + 1) * Math.cos(spiralAngle);
@@ -231,7 +246,8 @@
                 : 6 * Math.sqrt(papers.length + i + 1) * Math.sin(spiralAngle);
 
             graph.addNode(p.entry_id, {
-                x, y,
+                x,
+                y,
                 size,
                 label: p.title,
                 color: highlightColor,
@@ -254,7 +270,7 @@
         // Remove any nodes we previously added for author-highlight purposes
         for (const nid of authorAddedNodes) {
             if (graph.hasNode(nid)) {
-                graph.edges(nid).forEach(e => graph!.dropEdge(e));
+                graph.edges(nid).forEach((e) => graph!.dropEdge(e));
                 graph.dropNode(nid);
             }
         }
@@ -263,7 +279,11 @@
         if (!author) {
             // Empty author string = clear all highlights, restore original colors
             graph.forEachNode((n) => {
-                graph!.setNodeAttribute(n, "color", graph!.getNodeAttribute(n, "originalColor"));
+                graph!.setNodeAttribute(
+                    n,
+                    "color",
+                    graph!.getNodeAttribute(n, "originalColor"),
+                );
             });
             renderer.refresh();
             return;
@@ -280,7 +300,11 @@
             if (p && p.authors.toLowerCase().includes(q)) {
                 // Category colour (full opacity) for matching nodes
                 graph!.setNodeAttribute(n, "color", matchColor);
-                graph!.setNodeAttribute(n, "size", Math.max(graph!.getNodeAttribute(n, "size"), 4));
+                graph!.setNodeAttribute(
+                    n,
+                    "size",
+                    Math.max(graph!.getNodeAttribute(n, "size"), 4),
+                );
             } else {
                 // Dim non-matching nodes
                 graph!.setNodeAttribute(n, "color", "rgba(255,255,255,0.08)");
@@ -293,33 +317,57 @@
                 const params = new URLSearchParams();
                 params.set("search", author);
                 params.set("categories", categoryId);
-                params.set("take", "50");  // fetch up to 50 matching papers
+                params.set("take", "50"); // fetch up to 50 matching papers
                 params.set("skip", "0");
                 // call api endpoint (The service is PAPERS.SERVICE.TS in the backend)
-                const res = await fetch(`${apiBaseUrl}/papers?${params.toString()}`);
+                const res = await fetch(
+                    `${apiBaseUrl}/papers?${params.toString()}`,
+                );
                 if (res.ok) {
                     const payload = await res.json();
-                    const items: any[] = Array.isArray(payload) ? payload : (payload?.items ?? []);
+                    const items: any[] = Array.isArray(payload)
+                        ? payload
+                        : (payload?.items ?? []);
                     // Only keep papers whose author field actually matches the search term
                     const matching = items.filter((raw: any) => {
-                        const authors = Array.isArray(raw.authors) ? raw.authors.join(", ") : (raw.authors ?? "");
+                        const authors = Array.isArray(raw.authors)
+                            ? raw.authors.join(", ")
+                            : (raw.authors ?? "");
                         return authors.toLowerCase().includes(q);
                     });
                     matching.forEach((raw: any, i: number) => {
                         if (graph!.hasNode(raw.entry_id)) {
-                            // Already in the graph — make sure it's highlighted
-                            graph!.setNodeAttribute(raw.entry_id, "color", matchColor);
+                            // Already in the graph - make sure it's highlighted
+                            graph!.setNodeAttribute(
+                                raw.entry_id,
+                                "color",
+                                matchColor,
+                            );
                             graph!.setNodeAttribute(raw.entry_id, "size", 8);
                         } else {
-                            // Not in the graph yet — add it at a computed position
-                            const hasUmap = (raw.tsne1 || raw.tsne?.x);
+                            // Not in the graph yet - add it at a computed position
+                            const hasUmap = raw.tsne1 || raw.tsne?.x;
                             const x = hasUmap
                                 ? (raw.tsne?.x ?? raw.tsne1 ?? 0)
-                                : 6 * Math.sqrt(papers.length + i + 1) * Math.cos((papers.length + i) * Math.PI * (3 - Math.sqrt(5)));
+                                : 6 *
+                                  Math.sqrt(papers.length + i + 1) *
+                                  Math.cos(
+                                      (papers.length + i) *
+                                          Math.PI *
+                                          (3 - Math.sqrt(5)),
+                                  );
                             const y = hasUmap
                                 ? (raw.tsne?.y ?? raw.tsne2 ?? 0)
-                                : 6 * Math.sqrt(papers.length + i + 1) * Math.sin((papers.length + i) * Math.PI * (3 - Math.sqrt(5)));
-                            const authors = Array.isArray(raw.authors) ? raw.authors.join(", ") : (raw.authors ?? "");
+                                : 6 *
+                                  Math.sqrt(papers.length + i + 1) *
+                                  Math.sin(
+                                      (papers.length + i) *
+                                          Math.PI *
+                                          (3 - Math.sqrt(5)),
+                                  );
+                            const authors = Array.isArray(raw.authors)
+                                ? raw.authors.join(", ")
+                                : (raw.authors ?? "");
                             const newPaper: Paper = {
                                 id: Number(raw.id ?? 0),
                                 entry_id: raw.entry_id,
@@ -329,18 +377,30 @@
                                 published: raw.published ?? null,
                                 categories: raw.categories ?? null,
                                 url: raw.url ?? null,
-                                citations: Array.isArray(raw.citations) ? raw.citations : [],
+                                citations: Array.isArray(raw.citations)
+                                    ? raw.citations
+                                    : [],
                                 references: [],
-                                non_arxiv_citation_count: Number(raw.non_arxiv_citation_count ?? 0),
-                                non_arxiv_reference_count: Number(raw.non_arxiv_reference_count ?? 0),
+                                non_arxiv_citation_count: Number(
+                                    raw.non_arxiv_citation_count ?? 0,
+                                ),
+                                non_arxiv_reference_count: Number(
+                                    raw.non_arxiv_reference_count ?? 0,
+                                ),
                                 tsne1: x,
                                 tsne2: y,
                                 cluster: raw.categories ?? "U",
                             };
                             graph!.addNode(raw.entry_id, {
-                                x, y,
+                                x,
+                                y,
                                 // Size proportional to citations, same formula as regular nodes.
-                                size: 2 + (maxCit > 0 ? totalCitations(newPaper) / maxCit * 8 : 2),
+                                size:
+                                    2 +
+                                    (maxCit > 0
+                                        ? (totalCitations(newPaper) / maxCit) *
+                                          8
+                                        : 2),
                                 label: raw.title ?? raw.entry_id,
                                 color: matchColor,
                                 originalColor: matchColor,
@@ -351,7 +411,9 @@
                         }
                     });
                 }
-            } catch { /* ignore network errors silently */ }
+            } catch {
+                /* ignore network errors silently */
+            }
         }
 
         renderer.refresh();

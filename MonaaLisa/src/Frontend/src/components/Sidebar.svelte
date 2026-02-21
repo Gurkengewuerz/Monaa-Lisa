@@ -47,7 +47,7 @@
   let searchError: string | null = null;
   let searchTotal = 0;
 
-  // Advanced filter form type — each field maps to a backend query param
+  // Advanced filter form type - each field maps to a backend query param
   const TODAY = new Date().toISOString().slice(0, 10);
   interface AdvFilter {
     titleQuery: string;    // search by paper title
@@ -190,7 +190,7 @@
 
   // Called when the user clicks the "Search" button in the advanced panel.
   // Builds filter badges for display, runs the search, then tells the graph
-  // to highlight author-matching nodes (only when an author query is set —
+  // to highlight author-matching nodes (only when an author query is set -
   // the general searchHighlight event covers all other parameter combinations).
   function applyAdvancedSearch() {
     if (!validateAdv()) return;

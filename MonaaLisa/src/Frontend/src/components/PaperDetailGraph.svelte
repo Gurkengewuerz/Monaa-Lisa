@@ -3,10 +3,10 @@
   Written by Nick
 
   Shows two views for a single selected paper:
-    1. Citation Graph (default) — a Sigma.js network where nodes are papers
+    1. Citation Graph (default) - a Sigma.js network where nodes are papers
        and edges are citations/references. Uses UMAP coordinates so similar
        papers cluster together visually.
-    2. Relation View — draggable, resizable cards showing the top-20 most
+    2. Relation View - draggable, resizable cards showing the top-20 most
        semantically related papers. Cards are connected by lines drawn in SVG.
 
   Props:
@@ -251,13 +251,20 @@
     // ─── edge colour helper: fade opacity near the selected (center) node ────
     // Edges whose far endpoint lies close to the origin get reduced opacity so
     // the dense cluster right around the selected paper stays readable.
-    function edgeColor(r: number, g: number, b: number, baseAlpha: number, nodeX: number, nodeY: number): string {
+    function edgeColor(
+        r: number,
+        g: number,
+        b: number,
+        baseAlpha: number,
+        nodeX: number,
+        nodeY: number,
+    ): string {
         const dist = Math.sqrt(nodeX * nodeX + nodeY * nodeY);
         // Full opacity is reached at FADE_DIST units away from center
         const FADE_DIST = 20;
         const t = Math.min(dist / FADE_DIST, 1);
         // Minimum alpha is 35% of base so edges never fully disappear
-        const alpha = (baseAlpha * 0.35) + (baseAlpha * 0.65) * t;
+        const alpha = baseAlpha * 0.35 + baseAlpha * 0.65 * t;
         return `rgba(${r},${g},${b},${alpha.toFixed(3)})`;
     }
 
@@ -360,7 +367,7 @@
                 }
                 // Edge colour fades near the center so clustered edges stay readable
                 g.addEdge(id, paper.entry_id, {
-                    color: edgeColor(78, 205, 196, 0.30, x, y),
+                    color: edgeColor(78, 205, 196, 0.3, x, y),
                     size: 0.5,
                     type: "arrow",
                 });
@@ -442,27 +449,40 @@
         const NEAR_MAX_FACTOR = 1.4; // trigger when within 40% of min ratio
         // Track the last applied edge-opacity factor to avoid redundant graph writes.
         let lastEdgeFactor = -1;
-        renderer.getCamera().on('updated', (state: any) => {
+        renderer.getCamera().on("updated", (state: any) => {
             if (!renderer) return;
 
             // ─ label reveal at max zoom ─
             const atMaxZoom = state.ratio <= MIN_RATIO * NEAR_MAX_FACTOR;
-            renderer.setSetting('labelRenderedSizeThreshold', atMaxZoom ? 0 : 18);
+            renderer.setSetting(
+                "labelRenderedSizeThreshold",
+                atMaxZoom ? 0 : 18,
+            );
 
             // ─ edge opacity fade as user zooms in ──────────────────────────
             // Normalise: t=0 when fully zoomed in, t=1 at normal view distance.
-            const t = Math.max(0, Math.min(1, (state.ratio - MIN_RATIO) / (1.0 - MIN_RATIO)));
+            const t = Math.max(
+                0,
+                Math.min(1, (state.ratio - MIN_RATIO) / (1.0 - MIN_RATIO)),
+            );
             // Minimum opacity is 30% so edges never become completely invisible.
-            const factor = 0.30 + 0.70 * t;
+            const factor = 0.3 + 0.7 * t;
             // Only rewrite edge attributes when the shift is visually noticeable
             // (> 2%) to avoid unnecessary per-frame graph writes.
             if (Math.abs(factor - lastEdgeFactor) > 0.02) {
                 lastEdgeFactor = factor;
                 if (!graph) return;
                 graph.forEachEdge((edge) => {
-                    const base = graph!.getEdgeAttribute(edge, 'baseColor') as string;
+                    const base = graph!.getEdgeAttribute(
+                        edge,
+                        "baseColor",
+                    ) as string;
                     if (base) {
-                        graph!.setEdgeAttribute(edge, 'color', applyAlphaFactor(base, factor));
+                        graph!.setEdgeAttribute(
+                            edge,
+                            "color",
+                            applyAlphaFactor(base, factor),
+                        );
                     }
                 });
                 renderer.refresh();
@@ -478,7 +498,11 @@
     function storeBaseEdgeColors() {
         if (!graph) return;
         graph.forEachEdge((e) => {
-            graph!.setEdgeAttribute(e, 'baseColor', graph!.getEdgeAttribute(e, 'color'));
+            graph!.setEdgeAttribute(
+                e,
+                "baseColor",
+                graph!.getEdgeAttribute(e, "color"),
+            );
         });
     }
 
@@ -488,10 +512,12 @@
      * original string is returned unchanged.
      */
     function applyAlphaFactor(rgba: string, factor: number): string {
-        const m = rgba.match(/rgba?\((\d+),\s*(\d+),\s*(\d+)(?:,\s*([\d.]+))?\)/);
+        const m = rgba.match(
+            /rgba?\((\d+),\s*(\d+),\s*(\d+)(?:,\s*([\d.]+))?\)/,
+        );
         if (!m) return rgba;
         const [, r, g, b] = m;
-        const a = parseFloat(m[4] ?? '1');
+        const a = parseFloat(m[4] ?? "1");
         return `rgba(${r},${g},${b},${(a * factor).toFixed(3)})`;
     }
 
@@ -612,18 +638,26 @@
     $: handleDetailAuthorHighlight(authorHighlight);
 
     function handleDetailAuthorHighlight(author: string) {
-        if (!graph || !renderer || !fetchedData || viewMode !== 'graph') return;
+        if (!graph || !renderer || !fetchedData || viewMode !== "graph") return;
         if (!author) {
             // Reset colors
             graph.forEachNode((n) => {
                 if (n === paper.entry_id) {
-                    graph!.setNodeAttribute(n, 'color', COLOR_CENTER);
-                } else if (n === '__non_arxiv_aggregate') {
-                    graph!.setNodeAttribute(n, 'color', COLOR_DUMMY);
+                    graph!.setNodeAttribute(n, "color", COLOR_CENTER);
+                } else if (n === "__non_arxiv_aggregate") {
+                    graph!.setNodeAttribute(n, "color", COLOR_DUMMY);
                 } else {
                     const real = fetchedData!.realPapers[n];
                     const isCitation = fetchedData!.citedIds.includes(n);
-                    graph!.setNodeAttribute(n, 'color', real ? (isCitation ? COLOR_CITATION : COLOR_REFERENCE) : COLOR_DUMMY);
+                    graph!.setNodeAttribute(
+                        n,
+                        "color",
+                        real
+                            ? isCitation
+                                ? COLOR_CITATION
+                                : COLOR_REFERENCE
+                            : COLOR_DUMMY,
+                    );
                 }
             });
             renderer.refresh();
@@ -633,20 +667,26 @@
         graph.forEachNode((n) => {
             if (n === paper.entry_id) {
                 if (paper.authors.toLowerCase().includes(q)) {
-                    graph!.setNodeAttribute(n, 'color', '#ffd166');
-                    graph!.setNodeAttribute(n, 'size', 16);
+                    graph!.setNodeAttribute(n, "color", "#ffd166");
+                    graph!.setNodeAttribute(n, "size", 16);
                 }
                 return;
             }
-            if (n === '__non_arxiv_aggregate') return;
+            if (n === "__non_arxiv_aggregate") return;
             const real = fetchedData!.realPapers[n];
             if (real) {
-                const authors = Array.isArray(real.authors) ? real.authors.join(', ') : (real.authors ?? '');
+                const authors = Array.isArray(real.authors)
+                    ? real.authors.join(", ")
+                    : (real.authors ?? "");
                 if (authors.toLowerCase().includes(q)) {
-                    graph!.setNodeAttribute(n, 'color', '#ffd166');
-                    graph!.setNodeAttribute(n, 'size', 8);
+                    graph!.setNodeAttribute(n, "color", "#ffd166");
+                    graph!.setNodeAttribute(n, "size", 8);
                 } else {
-                    graph!.setNodeAttribute(n, 'color', 'rgba(255,255,255,0.08)');
+                    graph!.setNodeAttribute(
+                        n,
+                        "color",
+                        "rgba(255,255,255,0.08)",
+                    );
                 }
             }
         });
@@ -967,35 +1007,45 @@
             id: rp.id ?? 0,
             entry_id: rp.entry_id,
             title: rp.title ?? rp.entry_id,
-            authors: Array.isArray(rp.authors) ? rp.authors.join(', ') : (rp.authors ?? ''),
-            abstract: rp.abstract ?? '',
+            authors: Array.isArray(rp.authors)
+                ? rp.authors.join(", ")
+                : (rp.authors ?? ""),
+            abstract: rp.abstract ?? "",
             published: rp.published ?? null,
             categories: rp.categories ?? null,
             url: rp.url ?? null,
             citations: Array.isArray(rp.citations)
-                ? rp.citations.map((c: any) => typeof c === 'string' ? c : (c.cited_paper_entry_id ?? c.entry_id ?? ''))
+                ? rp.citations.map((c: any) =>
+                      typeof c === "string"
+                          ? c
+                          : (c.cited_paper_entry_id ?? c.entry_id ?? ""),
+                  )
                 : [],
             references: Array.isArray(rp.references)
-                ? rp.references.map((r: any) => typeof r === 'string' ? r : (r.referenced_paper_entry_id ?? r.entry_id ?? ''))
+                ? rp.references.map((r: any) =>
+                      typeof r === "string"
+                          ? r
+                          : (r.referenced_paper_entry_id ?? r.entry_id ?? ""),
+                  )
                 : [],
             non_arxiv_citation_count: rp.non_arxiv_citation_count ?? 0,
             non_arxiv_reference_count: rp.non_arxiv_reference_count ?? 0,
             tsne1: tx,
             tsne2: ty,
-            cluster: rp.cluster ?? '',
+            cluster: rp.cluster ?? "",
         };
     }
 
     function navigateToRelated(rp: any) {
-        dispatch('navigate', buildPaperFromRelated(rp));
+        dispatch("navigate", buildPaperFromRelated(rp));
     }
 
     function favoriteRelated(rp: any) {
-        dispatch('favorite', buildPaperFromRelated(rp));
+        dispatch("favorite", buildPaperFromRelated(rp));
     }
 
     function favoritePaper() {
-        dispatch('favorite', paper);
+        dispatch("favorite", paper);
     }
 
     // ─── view mode switching ──────────────────────────────────────────
@@ -1029,8 +1079,10 @@
                 // composite the loading spinner before we block the main
                 // thread with buildGraph + new Sigma(). Without this the
                 // spinner renders as a static image on first display.
-                await new Promise<void>(resolve =>
-                    requestAnimationFrame(() => requestAnimationFrame(() => resolve()))
+                await new Promise<void>((resolve) =>
+                    requestAnimationFrame(() =>
+                        requestAnimationFrame(() => resolve()),
+                    ),
                 );
                 if (!container) return;
                 graph = buildGraph(data);
@@ -1281,7 +1333,7 @@
                             <span class="rel-card-year"
                                 >{paper.published
                                     ? new Date(paper.published).getFullYear()
-                                    : "—"}</span
+                                    : "-"}</span
                             >
                             <span class="rel-card-category"
                                 >{categoryFullName(paper.categories)}</span
@@ -1332,8 +1384,17 @@
                                     arXiv ↗
                                 </a>
                             {/if}
-                            <button class="rel-action-btn rel-fav-btn" class:favorited={isFavoriteCheck(paper.entry_id)} title="{isFavoriteCheck(paper.entry_id) ? 'Remove from favorites' : 'Add to favorites'}" on:click|stopPropagation={favoritePaper}>
-                                {isFavoriteCheck(paper.entry_id) ? '★' : '☆'}
+                            <button
+                                class="rel-action-btn rel-fav-btn"
+                                class:favorited={isFavoriteCheck(
+                                    paper.entry_id,
+                                )}
+                                title={isFavoriteCheck(paper.entry_id)
+                                    ? "Remove from favorites"
+                                    : "Add to favorites"}
+                                on:click|stopPropagation={favoritePaper}
+                            >
+                                {isFavoriteCheck(paper.entry_id) ? "★" : "☆"}
                             </button>
                         </div>
                         <!-- svelte-ignore a11y-no-static-element-interactions -->
@@ -1372,7 +1433,7 @@
                                 <span class="rel-card-year"
                                     >{rp.published
                                         ? new Date(rp.published).getFullYear()
-                                        : "—"}</span
+                                        : "-"}</span
                                 >
                                 <span class="rel-card-category"
                                     >{categoryFullName(rp.categories)}</span
@@ -1424,11 +1485,26 @@
                                         arXiv ↗
                                     </a>
                                 {/if}
-                                <button class="rel-action-btn rel-nav-btn" title="Navigate to this paper" on:click|stopPropagation={() => navigateToRelated(rp)}>
+                                <button
+                                    class="rel-action-btn rel-nav-btn"
+                                    title="Navigate to this paper"
+                                    on:click|stopPropagation={() =>
+                                        navigateToRelated(rp)}
+                                >
                                     ➜
                                 </button>
-                                <button class="rel-action-btn rel-fav-btn" class:favorited={isFavoriteCheck(rp.entry_id)} title="{isFavoriteCheck(rp.entry_id) ? 'Remove from favorites' : 'Add to favorites'}" on:click|stopPropagation={() => favoriteRelated(rp)}>
-                                    {isFavoriteCheck(rp.entry_id) ? '★' : '☆'}
+                                <button
+                                    class="rel-action-btn rel-fav-btn"
+                                    class:favorited={isFavoriteCheck(
+                                        rp.entry_id,
+                                    )}
+                                    title={isFavoriteCheck(rp.entry_id)
+                                        ? "Remove from favorites"
+                                        : "Add to favorites"}
+                                    on:click|stopPropagation={() =>
+                                        favoriteRelated(rp)}
+                                >
+                                    {isFavoriteCheck(rp.entry_id) ? "★" : "☆"}
                                 </button>
                             </div>
                             <!-- svelte-ignore a11y-no-static-element-interactions -->
@@ -1879,7 +1955,10 @@
         font-size: 12px;
         padding: 1px 5px;
         cursor: pointer;
-        transition: background 0.15s, color 0.15s, border-color 0.15s;
+        transition:
+            background 0.15s,
+            color 0.15s,
+            border-color 0.15s;
         line-height: 1;
     }
     .rel-action-btn:hover {

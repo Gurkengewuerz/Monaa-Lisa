@@ -4,10 +4,10 @@
 
   This is the main "shell" component that renders everything.
   It works like a state machine with 4 view levels:
-    1. top      — shows top-level subject clusters (Physics, CS, Math, ...)
-    2. sub      — shows subcategory clusters inside a top-level subject
-    3. papers   — shows individual paper nodes via Sigma.js (Graph.svelte)
-    4. detail   — shows a paper's citation/reference graph (PaperDetailGraph.svelte)
+    1. top      - shows top-level subject clusters (Physics, CS, Math, ...)
+    2. sub      - shows subcategory clusters inside a top-level subject
+    3. papers   - shows individual paper nodes via Sigma.js (Graph.svelte)
+    4. detail   - shows a paper's citation/reference graph (PaperDetailGraph.svelte)
 
   The `view` variable holds the current level plus whatever context that level needs.
   Navigation always pushes forward (top → sub → papers → detail) or uses breadcrumbs to go back.
@@ -42,45 +42,45 @@
     const API_BASE_URL =
         publicEnv.PUBLIC_API_BASE_URL || "http://localhost:3000";
 
-    // ─── paper / node limits — Written by Nick ────────────────────────
+    // ─── paper / node limits - Written by Nick ────────────────────────
     // Defaults kept at 1000 for faster initial load; 2500 added as a middle
     // ground. Values >= 10000 and "All" show a confirmation modal because
     // they can cause severe slowdowns or browser crashes.
     let paperLimit = 1000;
     let nodeLimit = 1000;
     const LIMIT_OPTIONS = [
-        { value: 100,   label: "100" },
-        { value: 500,   label: "500" },
-        { value: 1000,  label: "1000" },
-        { value: 2500,  label: "2500" },
-        { value: 5000,  label: "5000" },
+        { value: 100, label: "100" },
+        { value: 500, label: "500" },
+        { value: 1000, label: "1000" },
+        { value: 2500, label: "2500" },
+        { value: 5000, label: "5000" },
         { value: 10000, label: "10000" },
-        { value: 0,     label: "All" },
+        { value: 0, label: "All" },
     ];
     // Threshold above which the user must confirm before the value is applied.
     const LARGE_LIMIT_THRESHOLD = 10000;
     const SIDEBAR_SAMPLE = 50; // papers shown in sidebar at cluster levels
 
-    // ─── large-load confirmation modal — Written by Nick ─────────────
+    // ─── large-load confirmation modal - Written by Nick ─────────────
     // Shows when the user picks 10000 or "All". Confirm is locked behind a
     // 5-second countdown so the warning text is actually read.
-    let confirmModalOpen  = false;   // whether the modal is visible
-    let confirmCountdown  = 5;       // seconds remaining before Confirm unlocks
+    let confirmModalOpen = false; // whether the modal is visible
+    let confirmCountdown = 5; // seconds remaining before Confirm unlocks
     let confirmTimer: ReturnType<typeof setInterval> | null = null;
     // The value the user attempted to select (held until confirmed/cancelled).
     let pendingLimit: number | null = null;
     // Which selector triggered the modal: 'paper' or 'node'.
-    let pendingLimitTarget: 'paper' | 'node' = 'paper';
-    // Last confirmed safe values — restored on cancel.
+    let pendingLimitTarget: "paper" | "node" = "paper";
+    // Last confirmed safe values - restored on cancel.
     let prevPaperLimit = paperLimit;
-    let prevNodeLimit  = nodeLimit;
+    let prevNodeLimit = nodeLimit;
 
     /** Open the modal for a dangerously large limit selection. */
-    function openLimitConfirm(target: 'paper' | 'node', attempted: number) {
+    function openLimitConfirm(target: "paper" | "node", attempted: number) {
         pendingLimitTarget = target;
-        pendingLimit       = attempted;
-        confirmCountdown   = 5;
-        confirmModalOpen   = true;
+        pendingLimit = attempted;
+        confirmCountdown = 5;
+        confirmModalOpen = true;
         // Kick off the 1-second tick.
         if (confirmTimer) clearInterval(confirmTimer);
         confirmTimer = setInterval(() => {
@@ -92,32 +92,35 @@
         }, 1000);
     }
 
-    /** User confirmed — apply the pending value and close. */
+    /** User confirmed - apply the pending value and close. */
     function applyLimitConfirm() {
         if (pendingLimit === null) return;
-        if (pendingLimitTarget === 'paper') {
-            paperLimit     = pendingLimit;
+        if (pendingLimitTarget === "paper") {
+            paperLimit = pendingLimit;
             prevPaperLimit = pendingLimit;
-            if (view.level === 'papers') loadPapers(view.categoryId);
+            if (view.level === "papers") loadPapers(view.categoryId);
         } else {
-            nodeLimit     = pendingLimit;
+            nodeLimit = pendingLimit;
             prevNodeLimit = pendingLimit;
         }
         closeLimitConfirm();
     }
 
-    /** User cancelled — revert the select back to the previous safe value. */
+    /** User cancelled - revert the select back to the previous safe value. */
     function cancelLimitConfirm() {
         // Revert binding so the <select> shows the old value again.
-        if (pendingLimitTarget === 'paper') paperLimit = prevPaperLimit;
+        if (pendingLimitTarget === "paper") paperLimit = prevPaperLimit;
         else nodeLimit = prevNodeLimit;
         closeLimitConfirm();
     }
 
     function closeLimitConfirm() {
         confirmModalOpen = false;
-        pendingLimit     = null;
-        if (confirmTimer) { clearInterval(confirmTimer); confirmTimer = null; }
+        pendingLimit = null;
+        if (confirmTimer) {
+            clearInterval(confirmTimer);
+            confirmTimer = null;
+        }
     }
 
     /**
@@ -129,11 +132,11 @@
         if (attempted === 10000 || attempted === 0) {
             // Immediately revert binding so the select still shows the old value.
             paperLimit = prevPaperLimit;
-            openLimitConfirm('paper', attempted);
+            openLimitConfirm("paper", attempted);
         } else {
-            // Safe value — apply and track.
+            // Safe value - apply and track.
             prevPaperLimit = attempted;
-            if (view.level === 'papers') loadPapers(view.categoryId);
+            if (view.level === "papers") loadPapers(view.categoryId);
         }
     }
 
@@ -145,7 +148,7 @@
         const attempted = Number((e.target as HTMLSelectElement).value);
         if (attempted === 10000 || attempted === 0) {
             nodeLimit = prevNodeLimit;
-            openLimitConfirm('node', attempted);
+            openLimitConfirm("node", attempted);
         } else {
             prevNodeLimit = attempted;
         }
@@ -195,7 +198,7 @@
     let groupPickerOpen = false;
     let groupPickerPaper: Paper | null = null;
     let groupPickerSelectedIds: string[] = [];
-    let groupPickerNewGroupName = '';
+    let groupPickerNewGroupName = "";
 
     function openDashboard() {
         dashboardOpen = true;
@@ -212,19 +215,23 @@
         } else {
             groupPickerPaper = paper;
             groupPickerSelectedIds = [];
-            groupPickerNewGroupName = '';
+            groupPickerNewGroupName = "";
             groupPickerOpen = true;
         }
     }
 
     function confirmGroupPicker() {
         if (!groupPickerPaper || !dashboardRef) return;
-        dashboardRef.addFavoriteWithGroups(groupPickerPaper, groupPickerSelectedIds, groupPickerNewGroupName.trim() || null);
+        dashboardRef.addFavoriteWithGroups(
+            groupPickerPaper,
+            groupPickerSelectedIds,
+            groupPickerNewGroupName.trim() || null,
+        );
         favoritesVersion += 1;
         groupPickerOpen = false;
         groupPickerPaper = null;
         groupPickerSelectedIds = [];
-        groupPickerNewGroupName = '';
+        groupPickerNewGroupName = "";
     }
 
     function cancelGroupPicker() {
@@ -429,10 +436,10 @@
     function handleTopClusterClick(
         e: CustomEvent<{ id: string; name: string; color: string }>,
     ) {
-        // User clicked a top-level blob — drill into its subcategories with a fade transition
+        // User clicked a top-level blob - drill into its subcategories with a fade transition
         drillDown(() => {
             currentCategoryColor = e.detail.color;
-            authorHighlight = '';
+            authorHighlight = "";
             view = {
                 level: "sub",
                 parentName: e.detail.name,
@@ -450,10 +457,10 @@
         if (view.level !== "sub") return;
         // Capture the current parentName before the async transition
         const parentName = view.parentName;
-        // User clicked a subcategory blob — load papers and switch to graph view with fade
+        // User clicked a subcategory blob - load papers and switch to graph view with fade
         drillDown(() => {
             currentCategoryColor = e.detail.color;
-            authorHighlight = '';
+            authorHighlight = "";
             searchHighlightPapers = []; // clear stale highlights on navigation
             view = {
                 level: "papers",
@@ -470,13 +477,13 @@
     function handlePaperSelected(e: CustomEvent<Paper>) {
         if (view.level !== "papers") return;
         const paper = e.detail;
-        // Capture context now — view may mutate before the drillDown callback runs
+        // Capture context now - view may mutate before the drillDown callback runs
         const categoryId = view.categoryId;
         const categoryName = view.categoryName;
         const parentName = view.parentName;
         arxivCitationCount = undefined;
         arxivReferenceCount = undefined;
-        authorHighlight = '';
+        authorHighlight = "";
         searchHighlightPapers = []; // clear on detail entry
         previousView = view;
         addSession(paper);
@@ -848,15 +855,14 @@
 
 <!-- main app container -->
 <div class="app-container">
-
-<!-- Full-screen fade overlay for drill-down transitions -->
-{#if drillTransitioning}
-  <div
-    class="drill-overlay"
-    class:drill-fade-out={!drillFadingIn}
-    class:drill-fade-in={drillFadingIn}
-  ></div>
-{/if}
+    <!-- Full-screen fade overlay for drill-down transitions -->
+    {#if drillTransitioning}
+        <div
+            class="drill-overlay"
+            class:drill-fade-out={!drillFadingIn}
+            class:drill-fade-in={drillFadingIn}
+        ></div>
+    {/if}
     <!-- Dashboard slide-in panel -->
     <Dashboard
         bind:this={dashboardRef}
@@ -936,7 +942,7 @@
         <div class="limit-select-wrapper">
             {#if view.level === "papers"}
                 <span class="limit-label">Papers:</span>
-                <!-- on:change intercepted — large values go through the modal -->
+                <!-- on:change intercepted - large values go through the modal -->
                 <select
                     class="limit-select"
                     bind:value={paperLimit}
@@ -952,7 +958,7 @@
                 </select>
             {:else if view.level === "detail"}
                 <span class="limit-label">Nodes:</span>
-                <!-- on:change intercepted — large values go through the modal -->
+                <!-- on:change intercepted - large values go through the modal -->
                 <select
                     class="limit-select"
                     bind:value={nodeLimit}
@@ -966,22 +972,32 @@
         </div>
     </nav>
 
-    <!-- Large-load confirmation modal — Written by Nick
+    <!-- Large-load confirmation modal - Written by Nick
          Triggered when the user selects 10 000 or "All" papers/nodes.
          The Confirm button is intentionally locked for 5 seconds so the
          warning text has time to be read before the destructive action fires. -->
     {#if confirmModalOpen}
         <div class="confirm-modal-backdrop" role="presentation">
-            <div class="confirm-modal" role="alertdialog" aria-modal="true" aria-labelledby="confirm-modal-title">
-                <h3 id="confirm-modal-title" class="confirm-modal-title">⚠ Large Dataset Warning</h3>
+            <div
+                class="confirm-modal"
+                role="alertdialog"
+                aria-modal="true"
+                aria-labelledby="confirm-modal-title"
+            >
+                <h3 id="confirm-modal-title" class="confirm-modal-title">
+                    ⚠ Large Dataset Warning
+                </h3>
                 <p class="confirm-modal-body">
                     Displaying more than 5 000 papers at once will significantly
                     increase loading times and may impact performance or
-                    <strong>crash your browser</strong>. Are you sure you want to
-                    continue?
+                    <strong>crash your browser</strong>. Are you sure you want
+                    to continue?
                 </p>
                 <div class="confirm-modal-buttons">
-                    <button class="confirm-btn confirm-btn-cancel" on:click={cancelLimitConfirm}>
+                    <button
+                        class="confirm-btn confirm-btn-cancel"
+                        on:click={cancelLimitConfirm}
+                    >
                         Cancel
                     </button>
                     <button
@@ -1055,7 +1071,10 @@
                         apiBaseUrl={API_BASE_URL}
                         {nodeLimit}
                         {authorHighlight}
-                        isFavoriteCheck={(entryId) => favoritesVersion >= 0 && dashboardRef ? dashboardRef.isFavorite(entryId) : false}
+                        isFavoriteCheck={(entryId) =>
+                            favoritesVersion >= 0 && dashboardRef
+                                ? dashboardRef.isFavorite(entryId)
+                                : false}
                         on:back={handleDetailBack}
                         on:neighbourhoodLoaded={handleNeighbourhoodLoaded}
                         on:navigate={handleGraphNavigate}
@@ -1108,52 +1127,75 @@
 </div>
 
 {#if groupPickerOpen && groupPickerPaper}
-  <!-- svelte-ignore a11y-click-events-have-key-events -->
-  <div class="picker-overlay" on:click|self={cancelGroupPicker} role="dialog" aria-modal="true">
-    <div class="picker-modal">
-      <h3 class="picker-heading">Add to Favorites</h3>
-      <p class="picker-paper-title">{truncate(groupPickerPaper.title, 90)}</p>
+    <!-- svelte-ignore a11y-click-events-have-key-events -->
+    <div
+        class="picker-overlay"
+        on:click|self={cancelGroupPicker}
+        role="dialog"
+        aria-modal="true"
+    >
+        <div class="picker-modal">
+            <h3 class="picker-heading">Add to Favorites</h3>
+            <p class="picker-paper-title">
+                {truncate(groupPickerPaper.title, 90)}
+            </p>
 
-      {#if dashboardRef && dashboardRef.getGroups().length > 0}
-        <p class="picker-section-label">Add to group(s):</p>
-        <div class="picker-groups">
-          {#each dashboardRef.getGroups() as group (group.id)}
-            <label class="picker-group-item">
-              <input
-                type="checkbox"
-                value={group.id}
-                checked={groupPickerSelectedIds.includes(group.id)}
-                on:change={(e) => {
-                  if ((e.target as HTMLInputElement).checked) {
-                    groupPickerSelectedIds = [...groupPickerSelectedIds, group.id];
-                  } else {
-                    groupPickerSelectedIds = groupPickerSelectedIds.filter(id => id !== group.id);
-                  }
-                }}
-              />
-              {group.name}
-            </label>
-          {/each}
+            {#if dashboardRef && dashboardRef.getGroups().length > 0}
+                <p class="picker-section-label">Add to group(s):</p>
+                <div class="picker-groups">
+                    {#each dashboardRef.getGroups() as group (group.id)}
+                        <label class="picker-group-item">
+                            <input
+                                type="checkbox"
+                                value={group.id}
+                                checked={groupPickerSelectedIds.includes(
+                                    group.id,
+                                )}
+                                on:change={(e) => {
+                                    if (
+                                        (e.target as HTMLInputElement).checked
+                                    ) {
+                                        groupPickerSelectedIds = [
+                                            ...groupPickerSelectedIds,
+                                            group.id,
+                                        ];
+                                    } else {
+                                        groupPickerSelectedIds =
+                                            groupPickerSelectedIds.filter(
+                                                (id) => id !== group.id,
+                                            );
+                                    }
+                                }}
+                            />
+                            {group.name}
+                        </label>
+                    {/each}
+                </div>
+            {/if}
+
+            <p class="picker-section-label">Or create a new group:</p>
+            <div class="picker-new-group">
+                <input
+                    type="text"
+                    class="picker-group-input"
+                    placeholder="New group name (optional)"
+                    bind:value={groupPickerNewGroupName}
+                    on:keydown={(e) => {
+                        if (e.key === "Enter") confirmGroupPicker();
+                    }}
+                />
+            </div>
+
+            <div class="picker-actions">
+                <button class="picker-cancel" on:click={cancelGroupPicker}
+                    >Cancel</button
+                >
+                <button class="picker-confirm" on:click={confirmGroupPicker}
+                    >★ Add to Favorites</button
+                >
+            </div>
         </div>
-      {/if}
-
-      <p class="picker-section-label">Or create a new group:</p>
-      <div class="picker-new-group">
-        <input
-          type="text"
-          class="picker-group-input"
-          placeholder="New group name (optional)"
-          bind:value={groupPickerNewGroupName}
-          on:keydown={(e) => { if (e.key === 'Enter') confirmGroupPicker(); }}
-        />
-      </div>
-
-      <div class="picker-actions">
-        <button class="picker-cancel" on:click={cancelGroupPicker}>Cancel</button>
-        <button class="picker-confirm" on:click={confirmGroupPicker}>★ Add to Favorites</button>
-      </div>
     </div>
-  </div>
 {/if}
 
 <style>
@@ -1182,12 +1224,20 @@
         animation: drillFadeIn 450ms ease-out forwards;
     }
     @keyframes drillFadeOut {
-        from { opacity: 0; }
-        to   { opacity: 1; }
+        from {
+            opacity: 0;
+        }
+        to {
+            opacity: 1;
+        }
     }
     @keyframes drillFadeIn {
-        from { opacity: 1; }
-        to   { opacity: 0; }
+        from {
+            opacity: 1;
+        }
+        to {
+            opacity: 0;
+        }
     }
 
     .breadcrumbs {
@@ -1234,7 +1284,7 @@
         color: #f0f0f8;
     }
 
-    /* ── Large-load confirmation modal — Written by Nick ── */
+    /* ── Large-load confirmation modal - Written by Nick ── */
     .confirm-modal-backdrop {
         position: fixed;
         inset: 0;
@@ -1252,7 +1302,9 @@
         border: 1px solid rgba(147, 51, 234, 0.28);
         border-radius: 12px;
         padding: 24px 24px 20px;
-        box-shadow: 0 16px 48px rgba(0, 0, 0, 0.6), 0 0 24px rgba(147, 51, 234, 0.1);
+        box-shadow:
+            0 16px 48px rgba(0, 0, 0, 0.6),
+            0 0 24px rgba(147, 51, 234, 0.1);
         display: flex;
         flex-direction: column;
         gap: 14px;
@@ -1296,7 +1348,11 @@
         color: var(--text-primary, #f0f0f8);
     }
     .confirm-btn-ok {
-        background: linear-gradient(135deg, rgba(147, 51, 234, 0.9), rgba(232, 57, 160, 0.8));
+        background: linear-gradient(
+            135deg,
+            rgba(147, 51, 234, 0.9),
+            rgba(232, 57, 160, 0.8)
+        );
         color: #fff;
     }
     .confirm-btn-ok:hover:not(:disabled) {
@@ -1451,12 +1507,12 @@
 
     .picker-modal {
         background: var(--bg-secondary, #141530);
-        border: 1px solid var(--glass-border, rgba(255,255,255,0.12));
+        border: 1px solid var(--glass-border, rgba(255, 255, 255, 0.12));
         border-radius: 14px;
         padding: 22px 24px;
         width: 360px;
         max-width: 94vw;
-        box-shadow: 0 8px 40px rgba(0,0,0,0.6);
+        box-shadow: 0 8px 40px rgba(0, 0, 0, 0.6);
         display: flex;
         flex-direction: column;
         gap: 14px;
@@ -1506,16 +1562,17 @@
         transition: background 0.12s;
     }
     .picker-group-item:hover {
-        background: rgba(255,255,255,0.05);
+        background: rgba(255, 255, 255, 0.05);
     }
 
-    .picker-new-group {}
+    .picker-new-group {
+    }
 
     .picker-group-input {
         width: 100%;
         box-sizing: border-box;
-        background: rgba(255,255,255,0.06);
-        border: 1px solid rgba(255,255,255,0.14);
+        background: rgba(255, 255, 255, 0.06);
+        border: 1px solid rgba(255, 255, 255, 0.14);
         color: var(--text-primary, #f0f0f8);
         font-size: 12px;
         padding: 6px 10px;
@@ -1536,7 +1593,7 @@
 
     .picker-cancel {
         background: none;
-        border: 1px solid rgba(255,255,255,0.15);
+        border: 1px solid rgba(255, 255, 255, 0.15);
         color: var(--text-muted, #6b6b8d);
         font-size: 12px;
         padding: 6px 14px;
@@ -1545,7 +1602,7 @@
         transition: all 0.15s;
     }
     .picker-cancel:hover {
-        background: rgba(255,255,255,0.06);
+        background: rgba(255, 255, 255, 0.06);
         color: var(--text-primary, #f0f0f8);
     }
 
