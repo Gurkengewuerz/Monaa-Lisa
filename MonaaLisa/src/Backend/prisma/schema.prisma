@@ -7,7 +7,7 @@
 generator client {
   provider = "prisma-client-js"
   //output   = "../generated/prisma"
-  previewFeatures = ["postgresqlExtensions"]
+  previewFeatures = ["postgresqlExtensions", "fullTextSearchPostgres"]
 }
 
 datasource db {
@@ -32,8 +32,22 @@ model Paper {
   non_arxiv_citation_count  Int?
   non_arxiv_reference_count Int?
   related_arxiv_ids         Json?
-  // App-only fields (not in dataset, used by ML pipeline)
+  // wird für die python anwendung benutzt um die koordinaten für umap bereitzustellen
   tsne                      Json?
+
+  // Optimale Suchindizes
+  // Für schnelle Sortierung
+  @@index([published(sort: Desc)])
+
+  // Um Kategorien zu durchsuchen
+  @@index([categories(ops: raw("gin_trgm_ops"))], type: Gin)
+
+  // schnelle suche einmal nach gezielt titel oder gezielt autoren
+  @@index([title(ops: raw("gin_trgm_ops"))], type: Gin)
+  @@index([authors(ops: raw("gin_trgm_ops"))], type: Gin)
+
+  // unsere häufigste query: alle paper einer kategorie und sortiert nach zitationen
+  @@index([categories, non_arxiv_citation_count(sort: Desc)])
 
   @@map("paper")
 }
@@ -79,6 +93,8 @@ model PaperReference {
   referenced_paper_entry_id String
 
   @@id([belonging_paper_entry_id, referenced_paper_entry_id])
+
+  @@index([referenced_paper_entry_id])
   @@map("paper_reference")
 }
 

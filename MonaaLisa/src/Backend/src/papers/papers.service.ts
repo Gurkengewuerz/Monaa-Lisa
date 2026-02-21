@@ -117,12 +117,12 @@ export class PapersService {
       { title: { equals: '[STUB] Pending Fetch', mode: 'insensitive' } },
     ];
 
-    if (q.search) {
-      const searchTerm = q.search.trim();
+    if (q.search && q.search.trim() !== '') {
+      const searchTerm = q.search.trim().split(/\s+/).join(' & ');
       where.OR = [
-        { title: { contains: searchTerm, mode: 'insensitive' } },
-        { authors: { contains: searchTerm, mode: 'insensitive' } },
-        { abstract: { contains: searchTerm, mode: 'insensitive' } },
+        { title: { search: searchTerm } },
+        { authors: { search: searchTerm } },
+        { abstract: { search: searchTerm } },
       ];
     }
 
