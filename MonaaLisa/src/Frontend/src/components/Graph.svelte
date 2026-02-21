@@ -1,19 +1,15 @@
 <!--
   Graph.svelte
-  Written by Nick
-
-  Renders a Sigma.js force-graph of papers in a single arXiv subcategory.
-  Each node = one paper. Node size ≈ citation count. Colour comes from the category.
-
-  The `authorHighlight` prop (string) lets GraphLayout tell this component to
-  highlight all nodes whose authors contain that name — and add any missing ones
-  by fetching from the API.
+  Das rendert den Hauptgraphen mit Sigma.js
+  Man sieht eine festgelegte Anzahl von Paper angeordnet nach ihrer thematischen Ähnlichkeit (durch UMAP dargestellt)
+  Jeder Datenpunkt ist ein Paper. Das Hovern zeigt einen Tooltipp mit details zum paper
 -->
 <script lang="ts">
     import { createEventDispatcher, onMount } from "svelte";
     import GraphLib from "graphology";
     import Sigma from "sigma";
     import type { Paper } from "$lib/types/paper";
+    import { json } from "d3";
 
     export let papers: Paper[] = [];
     export let selectedPaperId: string | null = null;
@@ -24,18 +20,14 @@
     export let apiBaseUrl: string = "http://localhost:3000";
     /** Current category ID for scoping author search */
     export let categoryId: string = "";
-    /**
-     * Full paper objects returned by the sidebar search.
-     * When non-empty these take priority over authorHighlight:
-     * matching nodes are highlighted with the category colour and
-     * up to MAX_SEARCH_ADD missing papers are injected into the graph.
-     */
+    // Return value of searched papers
     export let searchHighlightPapers: Paper[] = [];
 
     let container: HTMLDivElement | null = null;
     let renderer: Sigma | null = null;
     let graph: GraphLib | null = null;
     let paperCache = new Map<string, Paper>();
+    // Hover waits before closing
     let hoverTimeout: number | null = null;
     let hoveredPaper: Paper | null = null;
     let selectedNode: string | null = null;
@@ -43,8 +35,7 @@
     let authorAddedNodes: Set<string> = new Set();
     /** Track nodes added via search highlight so they can be removed on clear. */
     let searchAddedNodes: Set<string> = new Set();
-    /** Maximum extra nodes that a search-highlight may inject into the graph.
-     *  Prevents a broad search from flooding the view with thousands of nodes. */
+    // max number of paper injected so FE doesnt crash
     const MAX_SEARCH_ADD = 100;
     /** Stored globally so added nodes can be sized consistently with existing ones. */
     let maxCit = 0;
@@ -61,14 +52,22 @@
         );
     }
 
+    // Auf Deutsch zum Verständnis:
+    // Wir haben einen force-directed-graphen der die Paper als Knoten darstellt.
+    // Da es sein kann, dass Paper sehr nah beieinander liegen müssen wir mit möglichen Kollisionen umgehen
+    // Dazu haben wir einen einfachen Algorithmus implementiert der über mehrere Iterationen hinweg alle Knoten paarweise anschaut und sie auseinander schiebt wenn sie zu nah beieinander liegen.
+    // Es wird die Distanz von zwei punkten a und b berechnet (wurzel(deltaX^2 + deltaY^2)) und mit einem  Mindestabstand vergliche
+    // Ist die Distanz kleiner als das minimum wird eine verschiebung berechnet, proportional zum abstand. Ein bisschen wie magnete
+    // das ganze wird mehrmals wiederholt
+    // hier unten weiter auf englisch mit den parameter
     // ─── spread algorithm: push apart overlapping nodes ───────────────
     // ┌─ Overlap tuning knobs ─────────────────────────────────────────
     // │  MIN_DIST      – minimum pixel gap between any two node edges.
     // │                  Increase to spread nodes further apart.
     // │  MAX_DIST      – hard cap on how far a node may drift from the
-    // │                  centroid (prevents nodes flying off-screen).
-    // │  SPREAD_ITERS  – number of repulsion-relaxation passes; more =
-    // │                  better separation but slower initial load.
+    // │                  centroid (prevents nodes flying out screen).
+    // │  SPREAD_ITERS  – number of repulsion repeats; more =
+    // │                  better separation but slower load.
     // │  REPEL_STRENGTH– [0-1] fraction of overlap moved per iteration.
     // └────────────────────────────────────────────────────────────────
     const MIN_DIST = 20; // minimum distance between any two nodes
@@ -81,34 +80,34 @@
         if (nodes.length < 2) return;
 
         for (let iter = 0; iter < SPREAD_ITERS; iter++) {
-            // Compute centroid
-            let cx = 0,
-                cy = 0;
+            // compute the controid of the current layout
+            let centroidX = 0,
+                centroidY = 0;
             nodes.forEach((n) => {
-                cx += g.getNodeAttribute(n, "x");
-                cy += g.getNodeAttribute(n, "y");
+                centroidX += g.getNodeAttribute(n, "x");
+                centroidY += g.getNodeAttribute(n, "y");
             });
-            cx /= nodes.length;
-            cy /= nodes.length;
+            centroidX /= nodes.length;
+            centroidY /= nodes.length;
 
-            // Repel nodes that are too close (accounting for node sizes)
+            // Push nodes that are too close
             for (let i = 0; i < nodes.length; i++) {
                 let xi = g.getNodeAttribute(nodes[i], "x");
                 let yi = g.getNodeAttribute(nodes[i], "y");
-                const si = g.getNodeAttribute(nodes[i], "size") || 2;
+                const sizeI = g.getNodeAttribute(nodes[i], "size") || 2;
                 for (let j = i + 1; j < nodes.length; j++) {
                     let xj = g.getNodeAttribute(nodes[j], "x");
                     let yj = g.getNodeAttribute(nodes[j], "y");
-                    const sj = g.getNodeAttribute(nodes[j], "size") || 2;
-                    const dx = xj - xi;
-                    const dy = yj - yi;
-                    const dist = Math.sqrt(dx * dx + dy * dy) || 0.01;
-                    // Dynamic min distance based on combined node radii
-                    const minD = MIN_DIST + (si + sj) * 0.15;
-                    if (dist < minD) {
-                        const push = ((minD - dist) / 2) * REPEL_STRENGTH;
-                        const ux = (dx / dist) * push;
-                        const uy = (dy / dist) * push;
+                    const sizeJ = g.getNodeAttribute(nodes[j], "size") || 2;
+                    const deltaX = xj - xi;
+                    const deltaY = yj - yi;
+                    const dist = Math.sqrt(deltaX * deltaX + deltaY * deltaY) || 0.01;
+                    // Dynamic min distance
+                    const minimumDistance = MIN_DIST + (sizeI + sizeJ) * 0.15;
+                    if (dist < minimumDistance) {
+                        const push = ((minimumDistance - dist) / 2) * REPEL_STRENGTH;
+                        const ux = (deltaX / dist) * push;
+                        const uy = (deltaY / dist) * push;
                         g.setNodeAttribute(nodes[i], "x", xi - ux);
                         g.setNodeAttribute(nodes[i], "y", yi - uy);
                         g.setNodeAttribute(nodes[j], "x", xj + ux);
@@ -117,26 +116,21 @@
                 }
             }
 
-            // Clamp nodes that drifted beyond MAX_DIST from centroid
+            // stop nodes that drifted beyond MAX_DIST from centroid
             nodes.forEach((n) => {
                 let x = g.getNodeAttribute(n, "x");
                 let y = g.getNodeAttribute(n, "y");
-                const dx = x - cx;
-                const dy = y - cy;
-                const d = Math.sqrt(dx * dx + dy * dy);
+                const deltaX = x - centroidX;
+                const deltaY = y - centroidY;
+                const d = Math.sqrt(deltaX * deltaX + deltaY * deltaY);
                 if (d > MAX_DIST) {
-                    g.setNodeAttribute(n, "x", cx + (dx / d) * MAX_DIST);
-                    g.setNodeAttribute(n, "y", cy + (dy / d) * MAX_DIST);
+                    g.setNodeAttribute(n, "x", centroidX + (deltaX / d) * MAX_DIST);
+                    g.setNodeAttribute(n, "y", centroidY + (deltaY / d) * MAX_DIST);
                 }
             });
         }
     }
 
-    // ─── reactively handle highlight changes ─────────────────────────
-    // One reactive entry-point that decides which mode applies:
-    //   1. searchHighlightPapers is non-empty  → search-result highlights (all params)
-    //   2. authorHighlight string is set        → author-only highlights (legacy path)
-    //   3. both empty                           → restore default node colours
     $: applyGraphHighlights(searchHighlightPapers, authorHighlight);
 
     function applyGraphHighlights(searchPapers: Paper[], authorQ: string) {
@@ -293,8 +287,7 @@
             }
         });
 
-        // Always fetch from the API to find ALL matching papers (not just the ones
-        // already visible in the graph). We add every paper that isn't already a node.
+        // Always fetch from the API to find ALL matching papers
         if (categoryId) {
             try {
                 const params = new URLSearchParams();
@@ -302,6 +295,7 @@
                 params.set("categories", categoryId);
                 params.set("take", "50");  // fetch up to 50 matching papers
                 params.set("skip", "0");
+                // call api endpoint (The service is PAPERS.SERVICE.TS in the backend)
                 const res = await fetch(`${apiBaseUrl}/papers?${params.toString()}`);
                 if (res.ok) {
                     const payload = await res.json();
