@@ -224,7 +224,7 @@
 
             // Size follows the same formula as regular nodes so proportions match.
             const cit = totalCitations(p);
-            const size = 2 + (maxCit > 0 ? (cit / maxCit) * 8 : 2);
+            const size = 2 + (maxCit > 0 ? (cit / maxCit) * 2 : 2);
 
             // Prefer UMAP position; fall back to outward spiral around the graph.
             const hasUmap = p.tsne1 !== 0 || p.tsne2 !== 0;
@@ -286,7 +286,7 @@
             if (p && p.authors.toLowerCase().includes(q)) {
                 // Category colour (full opacity) for matching nodes
                 graph!.setNodeAttribute(n, "color", matchColor);
-                graph!.setNodeAttribute(n, "size", Math.max(graph!.getNodeAttribute(n, "size"), 8));
+                graph!.setNodeAttribute(n, "size", Math.max(graph!.getNodeAttribute(n, "size"), 4));
             } else {
                 // Dim non-matching nodes
                 graph!.setNodeAttribute(n, "color", "rgba(255,255,255,0.08)");
@@ -424,7 +424,9 @@
                   Math.sin(i * Math.PI * (3 - Math.sqrt(5)));
 
             const cit = totalCitations(paper);
-            const size = 2 + (maxCit > 0 ? (cit / maxCit) * 8 : 0);
+            // bei cit == maxCit => 2 + 8 = 10
+            // normal sind nodes 2 einheiten groß. wachsen bis zu faktor 6 bei sehr vielen zitationen
+            const size = 2 + (maxCit > 0 ? (cit / maxCit) * 4 : 0);
             const alpha = 0.4 + (maxCit > 0 ? (cit / maxCit) * 0.6 : 0.3);
             const rgb = hexToRgb(categoryColor);
             const color = `rgba(${rgb[0]},${rgb[1]},${rgb[2]},${alpha})`;
