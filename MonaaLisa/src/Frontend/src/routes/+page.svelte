@@ -10,12 +10,20 @@
   let landingPage: LandingPage;
 
   onMount(() => {
+    //check da cookie
+    if (document.cookie.split('; ').some(row => row === 'hasVisited=true')) {
+      showLanding = false;
+    }
+
     setTimeout(() => {
       loading = false;
     }, 2000);
   });
 
   function handleStart() {
+    //session cookie that keeps the user on the main app after they click start even if they close the tab
+    //deleted when browser is closed and it will show landing page again next time
+    document.cookie = "hasVisited=true; path=/; SameSite=Lax; Secure";
     showLanding = false;
   }
 
@@ -23,6 +31,8 @@
     if (showLanding && landingPage) {
       landingPage.reset();
     } else {
+      // Delete the cookie
+      document.cookie = "hasVisited=; path=/; max-age=0";
       showLanding = true;
       if (typeof window !== 'undefined') {
         window.scrollTo({ top: 0, behavior: 'instant' });
