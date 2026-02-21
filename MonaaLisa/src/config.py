@@ -69,5 +69,5 @@ class AppConfig:
             return default
 
 
-# Singleton instance to import elsewhere
+# actual singleton instance - take that OOP classes
 cfg = AppConfig()

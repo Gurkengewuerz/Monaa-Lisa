@@ -1,16 +1,3 @@
-"""
-Abstract: Provides the EmbeddingPipeline class that reduces 768-D SPECTER v2
-    embeddings from SemanticScholar down to 128-D (PCA) and then projects
-    to 2-D (UMAP) using pre-trained .pkl models.
-
-    The pipeline is thread-safe: the loaded sklearn / UMAP objects are read-only
-    after initialisation and numpy operations are atomic at the GIL level.
-
-    Added chunked UMAP processing to prevent OOM on systems with 16 GB RAM
-    (8 GB default WSL allocation). The UMAP transform is processed in batches
-    of UMAP_CHUNK_SIZE (default 500) vectors with explicit garbage collection.
-"""
-
 import gc
 import os
 from pathlib import Path
@@ -23,9 +10,7 @@ from config import cfg
 
 logger = Logger("EmbeddingPipeline")
 
-# Maximum vectors to process in a single UMAP transform call.
-# With a 6.68 GB UMAP model and 8 GB RAM (default WSL on 16 GB system),
-# we need to limit batch sizes to avoid OOM.
+# Wir müssen das UMAP-Modell in Chunks laden, um OOM (Out Of Memory) auf Maschinen mit begrenztem RAM zu vermeiden
 UMAP_CHUNK_SIZE = int(os.getenv("UMAP_CHUNK_SIZE", cfg.get("semanticpaper", "umap_chunk_size", "500")))
 
 
@@ -38,9 +23,9 @@ def _get_available_memory_gb() -> float | None:
         with open("/proc/meminfo", "r") as f:
             for line in f:
                 if line.startswith("MemAvailable:"):
-                    # Line format: "MemAvailable:   12345678 kB"
+                    # Zeilenformat: "MemAvailable:   12345678 kB"
                     kb = int(line.split()[1])
-                    return kb / (1024 * 1024)  # Convert to GB
+                    return kb / (1024 * 1024) 
     except (FileNotFoundError, PermissionError, ValueError):
         pass
     return None
@@ -57,21 +42,20 @@ def _log_memory_status(context: str = ""):
         else:
             logger.debug(msg)
 
-
+"""
+Abstract: Loads pre-trained PCA and UMAP models and exposes methods to
+    reduce raw SemanticScholar SPECTER v2 embeddings (768-D) into
+    128-D representations stored in the DB, and further project them
+    to 2-D coordinates for frontend visualisation.
+"""
 class EmbeddingPipeline:
-    """
-    Abstract: Loads pre-trained PCA and UMAP models and exposes methods to
-        reduce raw SemanticScholar SPECTER v2 embeddings (768-D) into
-        128-D representations stored in the DB, and further project them
-        to 2-D coordinates for frontend visualisation.
-    """
 
     def __init__(self, pca_model_path: str | Path | None = None, umap_model_path: str | Path | None = None):
         """
         Args:
-        - pca_model_path:  Path to the PCA .pkl (768 → 128-D).  Resolved from
+        - pca_model_path:  Path to the PCA .pkl (768 -> 128-D).  Resolved from
                            config / env if not given.
-        - umap_model_path: Path to the UMAP .pkl (128 → 2-D).  Same fallback.
+        - umap_model_path: Path to the UMAP .pkl (128 -> 2-D).  Same fallback.
         """
         if pca_model_path is None:
             pca_model_path = cfg.get(
@@ -107,7 +91,7 @@ class EmbeddingPipeline:
 
         _log_memory_status("Before UMAP load")
 
-        # Pre-flight check: warn if available memory is critically low
+        # Vorab-Check: Warnung, wenn verfügbarer Speicher kritisch niedrig ist
         avail_gb = _get_available_memory_gb()
         if avail_gb is not None and avail_gb < 2.0:
             logger.warning(
@@ -149,7 +133,7 @@ class EmbeddingPipeline:
 
     def process(self, vector_768d: list | np.ndarray) -> tuple[np.ndarray, tuple[float, float]]:
         """
-        Abstract: Full pipeline – 768-D → 128-D (PCA) → 2-D (UMAP).
+        Abstract: Full pipeline – 768-D -> 128-D (PCA) -> 2-D (UMAP).
         Args:
         - vector_768d: 768-element list or ndarray (SPECTER v2)
         Returns: (embedding_128d, (x, y))
@@ -185,11 +169,11 @@ class EmbeddingPipeline:
 
         n_vectors = matrix.shape[0]
 
-        # Small batches don't need chunking
+        # Kleine Batches benötigen kein Chunking, also direkt verarbeiten
         if n_vectors <= UMAP_CHUNK_SIZE:
             return self._umap.transform(matrix)
 
-        # Process in chunks to limit peak memory usage
+        # Verarbeitung in Chunks, um den maximalen Speicherverbrauch zu begrenzen
         logger.info(f"Processing {n_vectors} vectors in chunks of {UMAP_CHUNK_SIZE} to limit memory usage...")
         results = []
 
@@ -199,21 +183,21 @@ class EmbeddingPipeline:
             chunk_result = self._umap.transform(chunk)
             results.append(chunk_result)
 
-            # Explicit garbage collection between chunks to free memory
+            # Explizite Garbage Collection zwischen den Chunks, um Speicher freizugeben
             if end < n_vectors:
                 gc.collect()
-                # Log memory status every few chunks if running low
+                # Speicherauslastung alle paar Chunks loggen, um Probleme frühzeitig zu erkennen
                 if (end // UMAP_CHUNK_SIZE) % 5 == 0:
                     _log_memory_status(f"After chunk {end // UMAP_CHUNK_SIZE}")
 
-        # After all chunks, do a final gc
+        # Nach allen Chunks noch eine finale GC durchführen
         gc.collect()
 
         return np.vstack(results)
 
     def batch_process(self, vectors_768d: list[list] | np.ndarray) -> list[tuple[list[float], tuple[float, float]]]:
         """
-        Abstract: Full batch pipeline – 768-D → 128-D → 2-D for N vectors.
+        Abstract: Full batch pipeline – 768-D -> 128-D -> 2-D for N vectors.
         Args:
         - vectors_768d: (N, 768) array-like
         Returns: list of (embedding_128d_list, (x, y)) tuples

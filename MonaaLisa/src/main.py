@@ -2,9 +2,9 @@
 Abstract: Entry point of the SemanticPaper application (refactored).
 
 New flow:
-    1. First run  → download dataset + models from Google Drive → import into DB
-    2. Every run  → ensure pre-trained models (PCA + UMAP) are present
-    3. Load the EmbeddingPipeline (768→128→2D)
+    1. First run -> download dataset + models from Google Drive -> import into DB
+    2. Every run  -> ensure pre-trained models (PCA + UMAP) are present
+    3. Load the EmbeddingPipeline (768 ->128 ->2D)
     4. Run an immediate incremental update (arXiv gap-fill)
     5. Schedule monthly incremental updates and bi-weekly uncaught-paper retries
     6. Wait for shutdown signal

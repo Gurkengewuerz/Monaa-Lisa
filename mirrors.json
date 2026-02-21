@@ -12,7 +12,7 @@
         },
         "pca_model": {
             "filename": "pca_model_128d.pkl",
-            "description": "PCA model (768D → 128D)",
+            "description": "PCA model (768D -> 128D)",
             "mirrors": [
                 "https://monaa.shrimpshromp.eu/pca_model_128d.pkl"
             ],
@@ -22,7 +22,7 @@
         },
         "umap_model": {
             "filename": "umap_model_2d.pkl",
-            "description": "UMAP model (128D → 2D)",
+            "description": "UMAP model (128D -> 2D)",
             "mirrors": [
                 "https://monaa.shrimpshromp.eu/umap_model_2d-003.pkl"
             ],
