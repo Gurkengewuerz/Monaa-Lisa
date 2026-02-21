@@ -10,12 +10,16 @@ Abstract: Implements the incremental update pipeline that keeps the database
     4.  Batch-request SemanticScholar for SPECTER v2 embeddings (768-D),
         citations, and references.
     5.  For papers with embeddings:
-            PCA 768→128-D  →  UMAP 128→2-D  →  save to ``paper`` + ``embedding``.
-    6.  Papers without SemanticScholar data → ``uncaught_paper`` table.
+        -> PCA 768
+        -> 128-D  
+        -> UMAP 128
+        -> 2-D  
+        -> save to ``paper`` + ``embedding``.
+    6.  Papers without SemanticScholar data 
+        -> ``uncaught_paper`` table.
     7.  Periodically retry uncaught papers; drop after max retries.
-
-    The pipeline is designed to run as a scheduled job (default: monthly)
-    via APScheduler inside ``main.py``.
+        The pipeline is designed to run as a scheduled job (default: monthly)
+        via APScheduler inside ``main.py``.
 """
 
 import os
@@ -61,8 +65,9 @@ def _fetch_new_arxiv_papers(arxiv_client: ArxivAPI, since: datetime,
     - max_results: optional cap
     Returns: list[arxiv.Result]
     """
-    # arXiv query date format: YYYYMMDDHHMMSS
+    # arXiv Suchdatum-Format: YYYYMMDDHHMMSS
     date_str = since.strftime("%Y%m%d%H%M%S")
+    # Suche nach allen Papern, die nach dem übergebenen Datum eingereicht wurden
     query = f"submittedDate:[{date_str} TO 99991231235959]"
 
     logger.info(f"Querying arXiv for papers since {since.isoformat()} ...")
@@ -90,18 +95,15 @@ def _fetch_new_arxiv_papers(arxiv_client: ArxivAPI, since: datetime,
 
 def _normalize_entry_id(entry_id_or_url: str) -> str:
     """Strips the arxiv.org URL prefix and version suffix."""
+    # Entferne die URL-Präfixe, um nur die reine ID zu erhalten
     eid = entry_id_or_url.replace("http://arxiv.org/abs/", "").replace("http://arxiv.org/", "")
-    # Remove version suffix (e.g. v1, v2)
+    # Entferne Versions-Suffix (z.B. v1, v2)
     if "v" in eid.split("/")[-1]:
         parts = eid.rsplit("v", 1)
         if parts[-1].isdigit():
             eid = parts[0]
     return eid
 
-
-# ------------------------------------------------------------------
-#  Main incremental update
-# ------------------------------------------------------------------
 
 
 def run_incremental_update(
@@ -123,22 +125,24 @@ def run_incremental_update(
 
     newest_date = get_newest_paper_date()
     if newest_date is None:
+        # Wenn die Datenbank leer ist, brechen wir ab, da zuerst der initiale Import laufen muss
         logger.warning("No papers in database – skipping incremental update (run initial import first).")
         return
 
     logger.info(f"Newest paper in DB: {newest_date.isoformat()}")
     paper_count_before = get_paper_count()
 
-    # 1. Fetch new papers from arXiv
+    # 1. Hole neue Paper von arXiv
     raw_results = _fetch_new_arxiv_papers(arxiv_client, newest_date, max_results=max_papers)
     if not raw_results:
         logger.info("No new papers found on arXiv. Database is up to date.")
         return
 
-    # 2. Filter out papers already in the DB
+    # 2. Filtere Paper heraus, die bereits in der DB existieren
     new_papers = []
     for result in raw_results:
         eid = _normalize_entry_id(result.entry_id)
+        # Prüfe, ob die normalisierte ID bereits in der Datenbank vorhanden ist
         if not paper_exists_by_id(eid):
             new_papers.append((eid, result))
 
@@ -147,23 +151,25 @@ def run_incremental_update(
         logger.info("All fetched papers already exist in the DB.")
         return
 
-    # 3. Batch fetch from SemanticScholar
+    # 3. Batch-Abfrage bei SemanticScholar
     arxiv_ids = [eid for eid, _ in new_papers]
+    # Lade die Batch-Größe aus der Konfiguration oder nutze den Standardwert 400
     s2_batch_size = cfg.get_int(
         "semanticpaper", "s2_batch_size",
         int(os.getenv("S2_BATCH_SIZE", "400"))
     )
     found, not_found = s2_client.fetch_batch(arxiv_ids, batch_size=s2_batch_size)
 
-    # Build lookup for arXiv result metadata  
+    # Erstelle Lookup-Map für arXiv-Ergebnis-Metadaten, um später darauf zugreifen zu können
     result_map: dict[str, arx.Result] = {eid: res for eid, res in new_papers}
 
-    # 4. Process papers with embeddings
+    # 4. Verarbeite Paper mit Embeddings
     processed_count = 0
     if found:
-        # Collect 768-D vectors for batch processing
+        # Sammle 768-D Vektoren für die Batch-Verarbeitung
         vectors_768 = [item["embedding_768d"] for item in found]
         logger.info(f"Running PCA + UMAP on {len(vectors_768)} embeddings...")
+        # Führe PCA und UMAP auf den gesammelten Vektoren aus
         batch_results = pipeline.batch_process(vectors_768)
 
         for item, (emb_128_list, (x, y)) in zip(found, batch_results):
@@ -180,6 +186,7 @@ def run_incremental_update(
             journal_ref = getattr(result, "journal_ref", None)
             pdf_url = result.pdf_url if result else None
 
+            # Speichere das verarbeitete Paper mit allen Metadaten und Embeddings in der Datenbank
             ok = save_processed_paper(
                 entry_id=arxiv_id,
                 title=title,
@@ -205,8 +212,9 @@ def run_incremental_update(
             else:
                 logger.warning(f"Failed to save paper {arxiv_id}")
 
-    # 5. Save uncaught papers
+    # 5. Speichere nicht gefundene Paper (uncaught) für spätere Retrys
     uncaught_count = 0
+    # Lade die maximale Anzahl an Retrys aus der Konfiguration
     max_retries = cfg.get_int("semanticpaper", "uncaught_max_retries", int(os.getenv("UNCAUGHT_MAX_RETRIES", "4")))
     for arxiv_id in not_found:
         result = result_map.get(arxiv_id)
@@ -234,25 +242,15 @@ def run_incremental_update(
     logger.info(
         f"=== Incremental update complete in {elapsed:.1f}s === "
         f"Processed: {processed_count}, Uncaught: {uncaught_count}, "
-        f"DB total: {paper_count_before} → {paper_count_after}"
+        f"DB total: {paper_count_before} -> {paper_count_after}"
     )
-
-
-# ------------------------------------------------------------------
-#  Uncaught paper retry
-# ------------------------------------------------------------------
-
 
 def retry_uncaught_papers(
     s2_client: SemanticScholarAPI,
-    pipeline: EmbeddingPipeline,
-):
-    """
-    Abstract: Retries uncaught papers that are due for a check.
-        Papers that now have SemanticScholar data are processed and moved to
-        the main tables.  Papers that still lack data get their retry_count
-        incremented.  Papers that exceed max_retries are purged.
-    """
+    pipeline: EmbeddingPipeline, ):
+
+    # Diese Funktion wird in regelmäßigen Intervallen ausgeführt, um "uncaught papers" erneut abzufragen, 
+    # die zuvor nicht in SemanticScholar gefunden wurden.
     retry_interval = cfg.get_int(
         "semanticpaper", "uncaught_retry_interval_days",
         int(os.getenv("UNCAUGHT_RETRY_INTERVAL_DAYS", "14"))
@@ -260,9 +258,9 @@ def retry_uncaught_papers(
 
     logger.info(f"=== Uncaught paper retry (interval: {retry_interval}d) ===")
 
-    # Purge expired entries first
+    # Eliminiere uncaught papers, die das Retry-Limit überschritten haben
     purge_expired_uncaught()
-
+    # Hole alle uncaught papers, die für einen Retry fällig sind
     due = get_uncaught_papers_due(retry_interval_days=retry_interval)
     if not due:
         logger.info("No uncaught papers due for retry.")
@@ -277,19 +275,19 @@ def retry_uncaught_papers(
     )
     found, not_found = s2_client.fetch_batch(arxiv_ids, batch_size=s2_batch_size)
 
-    # Build lookup
+    # Erstelle eine Map für schnellen Zugriff auf die uncaught papers anhand ihrer ID
     uncaught_map = {p.entry_id: p for p in due}
 
-    # Process found papers
+    # Verarbeite gefundene Paper wie im Haupt-Update, speichere sie und lösche sie aus der uncaught-Tabelle.
     rescued_count = 0
     if found:
+        # Extrahiere die 768-D Vektoren und verarbeite sie im Batch
         vectors_768 = [item["embedding_768d"] for item in found]
         batch_results = pipeline.batch_process(vectors_768)
-
         for item, (emb_128_list, (x, y)) in zip(found, batch_results):
             arxiv_id = item["arxiv_id"]
             uncaught = uncaught_map.get(arxiv_id)
-
+    
             ok = save_processed_paper(
                 entry_id=arxiv_id,
                 title=uncaught.title if uncaught else "[Unknown]",
@@ -308,16 +306,17 @@ def retry_uncaught_papers(
                 reference_ids=item.get("reference_arxiv_ids"),
             )
             if ok:
+                # Wenn das Speichern erfolgreich war, entferne das Paper aus der uncaught-Tabelle
                 delete_uncaught_paper(arxiv_id)
                 rescued_count += 1
 
-    # Increment retry count for still-missing papers
+    # Erhöhe den Retry-Zähler für weiterhin fehlende Paper
     still_missing = 0
     for arxiv_id in not_found:
         increment_uncaught_retry(arxiv_id)
         still_missing += 1
 
-    # Purge again after increments
+    # Bereinige abgelaufene Paper erneut nach den Erhöhungen
     purge_expired_uncaught()
 
     logger.info(

@@ -184,6 +184,9 @@ class SemanticScholarAPI:
         batch_size: int = 400,
         pause_seconds: float = 1.0,
     ) -> tuple[list[dict], list[str]]:
+        
+
+
         url = "https://api.semanticscholar.org/graph/v1/paper/batch"
         fields = "externalIds,embedding.specter_v2,citations.externalIds,references.externalIds"
         headers = {}
@@ -193,11 +196,13 @@ class SemanticScholarAPI:
         found: list[dict] = []
         not_found: list[str] = []
 
+        # iteriert durch die arxiv ids in batches, um die API zu schonen
         for start in range(0, len(arxiv_ids), batch_size):
             chunk = arxiv_ids[start:start + batch_size]
             payload = {"ids": [f"ARXIV:{aid}" for aid in chunk]}
 
             try:
+                # semanticscholar hat keinen offiziellen batch-endpoint in der python library, daher direkt mit requests
                 resp = requests.post(
                     url,
                     json=payload,
@@ -205,27 +210,30 @@ class SemanticScholarAPI:
                     headers=headers,
                     timeout=120,
                 )
+                
                 resp.raise_for_status()
                 results = resp.json()
             except Exception as e:
+
                 self.logger.error(f"SemanticScholar batch request failed: {e}")
                 not_found.extend(chunk)
                 continue
 
+            # alle unbekannten paper (null in response) sammeln, damit caller sie uncaught-paper-tabelle schicken kann
             for i, item in enumerate(results):
                 arxiv_id = chunk[i] if i < len(chunk) else None
                 if item is None or not isinstance(item, dict):
                     if arxiv_id:
                         not_found.append(arxiv_id)
                     continue
-
+                # s2_id, embedding, citation arXiv IDs, reference arXiv IDs extrahieren
                 s2_id = item.get("paperId")
                 embedding_data = item.get("embedding")
                 vector_768 = None
                 if embedding_data and isinstance(embedding_data, dict):
                     vector_768 = embedding_data.get("vector")
 
-                # Extract citation arXiv IDs
+                # citation arXiv IDs extrahieren
                 citation_arxiv_ids = []
                 non_arxiv_citation_count = 0
                 for cit in (item.get("citations") or []):
@@ -236,7 +244,7 @@ class SemanticScholarAPI:
                     else:
                         non_arxiv_citation_count += 1
 
-                # Extract reference arXiv IDs
+                # reference arXiv IDs extrahieren
                 reference_arxiv_ids = []
                 non_arxiv_reference_count = 0
                 for ref in (item.get("references") or []):
@@ -247,12 +255,13 @@ class SemanticScholarAPI:
                     else:
                         non_arxiv_reference_count += 1
 
+                # nur paper mit gültigem embedding zurückgeben, damit caller sie direkt in embedding-tabelle speichern kann – paper ohne embedding (z.B. weil S2 sie kennt aber noch nicht verarbeitet hat) werden wie unbekannte paper behandelt und in not_found gesammelt
                 if vector_768 is None:
-                    # Paper exists on S2 but has no embedding yet
+                    
                     if arxiv_id:
                         not_found.append(arxiv_id)
                     continue
-
+                    # zum schluss alle gefundenen paper mit embedding und extrahierten citation/reference arXiv IDs zurückgeben
                 found.append({
                     "arxiv_id": arxiv_id,
                     "s2_id": s2_id,
