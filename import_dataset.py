@@ -459,8 +459,8 @@ if __name__ == "__main__":
     parser.add_argument(
         "--batch-size", "-b",
         type=int,
-        default=5000,
-        help="Number of papers per batch INSERT (default: 5000)",
+        default=25000,
+        help="Number of papers per batch INSERT (default: 25000)",
     )
     args = parser.parse_args()
 

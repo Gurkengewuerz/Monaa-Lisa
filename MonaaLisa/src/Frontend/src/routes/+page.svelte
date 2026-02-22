@@ -23,7 +23,7 @@
   function handleStart() {
     //session cookie that keeps the user on the main app after they click start even if they close the tab
     //deleted when browser is closed and it will show landing page again next time
-    document.cookie = "hasVisited=true; path=/; SameSite=Lax; Secure";
+    document.cookie = "hasVisited=true; path=/; SameSite=Lax";
     showLanding = false;
   }
 

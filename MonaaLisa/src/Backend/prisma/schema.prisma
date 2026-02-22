@@ -45,6 +45,7 @@ model Paper {
   // schnelle suche einmal nach gezielt titel oder gezielt autoren
   @@index([title(ops: raw("gin_trgm_ops"))], type: Gin)
   @@index([authors(ops: raw("gin_trgm_ops"))], type: Gin)
+  @@index([abstract(ops: raw("gin_trgm_ops"))], type: Gin)
 
   // unsere häufigste query: alle paper einer kategorie und sortiert nach zitationen
   @@index([categories, non_arxiv_citation_count(sort: Desc)])

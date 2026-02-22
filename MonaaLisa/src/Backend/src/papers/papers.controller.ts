@@ -100,6 +100,11 @@ export class PapersController {
     return this.papers.updateByEntryId(entryId, dto);
   }
 
+  @Post('neighbours/filtered')
+  async getNeighbours(@Body() body: { entryIds: string[]; filter: any }) {
+    return this.papers.findFilteredNeighbours(body.entryIds, body.filter);
+  }
+
   // Nick - November 2025
   // Die Möglichkeiten ein paper zu löschen damit es neugeladen werden kann
   /**

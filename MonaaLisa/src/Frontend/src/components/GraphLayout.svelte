@@ -768,6 +768,7 @@
     ): Paper | null {
         if (!raw?.entry_id || !raw?.title) return null;
         const [t1, t2] = parseTsne(raw.tsne);
+        console.log(`Normalized paper ${raw.entry_id} (${index + 1}/${total}) with t-SNE (${t1.toFixed(2)}, ${t2.toFixed(2)})`);
         return {
             id: Number(raw.id ?? index),
             entry_id: raw.entry_id,

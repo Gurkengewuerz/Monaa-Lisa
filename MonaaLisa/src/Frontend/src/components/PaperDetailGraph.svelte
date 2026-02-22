@@ -16,6 +16,7 @@
 -->
 <script lang="ts">
     import { createEventDispatcher, onMount, onDestroy, tick } from "svelte";
+    import { env as publicEnv } from "$env/dynamic/public";
     import GraphLib from "graphology";
     import Sigma from "sigma";
     import type { Paper } from "$lib/types/paper";
@@ -25,7 +26,7 @@
     /** The paper whose neighbourhood we are visualising. */
     export let paper: Paper;
     /** NestJS backend base URL. */
-    export let apiBaseUrl: string = "http://localhost:3000";
+    export let apiBaseUrl: string = publicEnv.PUBLIC_API_BASE_URL || "http://localhost:3000/";
     /** Maximum total nodes (citations + references). 0 = unlimited. */
     export let nodeLimit: number = 5000;
     /** Author name to highlight in the citation graph. */

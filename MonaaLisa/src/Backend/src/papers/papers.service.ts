@@ -46,6 +46,80 @@ export class PapersService {
     });
   }
 
+  /**
+   * Filtert eine Liste von bekannten entry_ids nach den Kriterien aus der UI.
+   * Das verhindert, dass wir zehntausende Paper ins Frontend laden müssen.
+   */
+  async findFilteredNeighbours(
+    entryIds: string[],
+    filter: {
+      dateFrom?: string;
+      dateTo?: string;
+      authorQuery?: string;
+      abstractQuery?: string;
+      minCitations?: number;
+      // onlyArxiv wird implizit behandelt, da non-arXiv Paper
+      // oft eh nicht in der Haupt-Tabelle liegen oder keine validen Daten haben.
+    },
+  ) {
+    if (!entryIds || entryIds.length === 0) return [];
+
+    const where: Prisma.PaperWhereInput = {
+      entry_id: { in: entryIds },
+    };
+
+    // 1. Datumsfilter
+    if (filter.dateFrom || filter.dateTo) {
+      const publishedFilter: Prisma.DateTimeNullableFilter = {};
+      if (filter.dateFrom) publishedFilter.gte = new Date(filter.dateFrom);
+      if (filter.dateTo) publishedFilter.lte = new Date(filter.dateTo);
+      where.published = publishedFilter;
+    }
+
+    // 2. Autorenfilter (Case-Insensitive Suche in Prisma)
+    if (filter.authorQuery && filter.authorQuery.trim() !== '') {
+      where.authors = {
+        contains: filter.authorQuery.trim(),
+        mode: 'insensitive',
+      };
+    }
+
+    // 3. Abstractfilter (Case-Insensitive Suche in Prisma)
+    if (filter.abstractQuery && filter.abstractQuery.trim() !== '') {
+      where.abstract = {
+        contains: filter.abstractQuery.trim(),
+        mode: 'insensitive',
+      };
+    }
+
+    // 4. Minimum Citations
+    if (filter.minCitations !== undefined && filter.minCitations >= 0) {
+      where.non_arxiv_citation_count = {
+        gte: filter.minCitations,
+      };
+    }
+
+    // Wir holen nur die Felder, die die Sidebar wirklich braucht,
+    // um Bandbreite und RAM zu sparen.
+    const papers = await this.prisma.paper.findMany({
+      where,
+      select: {
+        entry_id: true,
+        title: true,
+        authors: true,
+        abstract: true,
+        published: true,
+        categories: true,
+        non_arxiv_citation_count: true,
+        non_arxiv_reference_count: true,
+      },
+      // Ein Limit als Sicherheitsgurt, falls ein Filter zu "weich" ist
+      take: 1000,
+    });
+
+    return papers;
+  }
+
   // Idempotente Ingestion: Upsert über entry_id
   /**
    * Upsert (Create ODER Update) anhand `entry_id`.
@@ -118,11 +192,11 @@ export class PapersService {
     ];
 
     if (q.search && q.search.trim() !== '') {
-      const searchTerm = q.search.trim().split(/\s+/).join(' & ');
+      const term = q.search.trim();
       where.OR = [
-        { title: { search: searchTerm } },
-        { authors: { search: searchTerm } },
-        { abstract: { search: searchTerm } },
+        { title: { contains: term, mode: 'insensitive' } },
+        { authors: { contains: term, mode: 'insensitive' } },
+        { abstract: { contains: term, mode: 'insensitive' } },
       ];
     }
 
@@ -145,7 +219,12 @@ export class PapersService {
       this.prisma.paper.count({ where }),
     ]);
 
-    const enrichedItems = await this.enrichWithCitations(items);
+    const shouldEnrich = take <= 40;
+
+    const enrichedItems = shouldEnrich
+      ? await this.enrichWithCitations(items)
+      : items.map((p) => ({ ...p, citations: [], references: [] }));
+
     return { items: enrichedItems, total, skip, take };
   }
 
@@ -259,6 +338,12 @@ export class PapersService {
       where: { entry_id: { in: entryIds } },
       take,
     });
+
+    // Falls jemand 5000 IDs anfragt, NIEMALS enrichWithCitations machen
+    if (entryIds.length > 50) {
+      return papers.map((p) => ({ ...p, citations: [], references: [] }));
+    }
+
     return this.enrichWithCitations(papers);
   }
 

@@ -6,6 +6,7 @@
 -->
 <script lang="ts">
     import { createEventDispatcher, onMount } from "svelte";
+    import { env as publicEnv } from "$env/dynamic/public";
     import GraphLib from "graphology";
     import Sigma from "sigma";
     import type { Paper } from "$lib/types/paper";
@@ -17,7 +18,8 @@
     /** Author name to highlight in the graph. Empty string = no highlight. */
     export let authorHighlight: string = "";
     /** API base URL for fetching papers by author */
-    export let apiBaseUrl: string = "http://localhost:3000";
+    export let apiBaseUrl: string =
+        publicEnv.PUBLIC_API_BASE_URL || "http://localhost:3000";
     /** Current category ID for scoping author search */
     export let categoryId: string = "";
     // Return value of searched papers
@@ -44,11 +46,13 @@
 
     // ─── total citation count for node sizing ─────────────────────────
     function totalCitations(p: Paper): number {
-        return (
-            (p.citations?.length ?? 0) +
-            (p.references?.length ?? 0) +
-            (p.non_arxiv_citation_count ?? 0) +
-            (p.non_arxiv_reference_count ?? 0)
+        // Wir nutzen die numerischen Felder, die das Backend IMMER mitschickt,
+        const arxivCit = p.citations?.length ?? 0;
+        const nonArxivCit = p.non_arxiv_citation_count ?? 0;
+
+        return Math.max(
+            arxivCit + nonArxivCit,
+            p.non_arxiv_citation_count || 0,
         );
     }
 
@@ -70,80 +74,98 @@
     // │                  better separation but slower load.
     // │  REPEL_STRENGTH– [0-1] fraction of overlap moved per iteration.
     // └────────────────────────────────────────────────────────────────
-    const MIN_DIST = 20; // minimum distance between any two nodes
-    const MAX_DIST = 500; // maximum distance from centroid
-    const SPREAD_ITERS = 20; //60;
+    const n = papers.length;
+    const MIN_DIST = 2.5 * Math.sqrt(Math.max(1, n) / 1000); // minimum distance between any two nodes
+    const SPREAD_ITERS = 10; //60;
     const REPEL_STRENGTH = 0.5;
+
+    const COORD_SCALE = 60 * Math.sqrt(Math.max(1, n) / 1000); // 1000->40, 2500->~63
+
+    const ANCHOR = 0.012 * Math.sqrt(Math.max(1, n) / 1000); // 0.12..0.25 (mehr = UMAP-treuer)
+    const MAX_DRIFT = 180;
 
     function applySpread(g: GraphLib) {
         const nodes = g.nodes();
         if (nodes.length < 2) return;
 
         for (let iter = 0; iter < SPREAD_ITERS; iter++) {
-            // compute the controid of the current layout
-            let centroidX = 0,
-                centroidY = 0;
-            nodes.forEach((n) => {
-                centroidX += g.getNodeAttribute(n, "x");
-                centroidY += g.getNodeAttribute(n, "y");
-            });
-            centroidX /= nodes.length;
-            centroidY /= nodes.length;
-
-            // Push nodes that are too close
             for (let i = 0; i < nodes.length; i++) {
                 let xi = g.getNodeAttribute(nodes[i], "x");
                 let yi = g.getNodeAttribute(nodes[i], "y");
                 const sizeI = g.getNodeAttribute(nodes[i], "size") || 2;
+
                 for (let j = i + 1; j < nodes.length; j++) {
                     let xj = g.getNodeAttribute(nodes[j], "x");
                     let yj = g.getNodeAttribute(nodes[j], "y");
                     const sizeJ = g.getNodeAttribute(nodes[j], "size") || 2;
-                    const deltaX = xj - xi;
-                    const deltaY = yj - yi;
-                    const dist =
-                        Math.sqrt(deltaX * deltaX + deltaY * deltaY) || 0.01;
-                    // Dynamic min distance
-                    const minimumDistance = MIN_DIST + (sizeI + sizeJ) * 0.15;
-                    if (dist < minimumDistance) {
-                        const push =
-                            ((minimumDistance - dist) / 2) * REPEL_STRENGTH;
-                        const ux = (deltaX / dist) * push;
-                        const uy = (deltaY / dist) * push;
-                        g.setNodeAttribute(nodes[i], "x", xi - ux);
-                        g.setNodeAttribute(nodes[i], "y", yi - uy);
-                        g.setNodeAttribute(nodes[j], "x", xj + ux);
-                        g.setNodeAttribute(nodes[j], "y", yj + uy);
+
+                    const dx = xj - xi;
+                    const dy = yj - yi;
+                    const dist = Math.sqrt(dx * dx + dy * dy) || 0.0001;
+
+                    // "nicht berühren": Abstand ~ Summe Radien + kleiner Gap
+                    const minDist = sizeI + sizeJ + MIN_DIST;
+
+                    if (dist < minDist) {
+                        const push = ((minDist - dist) / 2) * REPEL_STRENGTH;
+                        const ux = (dx / dist) * push;
+                        const uy = (dy / dist) * push;
+
+                        xi -= ux;
+                        yi -= uy;
+                        xj += ux;
+                        yj += uy;
+
+                        g.setNodeAttribute(nodes[i], "x", xi);
+                        g.setNodeAttribute(nodes[i], "y", yi);
+                        g.setNodeAttribute(nodes[j], "x", xj);
+                        g.setNodeAttribute(nodes[j], "y", yj);
                     }
                 }
             }
 
-            // stop nodes that drifted beyond MAX_DIST from centroid
+            // Anchor zurück Richtung Originalposition + Drift clamp
             nodes.forEach((n) => {
+                const x0 = g.getNodeAttribute(n, "x0");
+                const y0 = g.getNodeAttribute(n, "y0");
                 let x = g.getNodeAttribute(n, "x");
                 let y = g.getNodeAttribute(n, "y");
-                const deltaX = x - centroidX;
-                const deltaY = y - centroidY;
-                const d = Math.sqrt(deltaX * deltaX + deltaY * deltaY);
-                if (d > MAX_DIST) {
-                    g.setNodeAttribute(
-                        n,
-                        "x",
-                        centroidX + (deltaX / d) * MAX_DIST,
-                    );
-                    g.setNodeAttribute(
-                        n,
-                        "y",
-                        centroidY + (deltaY / d) * MAX_DIST,
-                    );
+
+                x += (x0 - x) * ANCHOR;
+                y += (y0 - y) * ANCHOR;
+
+                const ddx = x - x0;
+                const ddy = y - y0;
+                const d = Math.sqrt(ddx * ddx + ddy * ddy);
+                if (d > MAX_DRIFT) {
+                    x = x0 + (ddx / d) * MAX_DRIFT;
+                    y = y0 + (ddy / d) * MAX_DRIFT;
                 }
+
+                g.setNodeAttribute(n, "x", x);
+                g.setNodeAttribute(n, "y", y);
             });
         }
     }
 
     $: applyGraphHighlights(searchHighlightPapers, authorHighlight);
 
+    $: if (selectedPaperId && graph && renderer) {
+        // Wir prüfen, ob sich die ID wirklich geändert hat,
+        // um unnötige Server-Anfragen zu vermeiden
+        if (selectedPaperId !== selectedNode) {
+            highlightNode(selectedPaperId);
+        }
+    }
+
     function applyGraphHighlights(searchPapers: Paper[], authorQ: string) {
+        if (!graph || !renderer) return;
+        if (searchPapers.length === 0 && !authorQ) {
+            restoreAllNodeColors();
+            // Falls trotzdem ein Paper ausgewählt ist, zeichnen wir dessen Highlights neu
+            if (selectedPaperId) highlightNode(selectedPaperId);
+            return;
+        }
         if (searchPapers.length > 0) {
             applySearchHighlight(searchPapers);
         } else if (authorQ) {
@@ -219,6 +241,7 @@
         graph.forEachNode((n) => {
             if (entryIds.has(n)) {
                 graph!.setNodeAttribute(n, "color", highlightColor);
+                graph!.setNodeAttribute(n, "size", 4);
             } else {
                 graph!.setNodeAttribute(n, "color", "rgba(255,255,255,0.08)");
             }
@@ -232,22 +255,30 @@
 
             // Size follows the same formula as regular nodes so proportions match.
             const cit = totalCitations(p);
-            const size = 2 + (maxCit > 0 ? (cit / maxCit) * 2 : 2);
+            const size = 3; //2 + (maxCit > 0 ? (cit / maxCit) * 6 : 2);
 
             // Prefer UMAP position; fall back to outward spiral around the graph.
             const hasUmap = p.tsne1 !== 0 || p.tsne2 !== 0;
+            console.log(
+                "applying search highlight for",
+                p.entry_id,
+                "has UMAP?",
+                hasUmap,
+            );
             const spiralAngle =
                 (papers.length + i) * Math.PI * (3 - Math.sqrt(5));
             const x = hasUmap
-                ? p.tsne1
+                ? p.tsne1 * COORD_SCALE
                 : 6 * Math.sqrt(papers.length + i + 1) * Math.cos(spiralAngle);
             const y = hasUmap
-                ? p.tsne2
+                ? p.tsne2 * COORD_SCALE
                 : 6 * Math.sqrt(papers.length + i + 1) * Math.sin(spiralAngle);
 
             graph.addNode(p.entry_id, {
                 x,
                 y,
+                x0: x,
+                y0: y,
                 size,
                 label: p.title,
                 color: highlightColor,
@@ -258,6 +289,7 @@
             searchAddedNodes.add(p.entry_id);
             addedCount++;
         }
+        console.log("search addedCount", addedCount);
 
         renderer.refresh();
     }
@@ -303,7 +335,7 @@
                 graph!.setNodeAttribute(
                     n,
                     "size",
-                    Math.max(graph!.getNodeAttribute(n, "size"), 4),
+                    Math.max(graph!.getNodeAttribute(n, "size"), 3),
                 );
             } else {
                 // Dim non-matching nodes
@@ -347,7 +379,7 @@
                         } else {
                             // Not in the graph yet - add it at a computed position
                             const hasUmap = raw.tsne1 || raw.tsne?.x;
-                            const x = hasUmap
+                            const rawTsneX = hasUmap
                                 ? (raw.tsne?.x ?? raw.tsne1 ?? 0)
                                 : 6 *
                                   Math.sqrt(papers.length + i + 1) *
@@ -356,7 +388,7 @@
                                           Math.PI *
                                           (3 - Math.sqrt(5)),
                                   );
-                            const y = hasUmap
+                            const rawTsneY = hasUmap
                                 ? (raw.tsne?.y ?? raw.tsne2 ?? 0)
                                 : 6 *
                                   Math.sqrt(papers.length + i + 1) *
@@ -365,6 +397,10 @@
                                           Math.PI *
                                           (3 - Math.sqrt(5)),
                                   );
+
+                            const x = rawTsneX * COORD_SCALE;
+                            const y = rawTsneY * COORD_SCALE;
+
                             const authors = Array.isArray(raw.authors)
                                 ? raw.authors.join(", ")
                                 : (raw.authors ?? "");
@@ -387,19 +423,21 @@
                                 non_arxiv_reference_count: Number(
                                     raw.non_arxiv_reference_count ?? 0,
                                 ),
-                                tsne1: x,
-                                tsne2: y,
+                                tsne1: rawTsneX,
+                                tsne2: rawTsneY,
                                 cluster: raw.categories ?? "U",
                             };
                             graph!.addNode(raw.entry_id, {
                                 x,
                                 y,
+                                x0: x,
+                                y0: y,
                                 // Size proportional to citations, same formula as regular nodes.
                                 size:
                                     2 +
                                     (maxCit > 0
                                         ? (totalCitations(newPaper) / maxCit) *
-                                          8
+                                          6
                                         : 2),
                                 label: raw.title ?? raw.entry_id,
                                 color: matchColor,
@@ -410,12 +448,12 @@
                             authorAddedNodes.add(raw.entry_id);
                         }
                     });
+                    console.log("author added", authorAddedNodes.size);
                 }
             } catch {
                 /* ignore network errors silently */
             }
         }
-
         renderer.refresh();
     }
 
@@ -429,26 +467,54 @@
         highlightNode(selectedPaperId);
     }
 
-    function highlightNode(nodeId: string) {
+    async function highlightNode(nodeId: string) {
         if (!graph || !renderer || !graph.hasNode(nodeId)) return;
+
+        // 1. Alle anderen Knoten dimmen und alte Kanten löschen
         graph.forEachNode((n) => {
             graph!.setNodeAttribute(n, "color", "rgba(255,255,255,0.08)");
         });
         graph.edges().forEach((e) => graph!.dropEdge(e));
 
+        // 2. Den Fokus-Knoten hervorheben
         graph.setNodeAttribute(nodeId, "color", "#00ff88");
-        const paper = paperCache.get(nodeId);
+
+        let paper = paperCache.get(nodeId);
+
+        // --- NEU: Zitationen nachladen, falls die Liste leer ist ---
+        if (
+            paper &&
+            paper.citations.length === 0 &&
+            (paper.non_arxiv_citation_count ?? 0) === 0
+        ) {
+            try {
+                const res = await fetch(
+                    `${apiBaseUrl}/papers/${encodeURIComponent(nodeId)}`,
+                );
+                if (res.ok) {
+                    const fullPaper = await res.json();
+                    paper.citations = fullPaper.citations || [];
+                    // Cache aktualisieren
+                    paperCache.set(nodeId, paper);
+                }
+            } catch (e) {
+                console.error("Graph: Failed to fetch citation details", e);
+            }
+        }
+
+        // 3. Kanten zu Zitationen zeichnen (falls diese im Graphen existieren)
         if (paper) {
             paper.citations.forEach((cid) => {
                 if (graph!.hasNode(cid)) {
                     graph!.setNodeAttribute(cid, "color", "#ffcc00");
                     graph!.addEdge(nodeId, cid, {
                         color: "rgba(255,255,255,0.3)",
-                        size: 0.8,
+                        size: 1.5, // Etwas dicker für bessere Sichtbarkeit
                     });
                 }
             });
         }
+
         selectedNode = nodeId;
         renderer.refresh();
     }
@@ -468,13 +534,18 @@
         papers.forEach((paper, i) => {
             // Use UMAP coordinates (tsne1/tsne2) when available, fallback to spiral
             const hasUmap = paper.tsne1 !== 0 || paper.tsne2 !== 0;
+            if (!hasUmap) {
+                console.warn(
+                    `Paper ${paper.entry_id} is missing UMAP coordinates, using fallback layout. Consider re-running t-SNE/UMAP preprocessing for better visualization.`,
+                );
+            }
             const x = hasUmap
-                ? paper.tsne1
+                ? paper.tsne1 * COORD_SCALE
                 : 6 *
                   Math.sqrt(i + 1) *
                   Math.cos(i * Math.PI * (3 - Math.sqrt(5)));
             const y = hasUmap
-                ? paper.tsne2
+                ? paper.tsne2 * COORD_SCALE
                 : 6 *
                   Math.sqrt(i + 1) *
                   Math.sin(i * Math.PI * (3 - Math.sqrt(5)));
@@ -490,6 +561,8 @@
             graph!.addNode(paper.entry_id, {
                 x,
                 y,
+                x0: x,
+                y0: y,
                 size,
                 label: paper.title,
                 color,
@@ -506,7 +579,7 @@
             renderEdgeLabels: false,
             defaultNodeType: "circle",
             defaultEdgeType: "line",
-            minCameraRatio: 0.08,
+            minCameraRatio: n >= 2500 ? 0.001 : 0.08,
             maxCameraRatio: 5,
             renderLabels: false,
             labelRenderedSizeThreshold: 8,

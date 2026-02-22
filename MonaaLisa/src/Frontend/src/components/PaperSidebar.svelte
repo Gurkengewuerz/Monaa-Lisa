@@ -5,12 +5,13 @@
 -->
 <script lang="ts">
     import { createEventDispatcher, onMount } from "svelte";
+    import { env as publicEnv } from "$env/dynamic/public";
     import type { Paper } from "$lib/types/paper";
     import { getSubcategoryName } from "../utils/arxivTaxonomy";
     import LoadingSpinner from "./LoadingSpinner.svelte";
 
     export let paper: Paper;
-    export let apiBaseUrl: string = "http://localhost:3000";
+    export let apiBaseUrl: string = publicEnv.PUBLIC_API_BASE_URL || "http://localhost:3000/";
     export let isOpen: boolean = false;
     export let isFavorite: boolean = false;
     /** When true (dashboard is open), the toggle button is blurred and non-interactive. */
