@@ -1,5 +1,6 @@
 <script lang="ts">
     let showAboutModal = false;
+    let lang = 'en'; // Standardmäßig auf Englisch
 </script>
 
 <div class="header">
@@ -26,19 +27,40 @@
                 on:click={() => (showAboutModal = false)}>×</button
             >
             <h2>About Us</h2>
-            <p>
-                MONAA-LISA ist eine Web-Anwendung zur hierarchischen Visualisierung von Open Access Literatur, die wissenschaftliche Recherchen
+            <div class="lang-switch">
+                <button class:active={lang === 'de'} on:click={() => lang = 'de'}>DE</button>
+                <button class:active={lang === 'en'} on:click={() => lang = 'en'}>EN</button>
+            </div>
+            <div class="content-area">
+                {#if lang === 'de'}
+                    <p>
+                        MONAA-LISA ist eine Web-Anwendung zur hierarchischen Visualisierung von Open Access Literatur, die wissenschaftliche Recherchen
                 intuitiver und strukturierter gestaltet. Entwickelt wurde das Projekt von Nico Bestek, Nick Wittkowski, Lenio Cabral-Rosario
-                und Bastian Rosinski im Rahmen des Softwarepraktikums 2025 an der Hochschule Bochum unter der Betreuung von Prof. Dr. Christian
+                und Bastian Rosinski im Rahmen des Softwarepraktikums 2025 an der <strong>Hochschule Bochum</strong> unter der Betreuung von Prof. Dr. Christian
                 Scheffer und Jonas Friemel.
-                
-            </p>
-            <p>
-                Ein ganz besonderer Dank gilt dabei <strong>Jonas Friemel</strong>, der uns das gesamte Jahr über als direkter Ansprechpartner
-                intensiv betreut hat. Er stand uns nicht nur jederzeit mit Rat und Tat zur Seite, sondern bewies auch in stressigen Phasen
-                ein sicheres Händchen. Gerade dann, wenn es im Projektverlauf einmal brenzlig wurde, hat er uns geholfen, stets einen kühlen
-                Kopf zu bewahren und einen guten Mittelweg zu finden.
-            </p>
+                    </p>
+                    <p>
+                        Ein ganz besonderer Dank gilt dabei <strong>Jonas Friemel</strong>, der uns das gesamte Jahr über als direkter Ansprechpartner intensiv betreut hat. Er stand uns jederzeit mit Rat und Tat zur Seite und half uns, auch in stressigen Phasen stets einen kühlen Kopf zu bewahren.
+                    </p>
+                {:else}
+                    <p>
+                        MONAA-LISA is a web application for the hierarchical visualization of Open Access literature, designed to make scientific research more intuitive and structured. The project was developed by Nico Bestek, Nick Wittkowski, Lenio Cabral-Rosario, and Bastian Rosinski as part of the 2025 Software Project at <strong>Bochum University of Applied Sciences</strong> under the supervision of Prof. Dr. Christian Scheffer and Jonas Friemel.
+                    </p>
+                    <p>
+                        Special thanks go to <strong>Jonas Friemel</strong>, who provided us with intensive support throughout the year as our direct contact person. He was always there to offer advice and assistance and helped us to keep a cool head even during stressful phases.
+                    </p>
+                {/if}
+            </div>
+            <hr class="modal-divider" />
+            <div class="modal-footer-license">
+                <p class="license-label">Licensed under AGPL v3</p>
+                <a href="https://github.com/Monaa-Lisa/Monaa-Lisa" target="_blank" rel="noopener noreferrer" class="github-link">
+                    <svg height="20" width="20" viewBox="0 0 16 16" fill="currentColor">
+                        <path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z"></path>
+                    </svg>
+                    Source Code on GitHub
+                </a>
+            </div>
         </div>
     </div>
 {/if}
@@ -192,5 +214,93 @@
     }
     .modal-close:hover {
         color: var(--text-primary, #f0f0f8);
+    }
+
+    /* Container für die Lizenz-Sektion im Modal */
+    .modal-footer-license {
+        margin-top: 20px;
+        display: flex;
+        flex-direction: column;
+        align-items: flex-start;
+        gap: 12px;
+    }
+
+    /* Die Trennlinie über dem GitHub-Link */
+    .modal-divider {
+        width: 100%;
+        border: none;
+        border-top: 1px solid rgba(255, 255, 255, 0.1);
+        margin-bottom: 5px;
+    }
+
+    /* Der Text "Licensed under AGPL v3" */
+    .license-label {
+        font-size: 12px;
+        color: var(--text-secondary, #a8a8c8);
+        opacity: 0.8;
+    }
+
+    /* Die optimierte GitHub-Link Klasse */
+    .github-link {
+        display: inline-flex;
+        align-items: center;
+        gap: 10px;
+        padding: 10px 18px;
+        background: rgba(147, 51, 234, 0.15); /* Dezentes Lila */
+        border: 1px solid rgba(147, 51, 234, 0.4);
+        border-radius: 8px;
+        color: #ffffff; /* Weiß für maximalen Kontrast */
+        text-decoration: none;
+        font-size: 14px;
+        font-weight: 600;
+        transition: all 0.25s ease;
+    }
+
+    /* Hover-Effekt für Interaktivität */
+    .github-link:hover {
+        background: rgba(147, 51, 234, 0.3);
+        border-color: #e839a0; /* Wechselt zu Pink beim Hover (passend zum Header-Gradient) */
+        transform: translateY(-2px);
+        box-shadow: 0 5px 15px rgba(147, 51, 234, 0.3);
+    }
+
+    /* Sorgt dafür, dass das Icon und Text perfekt auf einer Linie liegen */
+    .github-link svg {
+        flex-shrink: 0;
+        fill: currentColor; /* Verwendet die Textfarbe (#ffffff) auch für das Icon */
+    }
+
+    .modal-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        margin-bottom: 15px;
+    }
+
+    .lang-switch {
+        display: flex;
+        padding: 3px;
+        border-radius: 6px;
+    }
+
+    .lang-switch button {
+        background: none;
+        border: none;
+        color: var(--text-muted, #6b6b8d);
+        font-size: 11px;
+        font-weight: 700;
+        padding: 4px 8px;
+        cursor: pointer;
+        border-radius: 4px;
+        transition: all 0.2s ease;
+    }
+
+    .lang-switch button.active {
+        background: rgba(147, 51, 234, 0.3);
+        color: #fff;
+    }
+
+    .content-area {
+        min-height: 180px; /* Verhindert das Springen des Modals beim Umschalten */
     }
 </style>
