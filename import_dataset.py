@@ -307,7 +307,7 @@ def flush_links(conn, table: str, cols: list[str], rows: list[tuple]):
 # Main import loop
 # ---------------------------------------------------------------------------
 
-def import_dataset(filepath: str, batch_size: int = 5000):
+def import_dataset(filepath: str, batch_size: int = 20000):
     conn = get_connection()
     print(f"[db] Connected to {conn.dsn}")
     ensure_tables(conn)
@@ -459,8 +459,8 @@ if __name__ == "__main__":
     parser.add_argument(
         "--batch-size", "-b",
         type=int,
-        default=25000,
-        help="Number of papers per batch INSERT (default: 25000)",
+        default=20000,
+        help="Number of papers per batch INSERT (default: 20000)",
     )
     args = parser.parse_args()
 
