@@ -83,7 +83,7 @@ def main():
             sys.exit(1)
 
         dataset_path = get_dataset_path()
-        batch_size = cfg.get_int("semanticpaper", "import_batch_size", int(os.getenv("IMPORT_BATCH_SIZE", "5000")))
+        batch_size = cfg.get_int("semanticpaper", "import_batch_size", int(os.getenv("IMPORT_BATCH_SIZE", "20000")))
         logger.info(f"Importing dataset from {dataset_path} ...")
 
         if not run_import(dataset_path, batch_size):
