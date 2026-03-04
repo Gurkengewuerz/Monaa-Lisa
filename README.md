@@ -1,6 +1,7 @@
-![Logo](MonaaLisa/src/Frontend/src/assets/monaa_lisa_logo.png) (c) Nick
+<img src="MonaaLisa/src/Frontend/src/assets/monaa_lisa_logo.png" width="250" alt="MONAA-LISA Logo"> 
+
 # Monaa-Lisa
-Softwarepraktikum von Basti, Nick, Lenio und Nico
+**A tool for visualizing Open Access literature, developed as part of the 2025 Software Project at Hochschule Bochum (Bochum University of Applied Sciences).**
 
 ## Quickstart (Development)
 **Note:**
@@ -11,27 +12,22 @@ Softwarepraktikum von Basti, Nick, Lenio und Nico
    # Edit .env and set your own DB user, password, and database name - This has to be set otherwise nothing will run.
    ```
 
-2. **Start the development environment (VSCode Dev Container or Docker Compose):**
-   - **VSCode Dev Container:**
-     - Open the folder in VSCode and "Reopen in Container".
-   - **Docker Compose (manual):**
+2. **Start the development environment (Docker Compose):**
      ```sh
      docker-compose up --build
      ```
 
-3. **Access the app:**
+4. **Access the app:**
    - Frontend: http://localhost:5173
    - Database: localhost:5432 (Postgres)
 
-4. **Run SemanticPaper**
-    - In the VSCode Remote Dev container move into the correct directory:
-    ```sh
-    cd /app/MonaaLisa/src
-    ```
-    - Then run the main.py (starts fetching Papers)
-    ```sh
-    python3 main.py
-    ```
 
+## License
+
+Copyright (C) 2026 Nico Bestek, Bastian Rosinski, Lenio Cabral Rosario, Nick Wittkowski
+
+Unless otherwise stated, all files in this repository are licensed under the **GNU Affero General Public License v3 (AGPL-3.0)**. 
+
+See the [LICENSE](LICENSE) file for the full license text.
 
 
