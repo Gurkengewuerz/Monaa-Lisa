@@ -579,7 +579,7 @@
             renderEdgeLabels: false,
             defaultNodeType: "circle",
             defaultEdgeType: "line",
-            minCameraRatio: n >= 2500 ? 0.001 : 0.08,
+            minCameraRatio: n >= 1000 ? 0.001 : 0.08,
             maxCameraRatio: 5,
             renderLabels: false,
             labelRenderedSizeThreshold: 8,
