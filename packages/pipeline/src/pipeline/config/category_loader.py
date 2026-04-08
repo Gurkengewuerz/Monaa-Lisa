@@ -1,15 +1,18 @@
 import json
+import os
 import threading
 import time
-import os
 from pathlib import Path
 
-from util.logger import Logger
 from config import cfg
-
+from util.logger import Logger
 
 CONFIG_PATH = Path(
-    cfg.get("semanticpaper", "category_config_path", os.getenv("CATEGORY_CONFIG_PATH", str(Path(__file__).resolve().parents[2] / "categories.json")))
+    cfg.get(
+        "semanticpaper",
+        "category_config_path",
+        os.getenv("CATEGORY_CONFIG_PATH", str(Path(__file__).resolve().parents[2] / "categories.json")),
+    )
 )
 RELOAD_INTERVAL = cfg.get_int("semanticpaper", "reload_interval", int(os.getenv("RELOAD_INTERVAL", "60")))
 
@@ -25,6 +28,7 @@ class CategoryLoader:
     - reload_interval: Seconds between config reloads
     Returns: None
     """
+
     def __init__(self, config_path=CONFIG_PATH, reload_interval=RELOAD_INTERVAL):
         self.config_path = config_path
         self.reload_interval = reload_interval
@@ -42,10 +46,11 @@ class CategoryLoader:
     - None
     Returns: None
     """
+
     def load_config(self):
 
         try:
-            with open(self.config_path, 'r') as f:
+            with open(self.config_path) as f:
                 data = json.load(f)
             with self._lock:
                 old_set = set(self.semanticpaper_categories)
@@ -69,6 +74,7 @@ class CategoryLoader:
     - None
     Returns: None
     """
+
     def _watch_config(self):
         while True:
             time.sleep(self.reload_interval)
@@ -81,6 +87,7 @@ class CategoryLoader:
     - None
     Returns: List[str]
     """
+
     def get_semanticpaper_categories(self):
         with self._lock:
             return list(self.semanticpaper_categories)
@@ -96,5 +103,7 @@ Args:
 - None
 Returns: List[str]
 """
+
+
 def get_semanticpaper_categories():
     return _loader.get_semanticpaper_categories()

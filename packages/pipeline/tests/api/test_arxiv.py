@@ -1,5 +1,6 @@
-import pytest
 from unittest.mock import Mock, patch
+
+import pytest
 
 from pipeline.api.arxiv import ArxivAPI
 
@@ -7,9 +8,11 @@ from pipeline.api.arxiv import ArxivAPI
 @pytest.fixture
 def arxiv_api():
     """Creates an ArxivAPI instance with mocked external dependencies."""
-    with patch('pipeline.api.arxiv.RateLimiter'), \
-         patch('pipeline.api.arxiv.arx.Client'), \
-         patch('pipeline.api.arxiv.Logger'):
+    with (
+        patch("pipeline.api.arxiv.RateLimiter"),
+        patch("pipeline.api.arxiv.arx.Client"),
+        patch("pipeline.api.arxiv.Logger"),
+    ):
         api = ArxivAPI()
         api.rate_limiter = Mock()
         api.client = Mock()
@@ -21,7 +24,7 @@ class TestFetchLatestPaper:
     """Tests the conditional logic in fetch_latest_paper()."""
 
     # patch the Search class used in fetch_latest_paper to control its behavior
-    @patch('pipeline.api.arxiv.arx.Search')
+    @patch("pipeline.api.arxiv.arx.Search")
     def test_returns_none_when_api_returns_empty_results(self, mock_search, arxiv_api):
         """
         Tests the branch: if results: ... else return None
@@ -40,7 +43,7 @@ class TestFetchLatestPaper:
 class TestFetchPapers:
     """Tests conditional logic and edge cases in fetch_papers()."""
 
-    @patch('pipeline.api.arxiv.arx.Search')
+    @patch("pipeline.api.arxiv.arx.Search")
     def test_returns_empty_list_when_no_results(self, mock_search, arxiv_api):
         """
         Verifies empty iterator handling.
@@ -55,9 +58,8 @@ class TestFetchPapers:
         assert result == []
         assert isinstance(result, list)
 
-
-    @patch('pipeline.api.arxiv.Paper')
-    @patch('pipeline.api.arxiv.arx.Search')
+    @patch("pipeline.api.arxiv.Paper")
+    @patch("pipeline.api.arxiv.arx.Search")
     def test_handles_none_in_results_without_crashing(self, mock_search, mock_paper, arxiv_api):
         """
         Tests: if result: ... else: papers.append(None)
@@ -83,7 +85,7 @@ class TestFetchPapers:
 class TestFetchPapersByIds:
     """Tests fetch_papers_by_ids() specific logic."""
 
-    @patch('pipeline.api.arxiv.arx.Search')
+    @patch("pipeline.api.arxiv.arx.Search")
     def test_handles_empty_id_list(self, mock_search, arxiv_api):
         """
         Edge case: empty ID list should return empty list, not error.
@@ -103,8 +105,8 @@ class TestFetchHistoricalBatch:
     Tests pagination logic in fetch_historical_batch().
     """
 
-    @patch('pipeline.api.arxiv.Paper')
-    @patch('pipeline.api.arxiv.arx.Search')
+    @patch("pipeline.api.arxiv.Paper")
+    @patch("pipeline.api.arxiv.arx.Search")
     def test_has_more_true_when_batch_is_full(self, mock_search, mock_paper, arxiv_api):
         """
         Tests: has_more = len(papers) == batch_size
@@ -121,8 +123,8 @@ class TestFetchHistoricalBatch:
         assert len(papers) == 5
         assert has_more is True
 
-    @patch('pipeline.api.arxiv.Paper')
-    @patch('pipeline.api.arxiv.arx.Search')
+    @patch("pipeline.api.arxiv.Paper")
+    @patch("pipeline.api.arxiv.arx.Search")
     def test_has_more_false_when_batch_is_partial(self, mock_search, mock_paper, arxiv_api):
         """
         Tests: has_more = len(papers) == batch_size (False case)
@@ -140,7 +142,7 @@ class TestFetchHistoricalBatch:
         assert len(papers) == 2
         assert has_more is False
 
-    @patch('pipeline.api.arxiv.arx.Search')
+    @patch("pipeline.api.arxiv.arx.Search")
     def test_returns_empty_when_offset_exceeds_available_results(self, mock_search, arxiv_api):
         """
         Tests the StopIteration handling in the skip loop.
@@ -155,7 +157,7 @@ class TestFetchHistoricalBatch:
         assert papers == []
         assert has_more is False
 
-    @patch('pipeline.api.arxiv.arx.Search')
+    @patch("pipeline.api.arxiv.arx.Search")
     def test_catches_api_exceptions_and_returns_safe_defaults(self, mock_search, arxiv_api):
         """
         Tests: except Exception as e: return [], False
@@ -172,8 +174,8 @@ class TestFetchHistoricalBatch:
         assert has_more is False
         arxiv_api.logger.error.assert_called_once()
 
-    @patch('pipeline.api.arxiv.Paper')
-    @patch('pipeline.api.arxiv.arx.Search')
+    @patch("pipeline.api.arxiv.Paper")
+    @patch("pipeline.api.arxiv.arx.Search")
     def test_skip_logic_processes_correct_results(self, mock_search, mock_paper, arxiv_api):
         """
         Tests the skip loop: while skipped < start_offset: next(results_iter)

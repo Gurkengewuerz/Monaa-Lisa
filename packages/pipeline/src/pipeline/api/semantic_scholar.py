@@ -1,22 +1,21 @@
 import asyncio
 import time
-from typing import Tuple
 
 import requests
 import semanticscholar.Paper as SemanticScholarPaper
 from semanticscholar import AsyncSemanticScholar
 
-from pipeline.api.arxiv import ArxivAPI
 from models.paper import Paper
+from pipeline.api.arxiv import ArxivAPI
 from util.logger import Logger
-
 
 """
 27-December-2025 - Lenio
 Abstract: A client for interacting with the Semantic Scholar API.
 """
-class SemanticScholarAPI:
 
+
+class SemanticScholarAPI:
     """
     27-December-2025 - Lenio
     Initializes the Semantic Scholar API client.
@@ -24,6 +23,7 @@ class SemanticScholarAPI:
         api_key (str | None): Optional API key for authenticated requests.
     Note: Without an API key, the client will operate in unauthenticated mode with limited rate limits.
     """
+
     def __init__(self, api_key: str | None = None):
         self.client = AsyncSemanticScholar(api_key=api_key)
         self.api_key = api_key
@@ -41,6 +41,7 @@ class SemanticScholarAPI:
     Returns:
         Paper: The fetched paper object.
     """
+
     def fetch_paper(self, semantic_scholar_id: str) -> Paper:
         async def fetch_semantic_scholar_paper(paper_id: str):
             return await self.client.get_paper(paper_id)
@@ -58,7 +59,8 @@ class SemanticScholarAPI:
             - A list of Paper objects for citations found on arXiv.
             - A list of SemanticScholarPaper objects for citations not found on arXiv.
     """
-    def fetch_citations(self, p_paper: Paper, arxiv_client: ArxivAPI) -> Tuple[list[Paper], list[SemanticScholarPaper]]:
+
+    def fetch_citations(self, p_paper: Paper, arxiv_client: ArxivAPI) -> tuple[list[Paper], list[SemanticScholarPaper]]:
         async def get_citations(paper_obj: Paper):
             entry_id = paper_obj.entry_id or ""
             parts = entry_id.split("/")
@@ -92,7 +94,6 @@ class SemanticScholarAPI:
             citations_on_arxiv = []
         return (citations_on_arxiv, citations_not_present)
 
-
     """
     27-December-2025 - Lenio
     Fetches references for a given paper from Semantic Scholar.
@@ -104,7 +105,10 @@ class SemanticScholarAPI:
             - A list of Paper objects for references found on arXiv.
             - A list of SemanticScholarPaper objects for references not found on arXiv.
     """
-    def fetch_references(self, p_paper: Paper, arxiv_client: ArxivAPI) -> Tuple[list[Paper], list[SemanticScholarPaper]]:
+
+    def fetch_references(
+        self, p_paper: Paper, arxiv_client: ArxivAPI
+    ) -> tuple[list[Paper], list[SemanticScholarPaper]]:
         async def get_references(paper_obj: Paper):
             entry_id = paper_obj.entry_id or ""
             parts = entry_id.split("/")
@@ -138,7 +142,6 @@ class SemanticScholarAPI:
             references_on_arxiv = []
         return (references_on_arxiv, references_not_present)
 
-
     # ------------------------------------------------------------------
     # Batch API methods – Feb 2026 – Basti
     # ------------------------------------------------------------------
@@ -162,14 +165,13 @@ class SemanticScholarAPI:
             ``reference_arxiv_ids``, ``non_arxiv_citation_count``, ``non_arxiv_reference_count``
         not_found: list[str] – arXiv IDs that returned null (not on SemanticScholar)
     """
+
     def fetch_batch(
         self,
         arxiv_ids: list[str],
         batch_size: int = 400,
         pause_seconds: float = 1.0,
     ) -> tuple[list[dict], list[str]]:
-        
-
 
         url = "https://api.semanticscholar.org/graph/v1/paper/batch"
         fields = "externalIds,embedding.specter_v2,citations.externalIds,references.externalIds"
@@ -182,7 +184,7 @@ class SemanticScholarAPI:
 
         # iteriert durch die arxiv ids in batches, um die API zu schonen
         for start in range(0, len(arxiv_ids), batch_size):
-            chunk = arxiv_ids[start:start + batch_size]
+            chunk = arxiv_ids[start : start + batch_size]
             payload = {"ids": [f"ARXIV:{aid}" for aid in chunk]}
 
             try:
@@ -194,11 +196,10 @@ class SemanticScholarAPI:
                     headers=headers,
                     timeout=120,
                 )
-                
+
                 resp.raise_for_status()
                 results = resp.json()
             except Exception as e:
-
                 self.logger.error(f"SemanticScholar batch request failed: {e}")
                 not_found.extend(chunk)
                 continue
@@ -220,7 +221,7 @@ class SemanticScholarAPI:
                 # citation arXiv IDs extrahieren
                 citation_arxiv_ids = []
                 non_arxiv_citation_count = 0
-                for cit in (item.get("citations") or []):
+                for cit in item.get("citations") or []:
                     ext = (cit or {}).get("externalIds") or {}
                     cit_arxiv = ext.get("ArXiv")
                     if cit_arxiv:
@@ -231,7 +232,7 @@ class SemanticScholarAPI:
                 # reference arXiv IDs extrahieren
                 reference_arxiv_ids = []
                 non_arxiv_reference_count = 0
-                for ref in (item.get("references") or []):
+                for ref in item.get("references") or []:
                     ext = (ref or {}).get("externalIds") or {}
                     ref_arxiv = ext.get("ArXiv")
                     if ref_arxiv:
@@ -241,30 +242,29 @@ class SemanticScholarAPI:
 
                 # nur paper mit gültigem embedding zurückgeben, damit caller sie direkt in embedding-tabelle speichern kann – paper ohne embedding (z.B. weil S2 sie kennt aber noch nicht verarbeitet hat) werden wie unbekannte paper behandelt und in not_found gesammelt
                 if vector_768 is None:
-                    
                     if arxiv_id:
                         not_found.append(arxiv_id)
                     continue
                     # zum schluss alle gefundenen paper mit embedding und extrahierten citation/reference arXiv IDs zurückgeben
-                found.append({
-                    "arxiv_id": arxiv_id,
-                    "s2_id": s2_id,
-                    "embedding_768d": vector_768,
-                    "citation_arxiv_ids": citation_arxiv_ids,
-                    "reference_arxiv_ids": reference_arxiv_ids,
-                    "non_arxiv_citation_count": non_arxiv_citation_count,
-                    "non_arxiv_reference_count": non_arxiv_reference_count,
-                })
+                found.append(
+                    {
+                        "arxiv_id": arxiv_id,
+                        "s2_id": s2_id,
+                        "embedding_768d": vector_768,
+                        "citation_arxiv_ids": citation_arxiv_ids,
+                        "reference_arxiv_ids": reference_arxiv_ids,
+                        "non_arxiv_citation_count": non_arxiv_citation_count,
+                        "non_arxiv_reference_count": non_arxiv_reference_count,
+                    }
+                )
 
             self.logger.info(
-                f"Batch {start // batch_size + 1}: "
-                f"{len(chunk)} requested, {len([r for r in results if r])} returned"
+                f"Batch {start // batch_size + 1}: {len(chunk)} requested, {len([r for r in results if r])} returned"
             )
             if start + batch_size < len(arxiv_ids):
                 time.sleep(pause_seconds)
 
         self.logger.info(
-            f"Batch fetch complete: {len(found)} found, {len(not_found)} not found "
-            f"out of {len(arxiv_ids)} total"
+            f"Batch fetch complete: {len(found)} found, {len(not_found)} not found out of {len(arxiv_ids)} total"
         )
         return found, not_found

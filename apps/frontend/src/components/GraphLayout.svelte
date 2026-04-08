@@ -706,6 +706,12 @@
         }
     }
 
+    function retryLoadCurrentPapers() {
+        if (view.level === "papers") {
+            loadPapers(view.categoryId);
+        }
+    }
+
     /**
      * Load a sample of papers for the sidebar in top / sub cluster views.
      * @param level  'top' or 'sub'
@@ -1045,7 +1051,7 @@
                 {:else if error}
                     <div class="status-card error">
                         <p>{error}</p>
-                        <button on:click={() => loadPapers(view.categoryId)}
+                        <button on:click={retryLoadCurrentPapers}
                             >Erneut versuchen</button
                         >
                     </div>
@@ -1109,8 +1115,7 @@
                 isOpen={sidebarOpen}
                 {dashboardOpen}
                 {selectedPaperId}
-                categoryFilter={view.level === "papers" ||
-                view.level === "detail"
+                                categoryFilter={view.level === "papers"
                     ? view.categoryId
                     : view.level === "sub"
                       ? (CLUSTER_CAT_PREFIX[(view as any).parentId] ?? "")
@@ -1133,6 +1138,7 @@
         on:click|self={cancelGroupPicker}
         role="dialog"
         aria-modal="true"
+        tabindex="-1"
     >
         <div class="picker-modal">
             <h3 class="picker-heading">Add to Favorites</h3>
@@ -1563,9 +1569,6 @@
     }
     .picker-group-item:hover {
         background: rgba(255, 255, 255, 0.05);
-    }
-
-    .picker-new-group {
     }
 
     .picker-group-input {

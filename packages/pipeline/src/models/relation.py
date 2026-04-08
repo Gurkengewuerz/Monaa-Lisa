@@ -1,7 +1,6 @@
 from dataclasses import dataclass
+
 from database.db_models import DBPaperRelation
-
-
 
 """
 20-August-2025 - Lenio
@@ -12,12 +11,13 @@ Variables:
 - confidence: float -> A float representing the confidence level of the relation
 Suggestion for later: Consider adding more fields like relation type, context, etc. for better relation
 """
+
+
 @dataclass
 class Relation:
     source_id: str
     target_id: str
     confidence: float
-
 
     """
     20-August-2025 - Lenio
@@ -25,10 +25,6 @@ class Relation:
     Args: DBPaperRelation: SQLAlchemy model class for the paper.
     Returns: DBPaper -> An instance of the SQLAlchemy model with the paper's data.
     """
-    def to_db_model(self):
-        return DBPaperRelation(
-            source_id=self.source_id,
-            target_id=self.target_id,
-            confidence=self.confidence
-        )
 
+    def to_db_model(self):
+        return DBPaperRelation(source_id=self.source_id, target_id=self.target_id, confidence=self.confidence)

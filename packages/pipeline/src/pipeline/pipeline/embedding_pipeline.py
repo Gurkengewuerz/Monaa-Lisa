@@ -5,8 +5,8 @@ from pathlib import Path
 import joblib
 import numpy as np
 
-from util.logger import Logger
 from config import cfg
+from util.logger import Logger
 
 logger = Logger("EmbeddingPipeline")
 
@@ -20,12 +20,12 @@ def _get_available_memory_gb() -> float | None:
     Works on Linux (including Docker/WSL) by reading /proc/meminfo.
     """
     try:
-        with open("/proc/meminfo", "r") as f:
+        with open("/proc/meminfo") as f:
             for line in f:
                 if line.startswith("MemAvailable:"):
                     # Zeilenformat: "MemAvailable:   12345678 kB"
                     kb = int(line.split()[1])
-                    return kb / (1024 * 1024) 
+                    return kb / (1024 * 1024)
     except (FileNotFoundError, PermissionError, ValueError):
         pass
     return None
@@ -42,14 +42,16 @@ def _log_memory_status(context: str = ""):
         else:
             logger.debug(msg)
 
+
 """
 Abstract: Loads pre-trained PCA and UMAP models and exposes methods to
     reduce raw SemanticScholar SPECTER v2 embeddings (768-D) into
     128-D representations stored in the DB, and further project them
     to 2-D coordinates for frontend visualisation.
 """
-class EmbeddingPipeline:
 
+
+class EmbeddingPipeline:
     def __init__(self, pca_model_path: str | Path | None = None, umap_model_path: str | Path | None = None):
         """
         Args:
@@ -59,12 +61,14 @@ class EmbeddingPipeline:
         """
         if pca_model_path is None:
             pca_model_path = cfg.get(
-                "semanticpaper", "pca_model_path",
+                "semanticpaper",
+                "pca_model_path",
                 os.getenv("PCA_MODEL_PATH", "/app/data/models/pca_model_128d.pkl"),
             )
         if umap_model_path is None:
             umap_model_path = cfg.get(
-                "semanticpaper", "umap_model_path",
+                "semanticpaper",
+                "umap_model_path",
                 os.getenv("UMAP_MODEL_PATH", "/app/data/models/umap_model_2d.pkl"),
             )
 
@@ -92,7 +96,7 @@ class EmbeddingPipeline:
         _log_memory_status("Before UMAP load")
 
         logger.info(f"Loading UMAP model from {self._umap_path} ...")
-        umap_size_gb = self._umap_path.stat().st_size / (1024 ** 3)
+        umap_size_gb = self._umap_path.stat().st_size / (1024**3)
 
         # Vorab-Check: Warnung, wenn verfügbarer Speicher kritisch niedrig ist
         avail_gb = _get_available_memory_gb()

@@ -1,6 +1,7 @@
-import pytest
 import time
 from concurrent.futures import ThreadPoolExecutor
+
+import pytest
 
 from pipeline.api.rate_limiter import RateLimiter
 
@@ -135,4 +136,3 @@ class TestThreadSafety:
         total_wait = sum(call_times)
         # At least 4 calls had to wait (first one doesn't)
         assert total_wait >= 0.35  # ~4 * 0.1s with some tolerance
-

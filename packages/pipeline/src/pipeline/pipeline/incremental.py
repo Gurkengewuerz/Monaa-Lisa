@@ -11,11 +11,11 @@ Abstract: Implements the incremental update pipeline that keeps the database
         citations, and references.
     5.  For papers with embeddings:
         -> PCA 768
-        -> 128-D  
+        -> 128-D
         -> UMAP 128
-        -> 2-D  
+        -> 2-D
         -> save to ``paper`` + ``embedding``.
-    6.  Papers without SemanticScholar data 
+    6.  Papers without SemanticScholar data
         -> ``uncaught_paper`` table.
     7.  Periodically retry uncaught papers; drop after max retries.
         The pipeline is designed to run as a scheduled job (default: monthly)
@@ -24,26 +24,26 @@ Abstract: Implements the incremental update pipeline that keeps the database
 
 import os
 import time
-from datetime import datetime, timedelta
+from datetime import datetime
 
 import arxiv as arx
 
 from config import cfg
-from util.logger import Logger
-from pipeline.api.semantic_scholar import SemanticScholarAPI
-from pipeline.api.arxiv import ArxivAPI
-from pipeline.pipeline.embedding_pipeline import EmbeddingPipeline
 from database.db import (
+    delete_uncaught_paper,
     get_newest_paper_date,
-    paper_exists_by_id,
-    save_processed_paper,
-    save_uncaught_paper,
+    get_paper_count,
     get_uncaught_papers_due,
     increment_uncaught_retry,
-    delete_uncaught_paper,
+    paper_exists_by_id,
     purge_expired_uncaught,
-    get_paper_count,
+    save_processed_paper,
+    save_uncaught_paper,
 )
+from pipeline.api.arxiv import ArxivAPI
+from pipeline.api.semantic_scholar import SemanticScholarAPI
+from pipeline.pipeline.embedding_pipeline import EmbeddingPipeline
+from util.logger import Logger
 
 logger = Logger("IncrementalPipeline")
 
@@ -53,8 +53,7 @@ logger = Logger("IncrementalPipeline")
 # ------------------------------------------------------------------
 
 
-def _fetch_new_arxiv_papers(arxiv_client: ArxivAPI, since: datetime,
-                            max_results: int | None = None) -> list:
+def _fetch_new_arxiv_papers(arxiv_client: ArxivAPI, since: datetime, max_results: int | None = None) -> list:
     """
     Abstract: Fetches papers from arXiv submitted after ``since``.
         Returns a list of ``arxiv.Result`` objects (not our Paper dataclass)
@@ -105,7 +104,6 @@ def _normalize_entry_id(entry_id_or_url: str) -> str:
     return eid
 
 
-
 def run_incremental_update(
     arxiv_client: ArxivAPI,
     s2_client: SemanticScholarAPI,
@@ -154,10 +152,7 @@ def run_incremental_update(
     # 3. Batch-Abfrage bei SemanticScholar
     arxiv_ids = [eid for eid, _ in new_papers]
     # Lade die Batch-Größe aus der Konfiguration oder nutze den Standardwert 400
-    s2_batch_size = cfg.get_int(
-        "semanticpaper", "s2_batch_size",
-        int(os.getenv("S2_BATCH_SIZE", "400"))
-    )
+    s2_batch_size = cfg.get_int("semanticpaper", "s2_batch_size", int(os.getenv("S2_BATCH_SIZE", "400")))
     found, not_found = s2_client.fetch_batch(arxiv_ids, batch_size=s2_batch_size)
 
     # Erstelle Lookup-Map für arXiv-Ergebnis-Metadaten, um später darauf zugreifen zu können
@@ -245,15 +240,16 @@ def run_incremental_update(
         f"DB total: {paper_count_before} -> {paper_count_after}"
     )
 
+
 def retry_uncaught_papers(
     s2_client: SemanticScholarAPI,
-    pipeline: EmbeddingPipeline, ):
+    pipeline: EmbeddingPipeline,
+):
 
-    # Diese Funktion wird in regelmäßigen Intervallen ausgeführt, um "uncaught papers" erneut abzufragen, 
+    # Diese Funktion wird in regelmäßigen Intervallen ausgeführt, um "uncaught papers" erneut abzufragen,
     # die zuvor nicht in SemanticScholar gefunden wurden.
     retry_interval = cfg.get_int(
-        "semanticpaper", "uncaught_retry_interval_days",
-        int(os.getenv("UNCAUGHT_RETRY_INTERVAL_DAYS", "14"))
+        "semanticpaper", "uncaught_retry_interval_days", int(os.getenv("UNCAUGHT_RETRY_INTERVAL_DAYS", "14"))
     )
 
     logger.info(f"=== Uncaught paper retry (interval: {retry_interval}d) ===")
@@ -269,10 +265,7 @@ def retry_uncaught_papers(
     logger.info(f"{len(due)} uncaught papers due for retry")
 
     arxiv_ids = [p.entry_id for p in due]
-    s2_batch_size = cfg.get_int(
-        "semanticpaper", "s2_batch_size",
-        int(os.getenv("S2_BATCH_SIZE", "400"))
-    )
+    s2_batch_size = cfg.get_int("semanticpaper", "s2_batch_size", int(os.getenv("S2_BATCH_SIZE", "400")))
     found, not_found = s2_client.fetch_batch(arxiv_ids, batch_size=s2_batch_size)
 
     # Erstelle eine Map für schnellen Zugriff auf die uncaught papers anhand ihrer ID
@@ -287,7 +280,7 @@ def retry_uncaught_papers(
         for item, (emb_128_list, (x, y)) in zip(found, batch_results):  # noqa: B905
             arxiv_id = item["arxiv_id"]
             uncaught = uncaught_map.get(arxiv_id)
-    
+
             ok = save_processed_paper(
                 entry_id=arxiv_id,
                 title=uncaught.title if uncaught else "[Unknown]",
@@ -319,7 +312,4 @@ def retry_uncaught_papers(
     # Bereinige abgelaufene Paper erneut nach den Erhöhungen
     purge_expired_uncaught()
 
-    logger.info(
-        f"=== Uncaught retry complete: rescued={rescued_count}, "
-        f"still missing={still_missing} ==="
-    )
+    logger.info(f"=== Uncaught retry complete: rescued={rescued_count}, still missing={still_missing} ===")

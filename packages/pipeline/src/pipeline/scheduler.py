@@ -1,33 +1,35 @@
-import os
-from datetime import datetime
-from apscheduler.schedulers.background import BackgroundScheduler
-from database.db import db_base, engine
-
-from pipeline.api.arxiv import ArxivAPI
-from config import cfg
-from util.logger import Logger
-from pipeline.config.category_loader import get_semanticpaper_categories
-from database.db import (
-    create_program_run,
-    is_category_historically_completed,
-    mark_category_historically_completed,
-    ensure_historical_start,
-    update_historical_progress,
-    set_active_program_run,
-    program_run_exists,
-)
-import threading
-import queue
 import json
+import os
+import queue
+import threading
+from datetime import datetime
 from pathlib import Path
 
+from apscheduler.schedulers.background import BackgroundScheduler
+
+from config import cfg
+from database.db import (
+    create_program_run,
+    db_base,
+    engine,
+    ensure_historical_start,
+    is_category_historically_completed,
+    mark_category_historically_completed,
+    program_run_exists,
+    set_active_program_run,
+    update_historical_progress,
+)
+from pipeline.api.arxiv import ArxivAPI
+from pipeline.config.category_loader import get_semanticpaper_categories
+from util.logger import Logger
 
 """
 30-September-2025 - Lenio
 Refactored from scheduler.py coded by Basti on 13-August-2025
 """
-class Scheduler:
 
+
+class Scheduler:
     def __init__(self, arxiv_client: ArxivAPI):
         self._arxiv_client = arxiv_client
         self.logger = Logger("Scheduler")
@@ -39,13 +41,9 @@ class Scheduler:
         self.HISTORICAL_FETCH_INTERVAL_SECONDS = cfg.get_int(
             "semanticpaper",
             "historical_fetch_interval_seconds",
-            int(os.getenv("HISTORICAL_FETCH_INTERVAL_SECONDS", "60"))
+            int(os.getenv("HISTORICAL_FETCH_INTERVAL_SECONDS", "60")),
         )
-        self.QUEUE_MAX_SIZE = cfg.get_int(
-            "semanticpaper",
-            "queue_max_size",
-            int(os.getenv("QUEUE_MAX_SIZE", "200"))
-        )
+        self.QUEUE_MAX_SIZE = cfg.get_int("semanticpaper", "queue_max_size", int(os.getenv("QUEUE_MAX_SIZE", "200")))
         # Initialize bounded queue now that QUEUE_MAX_SIZE is defined
         self.paper_queue = queue.Queue(maxsize=self.QUEUE_MAX_SIZE)
         # for now save the historical state to disk, easier and quicker than to save to the db
@@ -57,11 +55,11 @@ class Scheduler:
         self._state_dirty = False
         self._load_historical_state()
 
-
     """
     12-November-2025 - Basti
     Abstract: Attempts to enqueue a paper without blocking; returns False if the queue is full.
     """
+
     def _enqueue_paper(self, paper) -> bool:
         if paper is None:
             return False
@@ -70,17 +68,15 @@ class Scheduler:
             return True
         except queue.Full:
             title = getattr(paper, "title", "Unknown Title")
-            self.logger.warning(
-                f"Paper queue capacity ({self.QUEUE_MAX_SIZE}) reached; dropping '{title}'"
-            )
+            self.logger.warning(f"Paper queue capacity ({self.QUEUE_MAX_SIZE}) reached; dropping '{title}'")
             return False
-
 
     """
     30-September-2025 - Lenio
     Abstract: Checks whether the scheduler is running
     Returns: bool indicating if the scheduler is running
     """
+
     def is_running(self) -> bool:
         return self._current_program_run_id is not None
 
@@ -91,6 +87,7 @@ class Scheduler:
     - None
     Returns: None
     """
+
     def daily_fetch(self):
         categories = get_semanticpaper_categories()
         self.logger.info(f"Fetching newest paper for categories: {categories}")
@@ -100,10 +97,7 @@ class Scheduler:
             for paper in papers:
                 if paper:
                     if not self._enqueue_paper(paper):
-                        self.logger.info(
-                            "Skipped enqueuing newest paper for %s because the queue is full",
-                            cat
-                        )
+                        self.logger.info("Skipped enqueuing newest paper for %s because the queue is full", cat)
                         break
                     self.logger.info(f"Enqueued paper: {paper.title}")
 
@@ -114,6 +108,7 @@ class Scheduler:
     - None
     Returns: None
     """
+
     def historical_fetch(self):
         with self.scheduler_lock:
             if self.historical_fetch_state["running"]:
@@ -182,7 +177,7 @@ class Scheduler:
                     self._state_dirty = True
                 self._persist_historical_state()
         except Exception as e:
-             self.logger.error(f"Error in historical_fetch: {e}")
+            self.logger.error(f"Error in historical_fetch: {e}")
         finally:
             with self.scheduler_lock:
                 self.historical_fetch_state["running"] = False
@@ -195,14 +190,15 @@ class Scheduler:
     - None
     Returns: BackgroundScheduler
     """
+
     def start_scheduler(self):
         if BackgroundScheduler is None:
             self.logger.error("Cannot start scheduler: APScheduler missing")
             return None
         db_base.metadata.create_all(bind=engine)
         #  Try to reuse existing program run if possible
-        #  this is done by checking if the stored ID exists 
-        # 
+        #  this is done by checking if the stored ID exists
+        #
         if self._current_program_run_id and program_run_exists(self._current_program_run_id):
             if not set_active_program_run(self._current_program_run_id):
                 self.logger.warning(
@@ -221,14 +217,14 @@ class Scheduler:
         scheduler = BackgroundScheduler()
         # Schedule daily_fetch at 0,6,12,18
         for hr in [0, 6, 12, 18]:
-            scheduler.add_job(self.daily_fetch, 'cron', hour=hr, minute=0, id=f"daily_fetch_{hr}")
+            scheduler.add_job(self.daily_fetch, "cron", hour=hr, minute=0, id=f"daily_fetch_{hr}")
         # Schedule historical_fetch  start now
         scheduler.add_job(
             self.historical_fetch,
-            'interval',
+            "interval",
             seconds=self.HISTORICAL_FETCH_INTERVAL_SECONDS,
             next_run_time=datetime.now(),
-            id='historical_fetch'
+            id="historical_fetch",
         )
         scheduler.start()
         self.logger.info(f"Scheduler started (run ID {self._current_program_run_id})")
@@ -242,6 +238,7 @@ class Scheduler:
     Args: None
     Returns: None
     """
+
     def _load_historical_state(self):
         if not self.state_path.exists():
             return
@@ -250,10 +247,10 @@ class Scheduler:
             with self.state_path.open("r", encoding="utf-8") as handle:
                 data = json.load(handle)
         except Exception as exc:
-            # fall back 
+            # fall back
             self.logger.warning(f"Failed to load historical state: {exc}")
             return
-    # retrieve offsets/positions where we last stopped
+        # retrieve offsets/positions where we last stopped
         offsets = data.get("offsets", {})
         if isinstance(offsets, dict):
             restored = 0
@@ -270,7 +267,7 @@ class Scheduler:
                 self.historical_fetch_state["running"] = False
             if restored:
                 self.logger.info(f"Restored historical offsets for {restored} categories")
-        # retrieve program run ID 
+        # retrieve program run ID
         program_run_id = data.get("program_run_id")
 
         if isinstance(program_run_id, int):
@@ -295,6 +292,7 @@ class Scheduler:
     - force: bool = False -> Whether to force persistence even if not dirty
     Returns: None   
     """
+
     def _persist_historical_state(self, force: bool = False):
         if not force and not self._state_dirty:
             return

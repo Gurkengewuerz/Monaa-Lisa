@@ -5,39 +5,38 @@ import tempfile
 import textwrap
 from dataclasses import dataclass, field
 from datetime import datetime
-import arxiv as arx
-from typing import List, Optional, Dict
 
+import arxiv as arx
 import requests
 
 from models.citation import Citation
-
 from models.paper_citation import PaperCitation
 from models.paper_reference import PaperReference
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(__file__))))
-from database.db_models import DBPaper
-from util.logger import Logger
-from models.reference import Reference
-from models.embedding import Embedding
 from lxml import etree
+
+from database.db_models import DBPaper
+from models.embedding import Embedding
+from models.reference import Reference
+from util.logger import Logger
 
 
 @dataclass
 class Paper:
     entry_id: str
     title: str
-    authors: List[str]
+    authors: list[str]
     abstract: str
     published: datetime
     url: str
-    categories: Optional[str] = None
+    categories: str | None = None
     references: list[Reference | PaperReference] = field(default_factory=list)
     citations: list[Citation | PaperCitation] = field(default_factory=list)
-    tsne: Optional[Dict] = None
-    embedding: Optional[Embedding] = None
-    _grobid_xml: Optional[str] = None
-    _paper_txt: Optional[str] = None
+    tsne: dict | None = None
+    embedding: Embedding | None = None
+    _grobid_xml: str | None = None
+    _paper_txt: str | None = None
     _paper_logger = None
     _grobid_logger = None
 
@@ -59,6 +58,7 @@ class Paper:
     Args: arvix_result: arxiv.Result -> Arxiv result object containing paper metadata.
     Returns: Paper -> A Paper object with metadata from the arXiv result.
     """
+
     @classmethod
     def from_arxiv(cls, arxiv_result: arx.Result):
         entry_id = arxiv_result.entry_id.replace("http://arxiv.org/", "")
@@ -70,10 +70,10 @@ class Paper:
         return cls(
             entry_id=entry_id,  # Remove base URL
             title=arxiv_result.title,
-            authors=[str(a) for a in arxiv_result.authors], # TODO # Normalize authors as objects
+            authors=[str(a) for a in arxiv_result.authors],  # TODO # Normalize authors as objects
             abstract=arxiv_result.summary,
             published=arxiv_result.published,
-            url=pdf_url
+            url=pdf_url,
         )
 
     """
@@ -82,6 +82,7 @@ class Paper:
     Args: DBPaper: SQLAlchemy model class for the paper.
     Returns: DBPaper -> An instance of the SQLAlchemy model with the paper's data.
     """
+
     def to_db_model(self):
         return DBPaper(
             entry_id=self.entry_id,
@@ -94,15 +95,14 @@ class Paper:
             url=self.url,
         )
 
-
     """
     31-July-2025 - Lenio
     Abstract: Returns paper text if processed
     Returns: Optional[str] -> The processed paper text or None if not processed.
     """
+
     def get_formatted_text(self):
         return self._paper_txt if self._paper_txt else None
-
 
     """
     29-July-2025 - Lenio
@@ -110,6 +110,7 @@ class Paper:
     Args: None
     Returns: None
     """
+
     def extract_metadata(self):
         self._grobid_xml = self.extract_paper_text_semantic()
         """ - Basti - 13. August 2025
@@ -126,12 +127,10 @@ class Paper:
             for section in sections:
                 self.logger.info(f"{section['title']}")
                 # format text
-                content = section['content'].strip().lstrip('.')
-                wrapped_text = textwrap.fill(content,
-                                             width=100,
-                                             break_long_words=False,
-                                             replace_whitespace=True,
-                                             break_on_hyphens=True)
+                content = section["content"].strip().lstrip(".")
+                wrapped_text = textwrap.fill(
+                    content, width=100, break_long_words=False, replace_whitespace=True, break_on_hyphens=True
+                )
                 self._paper_txt = wrapped_text
 
     """
@@ -139,7 +138,8 @@ class Paper:
     Abstract: Extracts references from the paper's PDF using Grobid.
     returns: List[Reference] -> A list of Reference objects found in the paper.
     """
-    def extract_references(self) -> List['Reference']:
+
+    def extract_references(self) -> list["Reference"]:
         references = []
         # Skip if no Grobid XML available
         if not self._grobid_xml:
@@ -156,11 +156,11 @@ class Paper:
                 self.logger.error(f"Unexpected error parsing references XML for '{self.title}': {e}")
                 return []
 
-            ns = {'tei': 'http://www.tei-c.org/ns/1.0'}
+            ns = {"tei": "http://www.tei-c.org/ns/1.0"}
             # Search for <div type="references"> in the <back> section
             references_xml = root.findall('.//tei:div[@type="references"]//tei:biblStruct', ns)
             for ref in references_xml:
-                titles = ref.findall('.//tei:title', ns)
+                titles = ref.findall(".//tei:title", ns)
                 if titles:
                     title_texts = [title.text or "" for title in titles]
                     # Only join non-empty strings
@@ -181,6 +181,7 @@ class Paper:
     - root: ET.Element -> The root element of the XML document.
     - ns: dict -> A dictionary containing XML namespaces.
     """
+
     def get_sections(self) -> list[dict]:
         # Skip if no Grobid XML available
         if not self._grobid_xml:
@@ -196,17 +197,17 @@ class Paper:
         except Exception as e:
             self.logger.error(f"Unexpected error parsing sections XML for '{self.title}': {e}")
             return []
-        ns = {'tei': 'http://www.tei-c.org/ns/1.0'}
+        ns = {"tei": "http://www.tei-c.org/ns/1.0"}
         sections = []
-        for section in root.findall('.//tei:body//tei:div', ns):
+        for section in root.findall(".//tei:body//tei:div", ns):
             # Get the section header and content xml elements
-            head_element = section.find('.//tei:head', ns)
-            content_elements = section.findall('.//tei:p', ns)
+            head_element = section.find(".//tei:head", ns)
+            content_elements = section.findall(".//tei:p", ns)
             if head_element is not None and content_elements is not None:
                 # The section data dictionary
                 section_data = {}
                 # The index indicating the section number
-                section_header_index = head_element.attrib.get('n', '')
+                section_header_index = head_element.attrib.get("n", "")
                 content = ""
                 # Get all paragraphs in a section
                 for paragraph in content_elements:
@@ -215,22 +216,23 @@ class Paper:
                         content += text + "\n"
                 if section_header_index != "":
                     # If section has a number in its attribute 'n'
-                    section_data['title'] = section_header_index + " " + (
-                        head_element.text if head_element is not None else "")
+                    section_data["title"] = (
+                        section_header_index + " " + (head_element.text if head_element is not None else "")
+                    )
                 else:
                     """ Sometimes grobid get's Sections wrong so if there is a section without an index
                         we merge its content with the previous section.
                     """
                     if len(sections) >= 1:
-                        sections[-1]['content'] += "\n" + content
+                        sections[-1]["content"] += "\n" + content
                         continue
                     else:
                         self.logger.warning("Section without index found but no previous section to merge with!")
                         self.logger.warning(f"Section header: {head_element.text}")
                         self.logger.warning(f"Section content: {content}")
-                        section_data['title'] = head_element.text if head_element is not None else ""
+                        section_data["title"] = head_element.text if head_element is not None else ""
                 # If section has a title add it's content to the section data
-                section_data['content'] = content
+                section_data["content"] = content
                 sections.append(section_data)
             else:
                 """
@@ -249,15 +251,14 @@ class Paper:
     Args: url: str -> The URL of the paper to extract text from.
     Returns: Optional[str] -> The extracted text from the paper, or None if extraction fails.
     """
-    def extract_paper_text_semantic(self) -> Optional[str]:
+
+    def extract_paper_text_semantic(self) -> str | None:
         local_logger = Paper.get_grobid_logger()
         temp_file_path = None
         try:
             pdf_url = self.url
             if not pdf_url:
-                local_logger.warning(
-                    "No PDF URL available for '%s'; skipping Grobid extraction", self.title
-                )
+                local_logger.warning("No PDF URL available for '%s'; skipping Grobid extraction", self.title)
                 return None
             if not pdf_url.startswith(("http://", "https://")):
                 pdf_url = f"https://{pdf_url.lstrip('/')}"
@@ -269,26 +270,23 @@ class Paper:
                 raise Exception(f"Failed to download PDF: HTTP Error Code is - {response.status_code}")
 
             # Create a temporary file to store the PDF
-            with tempfile.NamedTemporaryFile(suffix='.pdf', delete=False) as tmp_file:
+            with tempfile.NamedTemporaryFile(suffix=".pdf", delete=False) as tmp_file:
                 for chunk in response.iter_content(chunk_size=1024 * 256):
                     if chunk:
                         tmp_file.write(chunk)
                 temp_file_path = tmp_file.name
 
             # Send to Grobid for processing
-            with open(temp_file_path, 'rb') as pdf_file:
-                files = {'input': pdf_file}
-                grobid_url = 'http://grobid:8070/api/processFulltextDocument'
+            with open(temp_file_path, "rb") as pdf_file:
+                files = {"input": pdf_file}
+                grobid_url = "http://grobid:8070/api/processFulltextDocument"
                 grobid_response = requests.post(
-                    grobid_url,
-                    files=files,
-                    headers={'Accept': 'application/xml'},
-                    timeout=(5, 120)
+                    grobid_url, files=files, headers={"Accept": "application/xml"}, timeout=(5, 120)
                 )
 
             if not grobid_response.ok:
                 raise Exception(f"Grobid-Processing failed: {grobid_response.status_code}")
-            local_logger.info(f"Grobid processing finished successfully!")
+            local_logger.info("Grobid processing finished successfully!")
             return grobid_response.text
 
         except Exception as e:
@@ -303,7 +301,6 @@ class Paper:
                 except Exception as e:
                     local_logger.error(f"Failed to delete temporary file: {str(e)}")
 
-
     """
     25-May-2025 - Basti, updated 26-July-2025 - Lenio, Moved to paper.py 03-August-2025 - Lenio
     Abstract: Hashes the data of a arXiv Paper using SHA256 and returns its hash
@@ -313,8 +310,9 @@ class Paper:
     
     Returns: str -> Unique hash of the paper
     """
+
     def hash_paper_details(self) -> str:
-        to_hash = self.title + '|' + self.abstract
+        to_hash = self.title + "|" + self.abstract
         self.hash = hashlib.sha256(to_hash.encode()).hexdigest()
         self.logger.debug(f"[DEBUG] Printing to hash text: {to_hash}")
 

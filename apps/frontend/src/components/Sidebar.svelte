@@ -199,8 +199,9 @@
                 const rawItems = await res.json();
 
                 // Mapping der Ergebnisse (wie gewohnt)
-                searchResults = rawItems.map(mapPaperResponse);
-                searchTotal = searchResults.length;
+                const mappedResults = rawItems.map(mapPaperResponse);
+                searchResults = mappedResults;
+                searchTotal = mappedResults.length;
             } else {
                 // --- PFAD B: Globale Suche (GET - dein bestehender Code) ---
                 const params = new URLSearchParams();
@@ -255,10 +256,11 @@
                     ? rawItems.length
                     : (payload?.total ?? rawItems.length);
 
-                searchResults = rawItems.map(mapPaperResponse);
+                const mappedResults = rawItems.map(mapPaperResponse);
+                searchResults = mappedResults;
             }
 
-            dispatch("searchHighlight", searchResults);
+            dispatch("searchHighlight", searchResults ?? []);
         } catch (e) {
             searchError = e instanceof Error ? e.message : "Search failed.";
             searchResults = null;
@@ -540,8 +542,11 @@
         {#if advancedOpen}
             <div class="adv-panel">
                 <div class="adv-row">
-                    <label class="adv-label">Title</label>
+                    <label class="adv-label" for="sidebar-adv-title"
+                        >Title</label
+                    >
                     <input
+                        id="sidebar-adv-title"
                         class="adv-input"
                         type="text"
                         placeholder="Words in title"
@@ -550,8 +555,11 @@
                     />
                 </div>
                 <div class="adv-row">
-                    <label class="adv-label">Author</label>
+                    <label class="adv-label" for="sidebar-adv-author"
+                        >Author</label
+                    >
                     <input
+                        id="sidebar-adv-author"
                         class="adv-input"
                         type="text"
                         placeholder="Author name"
@@ -560,8 +568,11 @@
                     />
                 </div>
                 <div class="adv-row">
-                    <label class="adv-label">Abstract</label>
+                    <label class="adv-label" for="sidebar-adv-abstract"
+                        >Abstract</label
+                    >
                     <input
+                        id="sidebar-adv-abstract"
                         class="adv-input"
                         type="text"
                         placeholder="Text in abstract"
@@ -570,8 +581,11 @@
                     />
                 </div>
                 <div class="adv-row">
-                    <label class="adv-label">From</label>
+                    <label class="adv-label" for="sidebar-adv-from"
+                        >From</label
+                    >
                     <input
+                        id="sidebar-adv-from"
                         class="adv-input"
                         type="date"
                         max={TODAY}
@@ -580,8 +594,9 @@
                     />
                 </div>
                 <div class="adv-row">
-                    <label class="adv-label">To</label>
+                    <label class="adv-label" for="sidebar-adv-to">To</label>
                     <input
+                        id="sidebar-adv-to"
                         class="adv-input"
                         type="date"
                         max={TODAY}
@@ -590,10 +605,16 @@
                     />
                 </div>
                 <div class="adv-row">
-                    <label class="adv-label">Sort by</label>
+                    <label class="adv-label" for="sidebar-adv-sort"
+                        >Sort by</label
+                    >
                     <!-- Two published-date options: newest = most recent papers first,
                oldest = earliest papers first. Most cited sorts by combined citation count. -->
-                    <select class="adv-select" bind:value={adv.sort}>
+                    <select
+                        id="sidebar-adv-sort"
+                        class="adv-select"
+                        bind:value={adv.sort}
+                    >
                         <option value="published_desc"
                             >Published date (newest)</option
                         >
@@ -881,15 +902,6 @@
             transparent
         );
         flex-shrink: 0;
-    }
-    .sidebar-header h3 {
-        margin: 0;
-        color: var(--text-primary, #f0f0f8);
-        font-size: 15px;
-        font-weight: 600;
-        white-space: nowrap;
-        overflow: hidden;
-        text-overflow: ellipsis;
     }
     .header-text {
         flex: 1;

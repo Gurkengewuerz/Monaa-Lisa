@@ -1,10 +1,11 @@
-import arxiv as arx
-from models.paper import Paper
-from util.logger import Logger
 import os
-from pipeline.api.rate_limiter import RateLimiter
+
+import arxiv as arx
+
 from config import cfg
-from typing import Optional
+from models.paper import Paper
+from pipeline.api.rate_limiter import RateLimiter
+from util.logger import Logger
 
 """
 Original File by Basti - 04-May-2025
@@ -12,20 +13,21 @@ Refactored into a class by Lenio - 20-September-2025
 Abstract: This class provides methods to interact with the arXiv API, including fetching papers by category,
 fetching the latest paper, and reading paper metadata.
 """
-class ArxivAPI:
 
+
+class ArxivAPI:
     def __init__(self):
         self.logger = Logger("ArxivAPI")
         self.client = arx.Client()
         _interval = cfg.get_float("semanticpaper", "arxiv_min_interval", float(os.getenv("ARXIV_MIN_INTERVAL", "3.0")))
         self.rate_limiter = RateLimiter(min_interval=_interval)
 
-
     """
     29-September-2025 - Lenio
     Abstract: Returns the rate limiter instance.
     Returns: RateLimiter instance
     """
+
     def get_rate_limiter(self) -> RateLimiter:
         return self.rate_limiter
 
@@ -37,6 +39,7 @@ class ArxivAPI:
     
     Returns: Metadata of the provided Paper
     """
+
     def read_meta(self, paper: Paper):
         if paper:
             self.logger.info(f"Title: {paper.title}\n")
@@ -45,7 +48,6 @@ class ArxivAPI:
             self.logger.info(f"Abstract: {paper.abstract}\n")
             self.logger.info(f"PDF URL: {paper.url}\n")
             self.logger.info(f"Entry ID: {paper.entry_id}\n")
-
 
         else:
             self.logger.error("No Paper!")
@@ -57,13 +59,14 @@ class ArxivAPI:
     Args: None 
     Returns: One arXiv paper -> Result or None
     """
-    def fetch_latest_paper(self) -> Optional[Paper]:
+
+    def fetch_latest_paper(self) -> Paper | None:
         self.rate_limiter.wait()
         search = arx.Search(
-            query=f"cat:cs.CG",
+            query="cat:cs.CG",
             max_results=1,
             sort_by=arx.SortCriterion.SubmittedDate,
-            sort_order=arx.SortOrder.Descending
+            sort_order=arx.SortOrder.Descending,
         )
         results = list(self.client.results(search))
         return Paper.from_arxiv(results[0]) if results else None
@@ -78,15 +81,16 @@ class ArxivAPI:
     
     Returns: List -> of fetches papers
     """
+
     def fetch_papers(self, category: str = "cs.CG", amount: int = 10) -> list:
         self.rate_limiter.wait()
         search = arx.Search(
             query=f"cat:{category}",
             max_results=amount,
             sort_by=arx.SortCriterion.SubmittedDate,
-            sort_order=arx.SortOrder.Descending
+            sort_order=arx.SortOrder.Descending,
         )
-        papers: list[Paper] = [] # Typisieren wenn es geht hilft beim Coding
+        papers: list[Paper] = []  # Typisieren wenn es geht hilft beim Coding
         for result in self.client.results(search):
             # 15-December-2025 - Lenio - Question: Why do we wait here again?
             self.rate_limiter.wait()
@@ -106,6 +110,7 @@ class ArxivAPI:
     - arxiv_ids: List of arXiv IDs to fetch papers for.
     Returns: List of Paper objects corresponding to the provided arXiv IDs.
     """
+
     def fetch_papers_by_ids(self, arxiv_ids: list[str]) -> list[Paper]:
         self.rate_limiter.wait()
         search = arx.Search(id_list=arxiv_ids)
@@ -120,7 +125,9 @@ class ArxivAPI:
                 papers.append(None)
         return papers
 
-    def fetch_historical_batch(self, category: str, batch_size: int = 50, start_offset: int = 0) -> tuple[list[Paper], bool]:
+    def fetch_historical_batch(
+        self, category: str, batch_size: int = 50, start_offset: int = 0
+    ) -> tuple[list[Paper], bool]:
         self.rate_limiter.wait()
         try:
             # Ask for enough results to reach the desired offset without materializing all
@@ -129,7 +136,7 @@ class ArxivAPI:
                 query=f"cat:{category}",
                 max_results=total_needed,
                 sort_by=arx.SortCriterion.SubmittedDate,
-                sort_order=arx.SortOrder.Ascending
+                sort_order=arx.SortOrder.Ascending,
             )
             results_iter = self.client.results(search)
 

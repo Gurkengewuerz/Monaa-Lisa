@@ -494,6 +494,8 @@
     </div>
 
     <!-- tab content - clicking anywhere in the content area closes any open move-to menus -->
+    <!-- svelte-ignore a11y-click-events-have-key-events -->
+    <!-- svelte-ignore a11y-no-static-element-interactions -->
     <div
         class="db-content"
         on:click={() => {
@@ -707,6 +709,7 @@
                                             }}>&#x21C4;</button
                                         >
                                         {#if moveMenuOpenId === item.entry_id}
+                                            <!-- svelte-ignore a11y-click-events-have-key-events -->
                                             <!-- svelte-ignore a11y-no-static-element-interactions -->
                                             <div
                                                 class="db-move-menu"
@@ -854,6 +857,7 @@
                                                 }}>&#x21C4;</button
                                             >
                                             {#if moveMenuOpenId === item.entry_id}
+                                                <!-- svelte-ignore a11y-click-events-have-key-events -->
                                                 <!-- svelte-ignore a11y-no-static-element-interactions -->
                                                 <div
                                                     class="db-move-menu"

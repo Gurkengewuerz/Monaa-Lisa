@@ -1892,6 +1892,7 @@
         line-height: 1.45;
         color: var(--text-secondary, #a8a8c8);
         display: -webkit-box;
+        line-clamp: 2;
         -webkit-line-clamp: 2;
         -webkit-box-orient: vertical;
         overflow: hidden;
@@ -1899,6 +1900,7 @@
     .rel-card-abstract.expanded p {
         display: block;
         overflow: visible;
+        line-clamp: unset;
         -webkit-line-clamp: unset;
     }
 

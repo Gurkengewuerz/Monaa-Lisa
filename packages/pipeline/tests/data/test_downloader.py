@@ -1,6 +1,7 @@
-import pytest
-from unittest.mock import Mock, patch
 from pathlib import Path
+from unittest.mock import Mock, patch
+
+import pytest
 
 # All patches target the module where the names are looked up
 MOD = "pipeline.data.downloader"
@@ -38,9 +39,11 @@ def patch_globals():
             "gdrive_fallback": {"file_id": "GDRIVE_UMAP_ID"},
         },
     }
-    with patch(f"{MOD}.DOWNLOAD_SETTINGS", fake_settings), \
-         patch(f"{MOD}.FILES_CONFIG", fake_files), \
-         patch(f"{MOD}.logger"):
+    with (
+        patch(f"{MOD}.DOWNLOAD_SETTINGS", fake_settings),
+        patch(f"{MOD}.FILES_CONFIG", fake_files),
+        patch(f"{MOD}.logger"),
+    ):
         yield
 
 
@@ -86,7 +89,9 @@ class TestDownloadHttp:
         and clean up any partial file.
         """
         import requests as real_requests
+
         from pipeline.data.downloader import _download_http
+
         # Simulate a network error like a timeout. This should trigger the exception handling in _download_http.
         mock_get.side_effect = real_requests.exceptions.ConnectionError("timeout")
 
@@ -129,6 +134,7 @@ class TestDownloadHttp:
 
         # we expect the function to catch the OSError, log an error message, and return False without crashing.
         import pipeline.data.downloader as dl_mod
+
         assert result is False
         dl_mod.logger.error.assert_called_once()
         args, _ = dl_mod.logger.error.call_args
@@ -136,6 +142,7 @@ class TestDownloadHttp:
 
 
 # ─── _download_gdrive ───────────────────────────────────────────────────
+
 
 class TestDownloadGdrive:
     """Tests the retry logic and edge cases in _download_gdrive()."""
@@ -193,6 +200,7 @@ class TestDownloadGdrive:
 
         result = _download_gdrive("FAKE_ID", tmp_dest, "test", max_retries=2, retry_delay=0)
         import pipeline.data.downloader as dl_mod
+
         assert result is False
         # We expect the function to log an error about the empty file after retries are exhausted.
         # Since the function logs multiple types of errors,
@@ -224,6 +232,7 @@ class TestDownloadGdrive:
         Ensures the retry loop doesn't short-circuit on first failure.
         """
         from pipeline.data.downloader import _download_gdrive
+
         # We use a mutable object (list) to track call count inside the side_effect function.
         # Funfact: I learned this at my day job while keeping track of linked entities over a non-linked function loop.
         call_count = [0]
@@ -315,6 +324,7 @@ class TestDownloadFile:
         An unknown file_key has no config entry, so we must fail gracefully.
         """
         from pipeline.data.downloader import _download_file
+
         # We supply a file_key that doesn't exist in FILES_CONFIG.
         # Valid keys are "dataset", "pca_model", and "umap_model". We use "nonexistent_key" to trigger the error handling.
         result = _download_file("nonexistent_key", tmp_dest)
@@ -380,6 +390,7 @@ class TestVerifyPkl:
 
         result = _verify_pkl(pkl_file, "Test model", full_load=True)
         import pipeline.data.downloader as dl_mod
+
         assert result is False
         dl_mod.logger.error.assert_called_once()
         args, _ = dl_mod.logger.error.call_args
@@ -402,6 +413,7 @@ class TestVerifyPkl:
 
         result = _verify_pkl(pkl_file, "Test model", full_load=True)
         import pipeline.data.downloader as dl_mod
+
         assert result is False
         dl_mod.logger.error.assert_called_once()
         args, _ = dl_mod.logger.error.call_args
@@ -603,4 +615,3 @@ class TestCleanupDataset:
         mock_path.return_value = tmp_path / "nonexistent.jsonl"
 
         cleanup_dataset()  # should not raise
-

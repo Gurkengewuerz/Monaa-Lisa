@@ -1,30 +1,29 @@
-import os
 import json
+import os
 import time
 from pathlib import Path
-from typing import Optional
 
-import requests
 import gdown
 import joblib
+import requests
 
-from util.logger import Logger
 from config import cfg
-
+from util.logger import Logger
 
 logger = Logger("Downloader")
+
 
 # Laedt die Mirror Config aus dem Root des Projekts
 def _load_mirrors_config() -> dict:
     possible_paths = [
-        Path("/app/mirrors.json"),  
+        Path("/app/mirrors.json"),
         # wenn nicht docker dann hier hardcoded
         Path(__file__).parent.parent.parent.parent / "mirrors.json",
     ]
     # FallBack-Mechanismus: Versuche verschiedene Pfade, um die Konfigurationsdatei zu finden
     for config_path in possible_paths:
         if config_path.exists():
-            with open(config_path, "r", encoding="utf-8") as f:
+            with open(config_path, encoding="utf-8") as f:
                 logger.info(f"Loaded mirrors config from {config_path}")
                 return json.load(f)
     logger.warning("mirrors.json not found, using defaults")
@@ -54,6 +53,7 @@ def _get_file_config(file_key: str) -> dict:
     """Get configuration for a specific file from mirrors.json."""
     return FILES_CONFIG.get(file_key, {})
 
+
 """
 Abstract: Downloads a file from an HTTP mirror using streaming.
         Args:
@@ -62,21 +62,23 @@ Abstract: Downloads a file from an HTTP mirror using streaming.
         - description: Human-readable label for log messages
         Returns: bool -> True if download succeeded
 """
+
+
 def _download_http(url: str, dest: Path, description: str) -> bool:
 
     timeout = DOWNLOAD_SETTINGS.get("timeout_seconds", 300)
     chunk_size = DOWNLOAD_SETTINGS.get("chunk_size_bytes", 8 * 1024 * 1024)
-    
+
     try:
         logger.info(f"Downloading {description} from {url}...")
         response = requests.get(url, stream=True, timeout=timeout)
         response.raise_for_status()
-        
-        total_size = int(response.headers.get('content-length', 0))
+
+        total_size = int(response.headers.get("content-length", 0))
         downloaded = 0
         last_log_percent = -10
         # streamed den Download in Chunks, damit wir große Dateien herunterladen können ohne zu viel RAM zu verbrauchen
-        with open(dest, 'wb') as f:
+        with open(dest, "wb") as f:
             for chunk in response.iter_content(chunk_size=chunk_size):
                 if chunk:
                     f.write(chunk)
@@ -84,7 +86,9 @@ def _download_http(url: str, dest: Path, description: str) -> bool:
                     if total_size > 0:
                         percent = int(downloaded * 100 / total_size)
                         if percent >= last_log_percent + 10:
-                            logger.info(f"  {description}: {percent}% ({downloaded / (1024**2):.1f} MB / {total_size / (1024**2):.1f} MB)")
+                            logger.info(
+                                f"  {description}: {percent}% ({downloaded / (1024**2):.1f} MB / {total_size / (1024**2):.1f} MB)"
+                            )
                             last_log_percent = percent
         # Nach dem Download prüfen wir, ob die Datei existiert und nicht leer ist, um sicherzustellen, dass der Download erfolgreich war
         if dest.exists() and dest.stat().st_size > 0:
@@ -95,7 +99,7 @@ def _download_http(url: str, dest: Path, description: str) -> bool:
             logger.error(f"Download resulted in empty file: {dest}")
             dest.unlink(missing_ok=True)
             return False
-            
+
     except requests.exceptions.RequestException as e:
         logger.warning(f"HTTP download failed for {description} from {url}: {e}")
         dest.unlink(missing_ok=True)
@@ -104,6 +108,7 @@ def _download_http(url: str, dest: Path, description: str) -> bool:
         logger.error(f"Unexpected error downloading {description}: {e}")
         dest.unlink(missing_ok=True)
         return False
+
 
 """
     Abstract: Downloads a single file from Google Drive (fallback method).
@@ -116,8 +121,10 @@ def _download_http(url: str, dest: Path, description: str) -> bool:
     - retry_delay: Seconds to wait between retries (doubles each attempt)
     Returns: bool -> True if download succeeded and file is non-empty
 """
+
+
 def _download_gdrive(file_id: str, dest: Path, description: str, max_retries: int = 3, retry_delay: int = 60) -> bool:
-    # Fallback falls kein HTTP Mirror gegeben wird - dann ists noch auf meiner Google Drive 
+    # Fallback falls kein HTTP Mirror gegeben wird - dann ists noch auf meiner Google Drive
     url = f"https://drive.google.com/uc?id={file_id}"
     delay = retry_delay
 
@@ -155,6 +162,7 @@ def _download_gdrive(file_id: str, dest: Path, description: str, max_retries: in
                 return False
     return False
 
+
 """
     Abstract: Downloads a file using the mirror-first strategy.
               1. Try each HTTP mirror in order
@@ -164,6 +172,8 @@ def _download_gdrive(file_id: str, dest: Path, description: str, max_retries: in
     - dest: Local destination path
     Returns: bool -> True if download succeeded
 """
+
+
 def _download_file(file_key: str, dest: Path) -> bool:
     # Liest die Konfiguration für die angegebene Datei aus mirrors.json, einschließlich Beschreibung, HTTP-Mirrors und optionaler Google Drive Fallback-Informationen. Überprüft zuerst, ob die Datei bereits existiert und nicht leer ist, um unnötige Downloads zu vermeiden. Versucht dann, die Datei von jedem HTTP-Mirror herunterzuladen, mit konfigurierbaren Wiederholungsversuchen und Verzögerungen. Wenn alle HTTP-Mirrors fehlschlagen, versucht es den Download von Google Drive mit ähnlichen Wiederholungsmechanismen. Gibt True zurück, wenn der Download erfolgreich war und die Datei existiert, andernfalls False.
     config = _get_file_config(file_key)
@@ -174,15 +184,15 @@ def _download_file(file_key: str, dest: Path) -> bool:
     description = config.get("description", file_key)
     mirrors = config.get("mirrors", [])
     gdrive_fallback = config.get("gdrive_fallback", {})
-    
+
     # Vor dem Download prüfen wir, ob die Datei bereits existiert und eine vernünftige Größe hat, um unnötige Downloads zu vermeiden (z.B. wenn
     if dest.exists() and dest.stat().st_size > 0:
         logger.info(f"{description} already exists at {dest} ({dest.stat().st_size:,} bytes), skipping download.")
         return True
-    
+
     max_retries = DOWNLOAD_SETTINGS.get("max_retries", 3)
     retry_delay = DOWNLOAD_SETTINGS.get("retry_delay_seconds", 10)
-    
+
     # versucht zuerst die HTTP-Mirrors in der angegebenen Reihenfolge, mit Wiederholungsversuchen bei Fehlern (z.B. Netzwerkprobleme, Mirror-Ausfälle)
     for mirror_url in mirrors:
         for attempt in range(1, max_retries + 1):
@@ -192,15 +202,16 @@ def _download_file(file_key: str, dest: Path) -> bool:
                 logger.info(f"Mirror attempt {attempt}/{max_retries} failed, retrying in {retry_delay}s...")
                 time.sleep(retry_delay)
         logger.warning(f"Mirror {mirror_url} exhausted, trying next...")
-    
+
     # dann fallback auf Google Drive, wenn alle HTTP-Mirrors fehlschlagen. Auch hier mit Wiederholungsversuchen, da Google Drive manchmal unzuverlässig sein kann (z.B. bei großen Dateien oder wenn sie kürzlich aktualisiert wurden)
     gdrive_id = gdrive_fallback.get("file_id")
     if gdrive_id:
         logger.info(f"All mirrors failed for {description}, falling back to Google Drive...")
         return _download_gdrive(gdrive_id, dest, description, max_retries=5, retry_delay=60)
-    
+
     logger.error(f"No mirrors or GDrive fallback available for {description}")
     return False
+
 
 """
     Abstract: Verifies that a .pkl file is valid.
@@ -213,6 +224,8 @@ def _download_file(file_key: str, dest: Path) -> bool:
     - full_load: Whether to fully load the model into memory for verification
     Returns: bool
 """
+
+
 def _verify_pkl(path: Path, label: str, full_load: bool = True) -> bool:
 
     if not path.exists():
@@ -229,7 +242,7 @@ def _verify_pkl(path: Path, label: str, full_load: bool = True) -> bool:
         try:
             with open(path, "rb") as f:
                 header = f.read(2)
-                if header[0:1] != b'\x80':
+                if header[0:1] != b"\x80":
                     logger.error(f"{label} does not have a valid pickle header.")
                     return False
             logger.info(f"{label} header verified ({file_size / (1024**3):.2f} GB). Full load deferred to pipeline.")
@@ -248,8 +261,6 @@ def _verify_pkl(path: Path, label: str, full_load: bool = True) -> bool:
     except Exception as e:
         logger.error(f"Failed to verify {label}: {e}")
         return False
-
-
 
 
 def _get_filename(file_key: str) -> str:
@@ -278,10 +289,10 @@ def download_models() -> bool:
     Returns: bool -> True if both models were downloaded and verified.
     """
     models_dir = _models_dir()
-    
+
     pca_filename = _get_filename("pca_model")
     umap_filename = _get_filename("umap_model")
-    
+
     pca_path = models_dir / pca_filename
     umap_path = models_dir / umap_filename
 

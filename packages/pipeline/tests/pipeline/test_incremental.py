@@ -1,6 +1,6 @@
 import sys
 from datetime import datetime
-from unittest.mock import Mock, MagicMock, patch
+from unittest.mock import MagicMock, Mock, patch
 
 # Database.db creates a SQLAlchemy engine at module level, which requires
 # DATABASE_URL.  We inject a MagicMock into sys.modules BEFORE importing
@@ -10,8 +10,8 @@ sys.modules.setdefault("Database.db", MagicMock())
 from pipeline.pipeline.incremental import (  # noqa: E402
     _fetch_new_arxiv_papers,
     _normalize_entry_id,
-    run_incremental_update,
     retry_uncaught_papers,
+    run_incremental_update,
 )
 
 MODULE = "pipeline.pipeline.incremental"
@@ -19,10 +19,16 @@ MODULE = "pipeline.pipeline.incremental"
 
 # because arxiv.Result is a complex object with many fields, we create a helper function
 
-def _make_arxiv_result(entry_id="http://arxiv.org/abs/2401.00001v1",
-                       title="Test Paper", authors=None, summary="Abstract La La La Wait till I...",
-                       primary_category="cs.AI", published=None,
-                       pdf_url="http://arxiv.org/pdf/2401.00001v1"):
+
+def _make_arxiv_result(
+    entry_id="http://arxiv.org/abs/2401.00001v1",
+    title="Test Paper",
+    authors=None,
+    summary="Abstract La La La Wait till I...",
+    primary_category="cs.AI",
+    published=None,
+    pdf_url="http://arxiv.org/pdf/2401.00001v1",
+):
     """Creates a Mock that mimics an arxiv.Result object with all fields the pipeline accesses."""
     r = Mock()
     r.entry_id = entry_id
@@ -135,6 +141,7 @@ class TestFetchNewArxivPapers:
         If the arXiv API raises mid-iteration, papers collected so far
         must still be returned instead of crashing the pipeline.
         """
+
         # Iterator that yields 2 valid results, then explodes – simulates a network timeout mid-stream
         def _exploding_iterator():
             yield Mock()
@@ -180,8 +187,7 @@ class TestRunIncrementalUpdate:
     @patch(f"{MODULE}.get_paper_count", return_value=100)
     @patch(f"{MODULE}.get_newest_paper_date", return_value=datetime(2024, 1, 1))
     @patch(f"{MODULE}.logger")
-    def test_returns_early_when_no_new_arxiv_papers(self, mock_logger, mock_newest,
-                                                     mock_count, mock_fetch):
+    def test_returns_early_when_no_new_arxiv_papers(self, mock_logger, mock_newest, mock_count, mock_fetch):
         """
         Tests: if not raw_results: ... return
 
@@ -202,9 +208,9 @@ class TestRunIncrementalUpdate:
     @patch(f"{MODULE}.get_paper_count", return_value=100)
     @patch(f"{MODULE}.get_newest_paper_date", return_value=datetime(2024, 1, 1))
     @patch(f"{MODULE}.logger")
-    def test_returns_early_when_all_papers_already_in_db(self, mock_logger, mock_newest,
-                                                          mock_count, mock_fetch,
-                                                          mock_exists):
+    def test_returns_early_when_all_papers_already_in_db(
+        self, mock_logger, mock_newest, mock_count, mock_fetch, mock_exists
+    ):
         """
         Tests: if not new_papers: ... return
 
@@ -219,7 +225,7 @@ class TestRunIncrementalUpdate:
 
         s2_client.fetch_batch.assert_not_called()
 
-   # The next two tests cover the "if found:" branch: success vs failure of save_processed_paper
+    # The next two tests cover the "if found:" branch: success vs failure of save_processed_paper
 
     @patch(f"{MODULE}.save_uncaught_paper")
     # save_processed_paper returns True → paper saved successfully
@@ -230,10 +236,9 @@ class TestRunIncrementalUpdate:
     @patch(f"{MODULE}.get_paper_count", return_value=100)
     @patch(f"{MODULE}.get_newest_paper_date", return_value=datetime(2024, 1, 1))
     @patch(f"{MODULE}.logger")
-    def test_processes_found_papers_through_pipeline(self, mock_logger, mock_newest,
-                                                      mock_count, mock_fetch,
-                                                      mock_exists, mock_cfg,
-                                                      mock_save, mock_save_uncaught):
+    def test_processes_found_papers_through_pipeline(
+        self, mock_logger, mock_newest, mock_count, mock_fetch, mock_exists, mock_cfg, mock_save, mock_save_uncaught
+    ):
         """
         Tests: if found: ... pipeline.batch_process(vectors_768)
 
@@ -246,10 +251,17 @@ class TestRunIncrementalUpdate:
         # SemanticScholar "finds" the paper and returns an embedding
         s2_client = Mock()
         s2_client.fetch_batch.return_value = (
-            [{"arxiv_id": "2401.00001", "embedding_768d": [0.1] * 768,
-              "s2_id": "s2_123", "non_arxiv_citation_count": 5,
-              "non_arxiv_reference_count": 3,
-              "citation_arxiv_ids": [], "reference_arxiv_ids": []}],
+            [
+                {
+                    "arxiv_id": "2401.00001",
+                    "embedding_768d": [0.1] * 768,
+                    "s2_id": "s2_123",
+                    "non_arxiv_citation_count": 5,
+                    "non_arxiv_reference_count": 3,
+                    "citation_arxiv_ids": [],
+                    "reference_arxiv_ids": [],
+                }
+            ],
             [],  # not_found is empty
         )
 
@@ -272,10 +284,9 @@ class TestRunIncrementalUpdate:
     @patch(f"{MODULE}.get_paper_count", return_value=100)
     @patch(f"{MODULE}.get_newest_paper_date", return_value=datetime(2024, 1, 1))
     @patch(f"{MODULE}.logger")
-    def test_logs_warning_when_save_fails(self, mock_logger, mock_newest,
-                                           mock_count, mock_fetch,
-                                           mock_exists, mock_cfg,
-                                           mock_save, mock_save_uncaught):
+    def test_logs_warning_when_save_fails(
+        self, mock_logger, mock_newest, mock_count, mock_fetch, mock_exists, mock_cfg, mock_save, mock_save_uncaught
+    ):
         """
         Tests: if ok: processed_count += 1 / else: logger.warning(...)
 
@@ -288,8 +299,7 @@ class TestRunIncrementalUpdate:
         # SemanticScholar returns data, but the DB save will fail (mocked above)
         s2_client = Mock()
         s2_client.fetch_batch.return_value = (
-            [{"arxiv_id": "2401.00001", "embedding_768d": [0.1] * 768,
-              "s2_id": "s2_123"}],
+            [{"arxiv_id": "2401.00001", "embedding_768d": [0.1] * 768, "s2_id": "s2_123"}],
             [],
         )
 
@@ -301,7 +311,7 @@ class TestRunIncrementalUpdate:
         # save returned False → a warning about the failed paper must be logged
         mock_logger.warning.assert_called()
 
-   # This test covers the "for arxiv_id in not_found:" loop
+    # This test covers the "for arxiv_id in not_found:" loop
 
     @patch(f"{MODULE}.save_uncaught_paper")
     @patch(f"{MODULE}.cfg")
@@ -310,10 +320,9 @@ class TestRunIncrementalUpdate:
     @patch(f"{MODULE}.get_paper_count", return_value=100)
     @patch(f"{MODULE}.get_newest_paper_date", return_value=datetime(2024, 1, 1))
     @patch(f"{MODULE}.logger")
-    def test_saves_not_found_papers_as_uncaught(self, mock_logger, mock_newest,
-                                                 mock_count, mock_fetch,
-                                                 mock_exists, mock_cfg,
-                                                 mock_save_uncaught):
+    def test_saves_not_found_papers_as_uncaught(
+        self, mock_logger, mock_newest, mock_count, mock_fetch, mock_exists, mock_cfg, mock_save_uncaught
+    ):
         """
         Tests: for arxiv_id in not_found: save_uncaught_paper(...)
 
@@ -328,8 +337,8 @@ class TestRunIncrementalUpdate:
         # SemanticScholar doesn't know either paper
         s2_client = Mock()
         s2_client.fetch_batch.return_value = (
-            [],                                  # found is empty
-            ["2401.00001", "2401.00002"],         # both papers are not_found
+            [],  # found is empty
+            ["2401.00001", "2401.00002"],  # both papers are not_found
         )
 
         pipeline = Mock()
@@ -341,7 +350,7 @@ class TestRunIncrementalUpdate:
         # Pipeline should NOT have been called – there are no embeddings to process
         pipeline.batch_process.assert_not_called()
 
-   # This test covers the dedup filter: if not paper_exists_by_id(eid)
+    # This test covers the dedup filter: if not paper_exists_by_id(eid)
 
     # paper_exists_by_id is given a side_effect so we can control per-paper results
     @patch(f"{MODULE}.paper_exists_by_id")
@@ -349,9 +358,7 @@ class TestRunIncrementalUpdate:
     @patch(f"{MODULE}.get_paper_count", return_value=100)
     @patch(f"{MODULE}.get_newest_paper_date", return_value=datetime(2024, 1, 1))
     @patch(f"{MODULE}.logger")
-    def test_dedup_filters_existing_papers(self, mock_logger, mock_newest,
-                                            mock_count, mock_fetch,
-                                            mock_exists):
+    def test_dedup_filters_existing_papers(self, mock_logger, mock_newest, mock_count, mock_fetch, mock_exists):
         """
         Tests: if not paper_exists_by_id(eid): new_papers.append(...)
 
@@ -369,8 +376,7 @@ class TestRunIncrementalUpdate:
         s2_client = Mock()
         s2_client.fetch_batch.return_value = ([], [])
 
-        with patch(f"{MODULE}.cfg") as mock_cfg, \
-             patch(f"{MODULE}.save_uncaught_paper"):
+        with patch(f"{MODULE}.cfg") as mock_cfg, patch(f"{MODULE}.save_uncaught_paper"):
             mock_cfg.get_int.return_value = 400
             run_incremental_update(Mock(), s2_client, Mock())
 
@@ -388,8 +394,7 @@ class TestRetryUncaughtPapers:
     @patch(f"{MODULE}.get_uncaught_papers_due", return_value=[])
     @patch(f"{MODULE}.cfg")
     @patch(f"{MODULE}.logger")
-    def test_returns_early_when_no_papers_due(self, mock_logger, mock_cfg,
-                                               mock_due, mock_purge):
+    def test_returns_early_when_no_papers_due(self, mock_logger, mock_cfg, mock_due, mock_purge):
         """
         Tests: if not due: ... return
 
@@ -404,7 +409,7 @@ class TestRetryUncaughtPapers:
         # SemanticScholar should never be called when there's nothing to retry
         s2_client.fetch_batch.assert_not_called()
 
-   # The next two tests cover "if ok: delete_uncaught_paper" – True vs False branch
+    # The next two tests cover "if ok: delete_uncaught_paper" – True vs False branch
 
     @patch(f"{MODULE}.purge_expired_uncaught")
     @patch(f"{MODULE}.delete_uncaught_paper")
@@ -413,9 +418,9 @@ class TestRetryUncaughtPapers:
     @patch(f"{MODULE}.get_uncaught_papers_due")
     @patch(f"{MODULE}.cfg")
     @patch(f"{MODULE}.logger")
-    def test_rescues_found_papers_and_deletes_from_uncaught(self, mock_logger, mock_cfg,
-                                                             mock_due, mock_save,
-                                                             mock_delete, mock_purge):
+    def test_rescues_found_papers_and_deletes_from_uncaught(
+        self, mock_logger, mock_cfg, mock_due, mock_save, mock_delete, mock_purge
+    ):
         """
         Tests: if ok: delete_uncaught_paper(arxiv_id)
 
@@ -437,10 +442,17 @@ class TestRetryUncaughtPapers:
         # SemanticScholar now has data for this paper
         s2_client = Mock()
         s2_client.fetch_batch.return_value = (
-            [{"arxiv_id": "2401.00001", "embedding_768d": [0.1] * 768,
-              "s2_id": "s2_123", "non_arxiv_citation_count": 5,
-              "non_arxiv_reference_count": 3,
-              "citation_arxiv_ids": [], "reference_arxiv_ids": []}],
+            [
+                {
+                    "arxiv_id": "2401.00001",
+                    "embedding_768d": [0.1] * 768,
+                    "s2_id": "s2_123",
+                    "non_arxiv_citation_count": 5,
+                    "non_arxiv_reference_count": 3,
+                    "citation_arxiv_ids": [],
+                    "reference_arxiv_ids": [],
+                }
+            ],
             [],  # not_found is empty
         )
 
@@ -460,9 +472,9 @@ class TestRetryUncaughtPapers:
     @patch(f"{MODULE}.get_uncaught_papers_due")
     @patch(f"{MODULE}.cfg")
     @patch(f"{MODULE}.logger")
-    def test_does_not_delete_uncaught_when_save_fails(self, mock_logger, mock_cfg,
-                                                       mock_due, mock_save,
-                                                       mock_delete, mock_purge):
+    def test_does_not_delete_uncaught_when_save_fails(
+        self, mock_logger, mock_cfg, mock_due, mock_save, mock_delete, mock_purge
+    ):
         """
         Tests: if ok: delete_uncaught_paper (False branch)
 
@@ -496,9 +508,9 @@ class TestRetryUncaughtPapers:
     @patch(f"{MODULE}.get_uncaught_papers_due")
     @patch(f"{MODULE}.cfg")
     @patch(f"{MODULE}.logger")
-    def test_increments_retry_for_still_missing_papers(self, mock_logger, mock_cfg,
-                                                        mock_due, mock_increment,
-                                                        mock_purge):
+    def test_increments_retry_for_still_missing_papers(
+        self, mock_logger, mock_cfg, mock_due, mock_increment, mock_purge
+    ):
         """
         Tests: for arxiv_id in not_found: increment_uncaught_retry(arxiv_id)
 
@@ -516,8 +528,8 @@ class TestRetryUncaughtPapers:
         # SemanticScholar still doesn't know about either paper
         s2_client = Mock()
         s2_client.fetch_batch.return_value = (
-            [],                                  # found is empty
-            ["2401.00001", "2401.00002"],         # both still missing
+            [],  # found is empty
+            ["2401.00001", "2401.00002"],  # both still missing
         )
 
         pipeline = Mock()
@@ -527,4 +539,3 @@ class TestRetryUncaughtPapers:
         assert mock_increment.call_count == 2
         mock_increment.assert_any_call("2401.00001")
         mock_increment.assert_any_call("2401.00002")
-

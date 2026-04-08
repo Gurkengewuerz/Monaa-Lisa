@@ -1,6 +1,7 @@
-import pytest
+from unittest.mock import Mock, mock_open, patch
+
 import numpy as np
-from unittest.mock import Mock, patch, mock_open
+import pytest
 
 from pipeline.pipeline.embedding_pipeline import (
     EmbeddingPipeline,
@@ -12,8 +13,7 @@ from pipeline.pipeline.embedding_pipeline import (
 @pytest.fixture
 def pipeline():
     """Creates an EmbeddingPipeline with mocked PCA/UMAP models."""
-    with patch('pipeline.pipeline.embedding_pipeline.cfg'), \
-         patch('pipeline.pipeline.embedding_pipeline.Logger'):
+    with patch("pipeline.pipeline.embedding_pipeline.cfg"), patch("pipeline.pipeline.embedding_pipeline.Logger"):
         # Bypass __init__ entirely so we don't hit _load_models / disk access
         pipe = object.__new__(EmbeddingPipeline)
         pipe._pca = Mock()
@@ -65,10 +65,7 @@ class TestGetAvailableMemoryGb:
 
         A malformed or truncated /proc/meminfo must not crash the pipeline.
         """
-        fake_meminfo = (
-            "MemTotal:       16384000 kB\n"
-            "MemFree:         2048000 kB\n"
-        )
+        fake_meminfo = "MemTotal:       16384000 kB\nMemFree:         2048000 kB\n"
         with patch("builtins.open", mock_open(read_data=fake_meminfo)):
             result = _get_available_memory_gb()
 
@@ -78,8 +75,8 @@ class TestGetAvailableMemoryGb:
 class TestLogMemoryStatus:
     """Tests conditional logic in _log_memory_status()."""
 
-    @patch('pipeline.pipeline.embedding_pipeline.logger')
-    @patch('pipeline.pipeline.embedding_pipeline._get_available_memory_gb')
+    @patch("pipeline.pipeline.embedding_pipeline.logger")
+    @patch("pipeline.pipeline.embedding_pipeline._get_available_memory_gb")
     def test_logs_warning_when_memory_below_2gb(self, mock_get_mem, mock_logger):
         """
         Tests: if avail < 2.0 -> logger.warning(...)
@@ -94,8 +91,8 @@ class TestLogMemoryStatus:
         mock_logger.warning.assert_called_once()
         mock_logger.debug.assert_not_called()
 
-    @patch('pipeline.pipeline.embedding_pipeline.logger')
-    @patch('pipeline.pipeline.embedding_pipeline._get_available_memory_gb')
+    @patch("pipeline.pipeline.embedding_pipeline.logger")
+    @patch("pipeline.pipeline.embedding_pipeline._get_available_memory_gb")
     def test_logs_debug_when_memory_above_2gb(self, mock_get_mem, mock_logger):
         """
         Tests: else -> logger.debug(...)
@@ -110,8 +107,8 @@ class TestLogMemoryStatus:
         mock_logger.debug.assert_called_once()
         mock_logger.warning.assert_not_called()
 
-    @patch('pipeline.pipeline.embedding_pipeline.logger')
-    @patch('pipeline.pipeline.embedding_pipeline._get_available_memory_gb')
+    @patch("pipeline.pipeline.embedding_pipeline.logger")
+    @patch("pipeline.pipeline.embedding_pipeline._get_available_memory_gb")
     def test_does_nothing_when_memory_unavailable(self, mock_get_mem, mock_logger):
         """
         Tests: if avail is not None (False path) -> no logging at all.
@@ -130,8 +127,8 @@ class TestLogMemoryStatus:
 class TestLoadModels:
     """Tests conditional logic in _load_models()."""
 
-    @patch('pipeline.pipeline.embedding_pipeline.Logger')
-    @patch('pipeline.pipeline.embedding_pipeline.cfg')
+    @patch("pipeline.pipeline.embedding_pipeline.Logger")
+    @patch("pipeline.pipeline.embedding_pipeline.cfg")
     def test_raises_when_pca_model_not_found(self, mock_cfg, mock_logger_cls):
         """
         Tests: if not self._pca_path.exists() -> raise FileNotFoundError
@@ -145,18 +142,19 @@ class TestLoadModels:
                 umap_model_path="/nonexistent/umap.pkl",
             )
 
-    @patch('pipeline.pipeline.embedding_pipeline.joblib')
-    @patch('pipeline.pipeline.embedding_pipeline._get_available_memory_gb')
-    @patch('pipeline.pipeline.embedding_pipeline.Logger')
-    @patch('pipeline.pipeline.embedding_pipeline.cfg')
-    def test_raises_when_umap_model_not_found(self, mock_cfg, mock_logger_cls,
-                                               mock_get_mem, mock_joblib):
+    @patch("pipeline.pipeline.embedding_pipeline.joblib")
+    @patch("pipeline.pipeline.embedding_pipeline._get_available_memory_gb")
+    @patch("pipeline.pipeline.embedding_pipeline.Logger")
+    @patch("pipeline.pipeline.embedding_pipeline.cfg")
+    def test_raises_when_umap_model_not_found(self, mock_cfg, mock_logger_cls, mock_get_mem, mock_joblib):
         """
         Tests: if not self._umap_path.exists() -> raise FileNotFoundError
 
         Same as PCA – the UMAP file must exist before we attempt to load it.
         """
-        import tempfile, os
+        import os
+        import tempfile
+
         # Create a real temp file for PCA so the first check passes
         with tempfile.NamedTemporaryFile(suffix=".pkl", delete=False) as pca_f:
             pca_path = pca_f.name
@@ -226,7 +224,7 @@ class TestBatchProjectTo2d:
         assert call_args.ndim == 2
         assert call_args.shape == (1, 128)
 
-    @patch('pipeline.pipeline.embedding_pipeline.UMAP_CHUNK_SIZE', 500)
+    @patch("pipeline.pipeline.embedding_pipeline.UMAP_CHUNK_SIZE", 500)
     def test_small_batch_skips_chunking(self, pipeline):
         """
         Tests: if n_vectors <= UMAP_CHUNK_SIZE -> return self._umap.transform(matrix)
@@ -243,8 +241,8 @@ class TestBatchProjectTo2d:
         assert pipeline._umap.transform.call_count == 1
         assert result.shape == (10, 2)
 
-    @patch('pipeline.pipeline.embedding_pipeline.gc')
-    @patch('pipeline.pipeline.embedding_pipeline.UMAP_CHUNK_SIZE', 3)
+    @patch("pipeline.pipeline.embedding_pipeline.gc")
+    @patch("pipeline.pipeline.embedding_pipeline.UMAP_CHUNK_SIZE", 3)
     def test_large_batch_uses_chunking(self, mock_gc, pipeline):
         """
         Tests: n_vectors > UMAP_CHUNK_SIZE -> process in chunks
@@ -267,8 +265,8 @@ class TestBatchProjectTo2d:
         assert pipeline._umap.transform.call_count == 3
         assert result.shape == (7, 2)
 
-    @patch('pipeline.pipeline.embedding_pipeline.gc')
-    @patch('pipeline.pipeline.embedding_pipeline.UMAP_CHUNK_SIZE', 3)
+    @patch("pipeline.pipeline.embedding_pipeline.gc")
+    @patch("pipeline.pipeline.embedding_pipeline.UMAP_CHUNK_SIZE", 3)
     def test_gc_collect_called_between_chunks_but_not_after_last(self, mock_gc, pipeline):
         """
         Tests: if end < n_vectors -> gc.collect()
@@ -289,8 +287,8 @@ class TestBatchProjectTo2d:
         # 1 call between chunks (end=3 < 5) + 1 final call = 2
         assert mock_gc.collect.call_count == 2
 
-    @patch('pipeline.pipeline.embedding_pipeline.gc')
-    @patch('pipeline.pipeline.embedding_pipeline.UMAP_CHUNK_SIZE', 5)
+    @patch("pipeline.pipeline.embedding_pipeline.gc")
+    @patch("pipeline.pipeline.embedding_pipeline.UMAP_CHUNK_SIZE", 5)
     def test_exact_chunk_size_batch_skips_chunking(self, mock_gc, pipeline):
         """
         Tests: if n_vectors <= UMAP_CHUNK_SIZE (boundary: n == UMAP_CHUNK_SIZE)

@@ -270,13 +270,6 @@
         fill: currentColor; /* Verwendet die Textfarbe (#ffffff) auch für das Icon */
     }
 
-    .modal-header {
-        display: flex;
-        justify-content: space-between;
-        align-items: center;
-        margin-bottom: 15px;
-    }
-
     .lang-switch {
         display: flex;
         padding: 3px;
