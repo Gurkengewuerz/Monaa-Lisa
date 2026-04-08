@@ -2,10 +2,10 @@ import sys
 from datetime import datetime
 from unittest.mock import MagicMock, Mock, patch
 
-# Database.db creates a SQLAlchemy engine at module level, which requires
+# database.db creates a SQLAlchemy engine at module level, which requires
 # DATABASE_URL.  We inject a MagicMock into sys.modules BEFORE importing
 # incremental.py so that the real module is never loaded during tests.
-sys.modules.setdefault("Database.db", MagicMock())
+sys.modules.setdefault("database.db", MagicMock())
 
 from pipeline.pipeline.incremental import (  # noqa: E402
     _fetch_new_arxiv_papers,
