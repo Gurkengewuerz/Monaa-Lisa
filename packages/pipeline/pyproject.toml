@@ -1,0 +1,56 @@
+[project]
+name = "monaa-lisa-pipeline"
+version = "0.1.0"
+description = "Data ingestion and ML pipeline for MONAA-LISA"
+requires-python = ">=3.13"
+dependencies = [
+    # Core pipeline
+    "numpy==2.2.5",
+    "joblib==1.5.3",
+    "scikit-learn==1.8.0",
+    "umap-learn==0.5.11",
+    # Database
+    "psycopg2-binary==2.9.10",
+    "SQLAlchemy==2.0.41",
+    "pgvector==0.3.6",
+    # APIs & networking
+    "requests==2.32.3",
+    "arxiv==2.2.0",
+    "semanticscholar==0.11.0",
+    "lxml==6.0.0",
+    # Config & utilities
+    "python-dotenv==1.1.0",
+    "apscheduler==3.11.0",
+    "gdown==5.2.0",
+    "tqdm==4.67.1",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest==8.3.5",
+    "pytest-mock==3.14.0",
+    "ruff>=0.4.0",
+    "mypy>=1.10.0",
+]
+
+[tool.ruff]
+target-version = "py313"
+line-length = 120
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B"]
+ignore = ["E501"]
+
+[tool.ruff.format]
+quote-style = "double"
+
+[tool.mypy]
+python_version = "3.13"
+ignore_missing_imports = true
+strict = false
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+python_files = ["test_*.py", "*_test.py"]
+python_classes = ["Test*"]
+python_functions = ["test_*"]

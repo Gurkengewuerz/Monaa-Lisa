@@ -1,0 +1,102 @@
+services:
+  db:
+    image: pgvector/pgvector:pg16
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-monaa}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-sicherespasswort}
+      POSTGRES_DB: ${POSTGRES_DB:-monaa_lisa_db}
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-monaa} -d ${POSTGRES_DB:-monaa_lisa_db}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  app:
+    build:
+      context: ../../packages/pipeline
+      target: app
+    image: monaa-lisa-pipeline:latest
+    depends_on:
+      db:
+        condition: service_healthy
+      backend:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: postgresql+psycopg2://${POSTGRES_USER:-monaa}:${POSTGRES_PASSWORD:-sicherespasswort}@db:5432/${POSTGRES_DB:-monaa_lisa_db}
+      PYTHONPATH: /app/src
+      SEMANTIC_SCHOLAR_API_KEY: ${SEMANTIC_SCHOLAR_API_KEY:-}
+      DATA_DIR: /app/data
+    volumes:
+      - ../../packages/pipeline:/app
+      - python_cache:/root/.cache/pip
+      - app_data:/app/data
+    command: ["python", "src/main.py"]
+
+  backend:
+    image: node:20
+    working_dir: /app
+    depends_on:
+      db:
+        condition: service_healthy
+    env_file:
+      - ../../.env
+    environment:
+      DATABASE_URL: postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB}
+      PORT: 3000
+    volumes:
+      - ../../apps/backend:/app
+      - backend_node_modules:/app/node_modules
+    command: ["sh", "-c", "npm install && npx prisma generate && npx prisma migrate deploy && npm run build && npm run start:prod"]
+    ports:
+      - "3000:3000"
+    stdin_open: true
+    tty: true
+    healthcheck:
+      test: ["CMD-SHELL", "wget --no-verbose --tries=1 --spider http://localhost:3000 || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 90s
+
+  frontend:
+    build:
+      context: ../../apps/frontend
+      dockerfile: Dockerfile
+    ports:
+      - "5173:5173"
+    depends_on:
+      - app
+      - backend
+    volumes:
+      - ../../apps/frontend:/app
+      - /app/node_modules
+    environment:
+      VITE_API_URL: "http://backend:3000"
+
+  import:
+    build:
+      context: ../../packages/pipeline
+      target: app
+    image: monaa-lisa-pipeline:latest
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: postgresql+psycopg2://${POSTGRES_USER}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB}
+    volumes:
+      - ../../MonaaLisa_dataset_full.jsonl:/app/MonaaLisa_dataset_full.jsonl:ro
+    working_dir: /app
+    profiles:
+      - import
+    command: ["python", "import_dataset.py", "--file", "MonaaLisa_dataset_full.jsonl", "--batch-size", "5000"]
+
+volumes:
+  pgdata:
+  python_cache:
+  backend_node_modules:
+  app_data:

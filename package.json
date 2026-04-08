@@ -1,0 +1,36 @@
+{
+  "name": "monaa-lisa",
+  "private": true,
+  "workspaces": [
+    "apps/*"
+  ],
+  "scripts": {
+    "dev": "bun run --filter '*' dev",
+    "build": "bun run --filter '*' build",
+    "test": "bun run --filter '*' test",
+    "lint": "bun run --filter '*' lint",
+    "format": "bun run --filter '*' format",
+    "docker:dev": "docker compose -f infra/docker/docker-compose.yml up --build",
+    "docker:prod": "docker compose -f infra/docker/docker-compose.prod.yml up -d",
+    "prepare": "husky"
+  },
+  "devDependencies": {
+    "eslint": "^9.18.0",
+    "husky": "^9.0.0",
+    "lint-staged": "^15.0.0",
+    "prettier": "^3.4.2"
+  },
+  "lint-staged": {
+    "apps/backend/**/*.ts": [
+      "eslint --flag v10_config_lookup_from_file --fix",
+      "prettier --write"
+    ],
+    "apps/frontend/**/*.ts": [
+      "prettier --write"
+    ],
+    "packages/pipeline/**/*.py": [
+      "uvx ruff check --fix",
+      "uvx ruff format"
+    ]
+  }
+}

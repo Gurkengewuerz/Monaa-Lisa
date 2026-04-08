@@ -1,0 +1,29 @@
+**/__pycache__
+**/*.pyc
+**/*.pyo
+**/*.pyd
+.Python
+.env
+.venv
+env/
+venv/
+.coverage
+.coverage.*
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+.idea/
+.vscode/
+*.log
+
+# Data files (downloaded at runtime, not baked into image)
+data/
+*.pkl
+*.jsonl
+
+# Tests are not needed in the image
+tests/
+
+# Docs
+*.md
+*.png

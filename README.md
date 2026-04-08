@@ -1,4 +1,4 @@
-<img src="MonaaLisa/src/Frontend/src/assets/monaa_lisa_logo.png" width="250" alt="MONAA-LISA Logo">
+<img src="apps/frontend/src/assets/monaa_lisa_logo.png" width="250" alt="MONAA-LISA Logo">
 
 # Monaa-Lisa
 

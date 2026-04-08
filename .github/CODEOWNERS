@@ -1,0 +1,15 @@
+# Global fallback
+* @Gurkengewuerz
+
+# Frontend
+/apps/frontend/ @Gurkengewuerz
+
+# Backend
+/apps/backend/ @Gurkengewuerz
+
+# Python pipeline
+/packages/pipeline/ @Gurkengewuerz
+
+# Infrastructure
+/infra/ @Gurkengewuerz
+/.github/ @Gurkengewuerz

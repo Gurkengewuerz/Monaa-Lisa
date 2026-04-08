@@ -1,7 +1,7 @@
 {
   "name": "SemanticPaper Dev Environment for VSCode",
   "dockerComposeFile": [
-    "../docker-compose-vscode.yml"
+    "../infra/docker/docker-compose.vscode.yml"
   ],
   "service": "app",
   "workspaceFolder": "/app",
@@ -22,5 +22,5 @@
       }
     }
   },
-  "postCreateCommand": "pip install --user -r requirements.txt"
+  "postCreateCommand": "cd packages/pipeline && pip install --user -r requirements.txt"
 }
